@@ -41,6 +41,7 @@
                 <label for="manualNumber">手動設定號碼</label>
                 <input type="number" id="manualNumber" placeholder="輸入號碼" />
                 <button id="setNumber" type="button" class="btn-primary">設定號碼</button>
+                <button id="resetNumber" type="button" class="btn-reset-single">重置號碼</button>
             </div>
             
             <div class="control-group list-editor">
@@ -51,6 +52,7 @@
                 <input type="number" id="new-passed-number" placeholder="輸入號碼">
                 <button id="add-passed-btn" type="button" class="btn-add">+</button>
             </div>
+            <button id="resetPassed" type="button" class="btn-reset-single">重置過號列表</button>
             </div>
         </div>
     </div> 
@@ -68,6 +70,7 @@
                 <input type="text" id="new-link-url" placeholder="https://... 網址">
                 <button id="add-featured-btn" type="button" class="btn-add">+</button>
             </div>
+            <button id="resetFeaturedContents" type="button" class="btn-reset-single">重置精選連結</button>
             </div>
         </div>
     </div> 
@@ -91,17 +94,12 @@
                 <label for="public-toggle">對外開放前台</label>
                 <input type="checkbox" id="public-toggle">
             </div>
-            <div class="reset-zone">
-            <div class="control-group button-row">
-                <button id="resetNumber" type="button" class="btn-reset-single">重置號碼</button>
-                <button id="resetFeaturedContents" type="button" class="btn-reset-single">重置精選連結</button>
-                <button id="resetPassed" type="button" class="btn-reset-single">重置過號列表</button>
-            </div>
-            <button id="resetAll" type="button" class="btn-danger">💥 重置所有 (點擊確認)</button>
-            <button id="resetAllConfirm" type="button" class="btn-danger-confirm" style="display:none;">⚠️ 點此確認重置 ⚠️</button>
-            </div>
             
-            </div>
+            <div class="reset-zone">
+                <button id="resetAll" type="button" class="btn-danger">💥 重置所有 (點擊確認)</button>
+                </div>
+            
+        </div>
     </div> 
     
 </div> </div> 
