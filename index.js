@@ -2,20 +2,19 @@
  * ==========================================
  * 伺服器 (index.js)
  * 升級：多用戶角色系統 (Super Admin / Normal Admin)
- * - 使用 bcrypt 進行密碼雜湊
- * - 使用 uuid 進行 Session Token 管理
+ * 升級 v2：追蹤在線管理員列表
  * ==========================================
  */
 
-// --- 1. 模組載入 ---
+// --- 1. 模듈載入 ---
 const express = require("express");
 const http = require("http");
 const socketio = require("socket.io");
 const Redis = require("ioredis");
 const helmet = require('helmet'); 
 const rateLimit = require('express-rate-limit'); 
-const { v4: uuidv4 } = require('uuid'); // 【新】 用於 Session Token
-const bcrypt = require('bcrypt'); // 【新】 用於密碼雜湊
+const { v4: uuidv4 } = require('uuid'); 
+const bcrypt = require('bcrypt'); 
 
 // --- 2. 伺服器實體化 ---
 const app = express();
@@ -24,9 +23,9 @@ const io = socketio(server);
 
 // --- 3. 核心設定 & 安全性 ---
 const PORT = process.env.PORT || 3000;
-const ADMIN_TOKEN = process.env.ADMIN_TOKEN; // 這是「超級管理員」的密碼
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN; 
 const REDIS_URL = process.env.UPSTASH_REDIS_URL;
-const SALT_ROUNDS = 10; // 【新】 bcrypt 加密強度
+const SALT_ROUNDS = 10; 
 
 // --- 4. 關鍵檢查 ---
 if (!ADMIN_TOKEN) {
@@ -68,8 +67,11 @@ const KEY_LAST_UPDATED = 'callsys:updated';
 const KEY_SOUND_ENABLED = 'callsys:soundEnabled';
 const KEY_IS_PUBLIC = 'callsys:isPublic'; 
 const KEY_ADMIN_LOG = 'callsys:admin-log';
-const KEY_USERS = 'callsys:users'; // 【新】 儲存管理員帳密 (Hash)
-const SESSION_PREFIX = 'callsys:session:'; // 【新】 儲存 Session Token (String)
+const KEY_USERS = 'callsys:users'; 
+const SESSION_PREFIX = 'callsys:session:';
+
+// 【新】 在線管理員追蹤 (使用 Map 儲存 socket.id -> user info)
+const onlineAdmins = new Map();
 
 // --- 7. Express 中介軟體 (Middleware) ---
 
@@ -102,10 +104,10 @@ const loginLimiter = rateLimit({
     legacyHeaders: false,
 });
 
-// 【重大修改】 基於 Session Token 的驗證中介軟體
+// 基於 Session Token 的驗證中介軟體
 const authMiddleware = async (req, res, next) => {
     try {
-        const { token } = req.body; // 前端傳來的 Session Token
+        const { token } = req.body; 
         
         if (!token) {
             return res.status(401).json({ error: "未提供驗證 Token" });
@@ -115,14 +117,10 @@ const authMiddleware = async (req, res, next) => {
         const sessionData = await redis.get(sessionKey);
 
         if (!sessionData) {
-            // Token 找不到或已過期
             return res.status(403).json({ error: "驗證失敗或 Session 已過期" });
         }
 
-        // Token 有效，將用戶資訊附加到 req 物件上
-        req.user = JSON.parse(sessionData); // 包含 { username, role }
-        
-        // 刷新 Session 有效期 (8 小時)
+        req.user = JSON.parse(sessionData); 
         await redis.expire(sessionKey, 8 * 60 * 60);
         
         next();
@@ -132,7 +130,7 @@ const authMiddleware = async (req, res, next) => {
     }
 };
 
-// 【新】 超級管理員專用中介軟體
+// 超級管理員專用中介軟體
 const superAdminAuthMiddleware = (req, res, next) => {
     if (req.user && req.user.role === 'super') {
         next();
@@ -169,17 +167,14 @@ async function broadcastFeaturedContents() {
     }
 }
 
-// 【修改】 伺服器端日誌函式
-async function addAdminLog(username, message) { // 增加 username 參數
+// 伺服器端日誌函式
+async function addAdminLog(username, message) { 
     try {
         const timestamp = new Date().toLocaleTimeString('zh-TW', { hour12: false });
-        const logMessage = `[${timestamp}] [${username}] ${message}`; // 加入 username
+        const logMessage = `[${timestamp}] [${username}] ${message}`; 
         
-        // 1. 將日誌推入 Redis List (LIFO)
         await redis.lpush(KEY_ADMIN_LOG, logMessage);
-        // 2. 修剪列表，只保留最新的 50 筆
         await redis.ltrim(KEY_ADMIN_LOG, 0, 50);
-        // 3. 透過 Socket.io 廣播給所有在線的管理員
         io.emit("newAdminLog", logMessage);
         
     } catch (e) {
@@ -187,12 +182,22 @@ async function addAdminLog(username, message) { // 增加 username 參數
     }
 }
 
+// 【新】 廣播在線管理員列表
+function broadcastOnlineAdmins() {
+    try {
+        const adminList = Array.from(onlineAdmins.values());
+        // 廣播給所有連線的 client (包括 admin 和 public)
+        // admin.js 會監聽此事件，public.js 不會
+        io.emit("updateOnlineAdmins", adminList);
+    } catch (e) {
+        console.error("broadcastOnlineAdmins 失敗:", e);
+    }
+}
+
 
 // --- 9. API 路由 (Routes) ---
 
-// (移除 /check-token)
-
-// 【新】 登入路由 (取代 /check-token)
+// 登入路由
 app.post("/login", loginLimiter, async (req, res) => {
     try {
         const { username, password } = req.body;
@@ -201,9 +206,9 @@ app.post("/login", loginLimiter, async (req, res) => {
         }
 
         let isValid = false;
-        let role = 'normal'; // 預設為普通管理員
+        let role = 'normal'; 
 
-        // 邏輯 1：檢查是否為超級管理員 (固定帳號 'superadmin')
+        // 邏輯 1：檢查是否為超級管理員
         if (username === 'superadmin' && password === ADMIN_TOKEN) {
             isValid = true;
             role = 'super';
@@ -227,11 +232,8 @@ app.post("/login", loginLimiter, async (req, res) => {
         const sessionToken = uuidv4();
         const sessionKey = `${SESSION_PREFIX}${sessionToken}`;
         const sessionData = JSON.stringify({ username, role });
-
-        // 寫入 Session，設定 8 小時過期
         await redis.set(sessionKey, sessionData, "EX", 8 * 60 * 60); 
 
-        // 回傳 token 和角色給前端
         res.json({ success: true, token: sessionToken, role: role, username: username });
 
     } catch (e) {
@@ -250,22 +252,20 @@ const protectedAPIs = [
 ];
 app.use(protectedAPIs, apiLimiter, authMiddleware);
 
-// --- 【重要】 以下所有路由都需要修改 `addAdminLog` 的呼叫 ---
-
 app.post("/change-number", async (req, res) => {
     try {
         const { direction } = req.body;
-        const username = req.user.username; // 【新】 
+        const username = req.user.username; 
         let num;
         if (direction === "next") {
             num = await redis.incr(KEY_CURRENT_NUMBER);
-            await addAdminLog(username, `號碼增加為 ${num}`); // 【修改】
+            await addAdminLog(username, `號碼增加為 ${num}`); 
         }
         else if (direction === "prev") {
             const oldNum = await redis.get(KEY_CURRENT_NUMBER) || 0;
             num = await redis.decrIfPositive(KEY_CURRENT_NUMBER);
             if (Number(oldNum) > 0) {
-                await addAdminLog(username, `號碼減少為 ${num}`); // 【修改】
+                await addAdminLog(username, `號碼減少為 ${num}`); 
             }
         } 
         else {
@@ -283,13 +283,13 @@ app.post("/change-number", async (req, res) => {
 app.post("/set-number", async (req, res) => {
     try {
         const { number } = req.body;
-        const username = req.user.username; // 【新】 
+        const username = req.user.username; 
         const num = Number(number);
         if (isNaN(num) || num < 0 || !Number.isInteger(num)) {
             return res.status(400).json({ error: "請提供一個有效的非負整數。" });
         }
         await redis.set(KEY_CURRENT_NUMBER, num);
-        await addAdminLog(username, `號碼手動設定為 ${num}`); // 【修改】
+        await addAdminLog(username, `號碼手動設定為 ${num}`); 
         io.emit("update", num);
         await updateTimestamp();
         res.json({ success: true, number: num });
@@ -302,14 +302,14 @@ app.post("/set-number", async (req, res) => {
 app.post("/api/passed/add", async (req, res) => {
     try {
         const { number } = req.body;
-        const username = req.user.username; // 【新】 
+        const username = req.user.username; 
         const num = Number(number);
         if (isNaN(num) || num <= 0 || !Number.isInteger(num)) {
             return res.status(400).json({ error: "請提供有效的正整數。" });
         }
         await redis.zadd(KEY_PASSED_NUMBERS, num, num);
-        await redis.zremrangebyrank(KEY_PASSED_NUMBERS, 0, -21); // 自動修剪 (保留 20)
-        await addAdminLog(username, `過號列表新增 ${num}`); // 【修改】
+        await redis.zremrangebyrank(KEY_PASSED_NUMBERS, 0, -21); 
+        await addAdminLog(username, `過號列表新增 ${num}`); 
         await broadcastPassedNumbers();
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -318,9 +318,9 @@ app.post("/api/passed/add", async (req, res) => {
 app.post("/api/passed/remove", async (req, res) => {
     try {
         const { number } = req.body;
-        const username = req.user.username; // 【新】 
+        const username = req.user.username; 
         await redis.zrem(KEY_PASSED_NUMBERS, number);
-        await addAdminLog(username, `過號列表移除 ${number}`); // 【修改】
+        await addAdminLog(username, `過號列表移除 ${number}`); 
         await broadcastPassedNumbers();
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -329,7 +329,7 @@ app.post("/api/passed/remove", async (req, res) => {
 app.post("/api/featured/add", async (req, res) => {
     try {
         const { linkText, linkUrl } = req.body;
-        const username = req.user.username; // 【新】 
+        const username = req.user.username; 
         if (!linkText || !linkUrl) {
             return res.status(400).json({ error: "文字和網址皆必填。" });
         }
@@ -338,7 +338,7 @@ app.post("/api/featured/add", async (req, res) => {
         }
         const item = { linkText, linkUrl };
         await redis.rpush(KEY_FEATURED_CONTENTS, JSON.stringify(item));
-        await addAdminLog(username, `精選連結新增: ${linkText}`); // 【修改】
+        await addAdminLog(username, `精選連結新增: ${linkText}`); 
         await broadcastFeaturedContents();
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -347,13 +347,13 @@ app.post("/api/featured/add", async (req, res) => {
 app.post("/api/featured/remove", async (req, res) => {
     try {
         const { linkText, linkUrl } = req.body;
-        const username = req.user.username; // 【新】 
+        const username = req.user.username; 
         if (!linkText || !linkUrl) {
             return res.status(400).json({ error: "缺少必要參數。" });
         }
         const item = { linkText, linkUrl };
         await redis.lrem(KEY_FEATURED_CONTENTS, 1, JSON.stringify(item));
-        await addAdminLog(username, `精選連結移除: ${linkText}`); // 【修改】
+        await addAdminLog(username, `精選連結移除: ${linkText}`); 
         await broadcastFeaturedContents();
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -361,9 +361,9 @@ app.post("/api/featured/remove", async (req, res) => {
 
 app.post("/api/passed/clear", async (req, res) => {
     try {
-        const username = req.user.username; // 【新】 
+        const username = req.user.username; 
         await redis.del(KEY_PASSED_NUMBERS);
-        await addAdminLog(username, `過號列表已清空`); // 【修改】
+        await addAdminLog(username, `過號列表已清空`); 
         io.emit("updatePassed", []);
         await updateTimestamp();
         res.json({ success: true, message: "過號列表已清空" });
@@ -372,9 +372,9 @@ app.post("/api/passed/clear", async (req, res) => {
 
 app.post("/api/featured/clear", async (req, res) => {
     try {
-        const username = req.user.username; // 【新】 
+        const username = req.user.username; 
         await redis.del(KEY_FEATURED_CONTENTS);
-        await addAdminLog(username, `精選連結已清空`); // 【修改】
+        await addAdminLog(username, `精選連結已清空`); 
         io.emit("updateFeaturedContents", []);
         await updateTimestamp();
         res.json({ success: true, message: "精選連結已清空" });
@@ -384,10 +384,10 @@ app.post("/api/featured/clear", async (req, res) => {
 app.post("/set-sound-enabled", async (req, res) => {
     try {
         const { enabled } = req.body;
-        const username = req.user.username; // 【新】 
+        const username = req.user.username; 
         const valueToSet = enabled ? "1" : "0";
         await redis.set(KEY_SOUND_ENABLED, valueToSet);
-        await addAdminLog(username, `前台音效已設為: ${enabled ? '開啟' : '關閉'}`); // 【修改】
+        await addAdminLog(username, `前台音效已設為: ${enabled ? '開啟' : '關閉'}`); 
         io.emit("updateSoundSetting", enabled);
         await updateTimestamp();
         res.json({ success: true, isEnabled: enabled });
@@ -400,10 +400,10 @@ app.post("/set-sound-enabled", async (req, res) => {
 app.post("/set-public-status", async (req, res) => {
     try {
         const { isPublic } = req.body;
-        const username = req.user.username; // 【新】 
+        const username = req.user.username; 
         const valueToSet = isPublic ? "1" : "0";
         await redis.set(KEY_IS_PUBLIC, valueToSet);
-        await addAdminLog(username, `前台已設為: ${isPublic ? '對外開放' : '關閉維護'}`); // 【修改】
+        await addAdminLog(username, `前台已設為: ${isPublic ? '對外開放' : '關閉維護'}`); 
         io.emit("updatePublicStatus", isPublic); 
         await updateTimestamp();
         res.json({ success: true, isPublic: isPublic });
@@ -415,7 +415,7 @@ app.post("/set-public-status", async (req, res) => {
 
 app.post("/reset", async (req, res) => {
     try {
-        const username = req.user.username; // 【新】 
+        const username = req.user.username; 
         const multi = redis.multi();
         multi.set(KEY_CURRENT_NUMBER, 0);
         multi.del(KEY_PASSED_NUMBERS);
@@ -425,7 +425,7 @@ app.post("/reset", async (req, res) => {
         multi.del(KEY_ADMIN_LOG);
         await multi.exec();
 
-        await addAdminLog(username, `💥 系統已重置所有資料`); // 【修改】
+        await addAdminLog(username, `💥 系統已重置所有資料`); 
 
         io.emit("update", 0);
         io.emit("updatePassed", []);
@@ -445,11 +445,11 @@ app.post("/reset", async (req, res) => {
 
 // --- 10. Socket.io 連線處理 ---
 io.on("connection", async (socket) => {
-    const token = socket.handshake.auth.token; // 這是 Session Token
+    const token = socket.handshake.auth.token; 
     let isAdmin = false;
-    let username = "Public_User"; // 預設
+    let username = "Public_User";
     
-    // 【修改】 驗證 Session Token
+    // 驗證 Session Token
     if (token) {
         const sessionKey = `${SESSION_PREFIX}${token}`;
         const sessionData = await redis.get(sessionKey);
@@ -460,14 +460,22 @@ io.on("connection", async (socket) => {
             username = user.username;
             
             console.log(`✅ 一個已驗證的 Admin 連線 (${username})`, socket.id);
+            
+            // 【新】 將用戶添加到在線列表並廣播
+            onlineAdmins.set(socket.id, { username: user.username, role: user.role });
+            broadcastOnlineAdmins();
+
             socket.on("disconnect", (reason) => {
                 console.log(`🔌 Admin ${socket.id} (${username}) 斷線: ${reason}`);
+                // 【新】 從在線列表移除並廣播
+                onlineAdmins.delete(socket.id);
+                broadcastOnlineAdmins();
             });
 
             // Admin 連線時，傳送日誌歷史
             try {
                 const logs = await redis.lrange(KEY_ADMIN_LOG, 0, 50);
-                socket.emit("initAdminLogs", logs); // 只傳送給這個剛連線的 admin
+                socket.emit("initAdminLogs", logs); 
             } catch (e) {
                 console.error("讀取日誌歷史失敗:", e);
             }
@@ -479,6 +487,7 @@ io.on("connection", async (socket) => {
     }
 
     try {
+        // ... (載入初始資料的 pipeline 保持不變) ...
         const pipeline = redis.multi();
         pipeline.get(KEY_CURRENT_NUMBER);
         pipeline.zrange(KEY_PASSED_NUMBERS, 0, -1);
@@ -522,15 +531,13 @@ io.on("connection", async (socket) => {
     }
 });
 
-// --- 11. 【新】 超級管理員 API (管理用戶) ---
+// --- 11. 超級管理員 API (管理用戶) ---
 
-// 應用超級管理員中介軟體 (必須在 authMiddleware 之後)
 const superAdminAPIs = [
     "/api/admin/users",
     "/api/admin/add-user",
     "/api/admin/del-user"
 ];
-// 先跑通用驗證，再跑超級管理員權限驗證
 app.use(superAdminAPIs, apiLimiter, authMiddleware, superAdminAuthMiddleware);
 
 // 獲取所有普通管理員
@@ -557,7 +564,6 @@ app.post("/api/admin/add-user", async (req, res) => {
             return res.status(400).json({ error: "此帳號已被使用。" });
         }
 
-        // 雜湊密碼
         const hash = await bcrypt.hash(newPassword, SALT_ROUNDS);
         await redis.hset(KEY_USERS, newUsername, hash);
 
@@ -590,10 +596,10 @@ app.post("/api/admin/del-user", async (req, res) => {
 // --- 12. 清空日誌 API ---
 app.post("/api/logs/clear", async (req, res) => {
     try {
-        const username = req.user.username; // 【新】 
+        const username = req.user.username; 
         await redis.del(KEY_ADMIN_LOG);
-        await addAdminLog(username, `🧼 管理員清空了所有日誌`); // 【修改】
-        io.emit("initAdminLogs", []); // 廣播清空
+        await addAdminLog(username, `🧼 管理員清空了所有日誌`); 
+        io.emit("initAdminLogs", []); 
         res.json({ success: true, message: "日誌已清空。" });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
