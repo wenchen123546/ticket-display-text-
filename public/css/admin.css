@@ -363,9 +363,8 @@ input[type="url"] {
 
 
 #resetAll { 
-    /* 【修改】 移除 100% 寬度，使其寬度自適應 */
-    width: auto; 
-    /* .reset-zone 的 text-align: center 會使其置中 */
+    /* 【修改】 改回 100% 寬度，使其與上方的 Toggle 區塊一致 */
+    width: 100%; 
 }
 #resetAllConfirm { 
     width: 100%; 
