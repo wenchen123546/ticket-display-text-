@@ -1,17 +1,13 @@
 /*
  * ==========================================
  * 伺服器 (index.js)
- * * 【修改 V3.8 - 部署修正】
- * * 使用 path.join(__dirname, "public") 來提供 express.static
- * * 這是為了修復在 Render 平台上因工作目錄不同，導致 CSS/JS 404 的致命錯誤
+ * * 【修改 V3.9 - 關鍵架構修正】
+ * * 新增 @socket.io/redis-adapter，解決 Render 平台
+ * * 多實例 (Multi-Instance) 部署造成的 502/Disconnect/xhr poll error
+ * * * * 【修改 V3.8 - 部署修正】
+ * * 使用 path.join(__dirname, "public")
  * * 【修改 V3.7 - 部署修正】
  * * 增加 Socket.io 的 CORS 設定 (origin: "*")
- * * 【修改 V3.6 - 部署修正】
- * * 將 app.set('trust proxy', 1)
- * * 【修改 V3.3 - 修正】 
- * * 增加「緊急後門」
- * * 【修改 V3.2 - 修正】 
- * * 增加 JWT 過期時間 (8h)
  * ==========================================
  */
 
@@ -21,32 +17,23 @@ require('express-async-errors');
 const http = require("http");
 const socketio = require("socket.io");
 const Redis = require("ioredis");
+const { createAdapter } = require("@socket.io/redis-adapter"); // <-- 【Adapter】 載入 Adapter
 const helmet = require('helmet'); 
 const rateLimit = require("express-rate-limit");
 const bcrypt = require('bcryptjs'); 
 const jwt = require('jsonwebtoken'); 
-const path = require('path'); // 【V3.8 修正】 載入 path 模組
+const path = require('path'); 
 
 // --- 2. 伺服器實體化 ---
 const app = express();
-
-// 【V3.6 部署修正】 
-// 將 'true' (不安全) 修改為 '1' (信任第一層 Proxy，例如 Render)
-// 這將修復 ERR_ERL_PERMISSIVE_TRUST_PROXY 崩潰錯誤
 app.set('trust proxy', 1);
-
 const server = http.createServer(app);
-
-// --- 【V3.7 部署修正】 ---
-// 告訴 Socket.io 接受來自所有來源的 WebSocket 連線
-// 這是修復 Render 平台上 WSS 被 CORS 阻擋的關鍵
 const io = socketio(server, {
     cors: {
-        origin: "*", // 允許所有來源
+        origin: "*", 
         methods: ["GET", "POST"]
     }
 });
-// --- V3.7 修正結束 ---
 
 
 // --- 3. 核心設定 & 安全性 ---
@@ -54,7 +41,7 @@ const PORT = process.env.PORT || 3000;
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN; 
 const REDIS_URL = process.env.UPSTASH_REDIS_URL;
 const JWT_SECRET = process.env.JWT_SECRET; 
-const DEFAULT_JWT_EXPIRY_HOURS = 8; // 【V3.2 恢復】 預設 8 小時
+const DEFAULT_JWT_EXPIRY_HOURS = 8; 
 
 // --- 4. 關鍵檢查 ---
 if (!ADMIN_TOKEN) {
@@ -71,20 +58,33 @@ if (!JWT_SECRET) {
 }
 
 // --- 5. 連線到 Upstash Redis ---
-const redis = new Redis(REDIS_URL, {
-    tls: {
-        rejectUnauthorized: false
-    }
+// 【Adapter 修正】
+// Adapter 需要兩個*獨立*的連線
+const pubClient = new Redis(REDIS_URL, { 
+    tls: { rejectUnauthorized: false } 
 });
-redis.on('connect', () => { console.log("✅ 成功連線到 Upstash Redis 資料庫。"); });
+const subClient = pubClient.duplicate(); // 複製連線
 
-// --- 【!!! 關鍵錯誤修正 !!!】 ---
-// 移除 process.exit(1)，以避免伺服器因暫時性的 Redis 連線錯誤而陷入崩潰循環
-redis.on('error', (err) => { 
-    console.error("❌ Redis 連線錯誤 (非致命):", err); 
-    // process.exit(1); // <-- 移除此行
+// 我們仍然需要一個「一般」連線來執行 GET/SET/LRANGE
+const redis = new Redis(REDIS_URL, { 
+    tls: { rejectUnauthorized: false } 
 });
-// --- 【錯誤修正結束】 ---
+
+// 將 Adapter 附加到 Socket.io
+io.adapter(createAdapter(pubClient, subClient));
+
+// 監聽「一般」連線
+redis.on('connect', () => { console.log("✅ 成功連線到 Upstash Redis (主要客戶端)。"); });
+redis.on('error', (err) => { 
+    console.error("❌ Redis (主要客戶端) 連線錯誤 (非致命):", err); 
+});
+// 監聽 Adapter 連線
+pubClient.on('connect', () => { console.log("✅ 成功連線到 Redis Adapter (Pub/Sub)。"); });
+pubClient.on('error', (err) => { 
+    console.error("❌ Redis Adapter (Pub/Sub) 連線錯誤 (非致命):", err); 
+});
+// --- 【Adapter 修正結束】 ---
+
 
 redis.defineCommand("decrIfPositive", {
     numberOfKeys: 1,
@@ -115,19 +115,13 @@ app.use(helmet({
       directives: {
         ...helmet.contentSecurityPolicy.getDefaultDirectives(),
         "script-src": ["'self'", "https://cdn.jsdelivr.net", "https://cdnjs.cloudflare.com"],
-        // 【V3.2 修正】 移除 'unsafe-inline'
         "style-src": ["'self'", "https://cdn.jsdelivr.net"], 
         "connect-src": ["'self'", "https://cdn.jsdelivr.net"]
       },
     },
 }));
 
-// --- 【V3.8 部署修正】 ---
-// 使用 path.join 和 __dirname 來建立一個絕對路徑
-// 這將確保無論 node 指令在哪裡執行，都能正確找到 public 資料夾
 app.use(express.static(path.join(__dirname, "public")));
-// --- V3.8 修正結束 ---
-
 app.use(express.json());
 
 const apiLimiter = rateLimit({
@@ -136,18 +130,14 @@ const apiLimiter = rateLimit({
     message: { error: "請求過於頻繁，請稍後再試。" },
     standardHeaders: true, 
     legacyHeaders: false, 
-    // 【關鍵修復 V3.1】 告訴 limiter 信任第一層 proxy
-    // (這必須與 app.set('trust proxy', 1) 配合)
     trustProxy: 1 
 });
 const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, 
-    max: 10, // 【注意】 緊急後門登入也會計入此限制
+    max: 10, 
     message: { error: "登入嘗試次數過多，請 15 分鐘後再試。" },
     standardHeaders: true,
     legacyHeaders: false,
-    // 【關鍵修復 V3.1】 告訴 limiter 信任第一層 proxy
-    // (這必須與 app.set('trust proxy', 1) 配合)
     trustProxy: 1 
 });
 
@@ -166,11 +156,9 @@ const authMiddleware = (req, res, next) => {
         
         next(); 
     } catch (err) {
-        // 【V3.2 修正】 增加對 Token 過期的處理
         if (err.name === 'TokenExpiredError') {
             return res.status(401).json({ error: "認證已過期，請重新登入。" });
         }
-        // 
         return res.status(401).json({ error: "認證無效或Token錯誤" });
     }
 };
@@ -207,7 +195,6 @@ async function broadcastFeaturedContents() {
 
 async function addAdminLog(message, username = '系統') {
     try {
-        // 【優化】 增加日期，使用 toLocaleString 確保格式一致性
         const timestamp = new Date().toLocaleString('zh-TW', { 
             year: 'numeric', 
             month: '2-digit', 
@@ -237,40 +224,31 @@ app.post("/login", loginLimiter, async (req, res) => {
         return res.status(400).json({ error: "請輸入使用者名稱和密碼。" });
     }
 
-    // --- V3.3 修正： 【高風險 - 已移除】 ---
-    // 移除了使用 ADMIN_TOKEN 明文比對的緊急後門
-    // --- V3.3 修正結束 ---
-
-
     // --- 正常的 Redis 資料庫登入邏輯 ---
     const userJSON = await redis.hget(KEY_ADMINS, username);
     if (!userJSON) {
-        // 如果沒找到，或密碼不匹配
         return res.status(403).json({ error: "使用者名稱或密碼錯誤。" });
     }
 
     const user = JSON.parse(userJSON);
     
-    // 使用 bcrypt 比對儲存在 Redis 中的雜湊密碼
     const isMatch = await bcrypt.compare(password, user.passwordHash);
     if (!isMatch) {
         return res.status(403).json({ error: "使用者名稱或密碼錯誤。" });
     }
 
-    // --- 資料庫比對成功，簽發 Token ---
     const payload = {
         username: user.username,
         role: user.role
     };
     
-    // 【V3.2 修正】 恢復 expiresIn 選項
     const token = jwt.sign(payload, JWT_SECRET, { expiresIn: `${DEFAULT_JWT_EXPIRY_HOURS}h` }); 
 
     res.json({ 
         success: true, 
         token: token, 
         role: user.role,
-        username: user.username // <-- 【安全修正】 回傳使用者名稱
+        username: user.username 
     });
 });
 
@@ -322,7 +300,6 @@ app.post("/api/admin/delete", async (req, res) => {
         return res.status(400).json({ error: "您無法刪除自己的帳號。" });
     }
     
-    // 【V3.3 安全強化】 防止後門管理員刪除自己 (雖然 UI 已隱藏，但應在後端防禦)
     if (req.user.username === 'superadmin (Fallback)' && username === 'superadmin') {
          return res.status(400).json({ error: "您無法在後門模式下刪除 'superadmin' 資料庫帳號。" });
     }
@@ -502,7 +479,6 @@ app.post("/reset", async (req, res) => {
     multi.set(KEY_SOUND_ENABLED, "1");
     multi.set(KEY_IS_PUBLIC, "1"); 
     multi.del(KEY_ADMIN_LOG); 
-    // 【注意】 resetAll 故意不清空 KEY_ADMINS
     await multi.exec();
 
     await addAdminLog(`💥 系統已重置所有資料 (不清空管理員帳號)`, req.user.username); 
@@ -587,12 +563,11 @@ io.use((socket, next) => {
     try {
         // 驗證 JWT
         const payload = jwt.verify(token, JWT_SECRET);
-        socket.user = payload; // 附加 user 資訊 (e.g., { username: '...', role: 'admin' })
+        socket.user = payload; 
         next();
     } catch (err) {
         // 情況 3: Token 無效或過期
         console.warn(`Socket 認證失敗: ${err.message}`);
-        // 【V3.2 修正】 處理過期
         if (err.name === 'TokenExpiredError') {
              return next(new Error("Authentication failed: Token expired"));
         }
@@ -602,37 +577,26 @@ io.use((socket, next) => {
 
 // --- 【架構修正】 ---
 // 大幅簡化連線處理，移除所有初始資料的發送
-// Socket.io 現在只負責「加入房間」和「即時轉發」
 io.on("connection", async (socket) => {
     
     const isAdmin = (socket.user && socket.user.role !== 'public');
 
     if (isAdmin) {
         console.log(`✅ 一個 Admin (${socket.user.username}) 連線`, socket.id);
-        socket.join('admin_room'); // 加入管理員專用房間
+        socket.join('admin_room'); 
         socket.on("disconnect", (reason) => {
             console.log(`🔌 Admin (${socket.user.username}) ${socket.id} 斷線: ${reason}`);
         });
 
-        // (移除 Admin 連線時自動發送 initAdminLogs 的邏輯)
-        // (這現在由 /api/get-all-state 統一處理)
-
     } else {
         console.log("🔌 一個 Public User 連線", socket.id);
-        socket.join('public_room'); // 加入公開房間
+        socket.join('public_room'); 
     }
-
-    // (移除所有 "廣播初始狀態給所有人" 的 try...catch 區塊)
-    // (這現在由 /api/get-all-state 統一處理)
 });
 
 
 // --- 13. 啟動伺服器 & 建立超級管理員 ---
 // 【Render 部署修正】
-// 採用 "old_index.js" 的正確結構：
-// 1. 立即啟動 server.listen，以響應 Render 的埠號偵測
-// 2. 將異步的啟動任務 (Redis 檢查) 放入 listen 的 async 回呼函式中
-// ----------------------------------------------------
 server.listen(PORT, '0.0.0.0', async () => {
     // 1. 伺服器已啟動，Render 埠號偵測會成功
     console.log(`✅ Server running on host 0.0.0.0, port ${PORT}`);
