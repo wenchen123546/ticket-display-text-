@@ -258,7 +258,6 @@ async function loadInitialDataViaAPI() {
         renderAdminLogs(data.logs); // 使用新的渲染函式
 
         // (如果 superadmin 卡片已顯示，就載入管理員列表)
-        // (*** 優化：建議將此邏輯移至 showPanel() ***)
         if (superAdminCard.style.display === "block") {
             loadAdmins();
         }
