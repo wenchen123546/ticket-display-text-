@@ -1,13 +1,16 @@
 /*
  * ==========================================
  * 伺服器 (index.js)
+ * * 【修改 V3.3 - 修正】
+ * * 1. 增加「緊急後門」：允許 'superadmin' 使用 'ADMIN_TOKEN' 作為密碼登入
+ * * (用於 Redis 資料遺失時的災難還原)
  * * 【修改 V3.2 - 修正】 
  * * 1. 增加 JWT 過期時間 (8h)，並在 middleware 中處理 TokenExpiredError
  * * 2. 收緊 Helmet CSP，移除 'unsafe-inline' style-src
  * ==========================================
  */
 
-// --- 1. 模듈載入 ---
+// --- 1. 模組載入 ---
 const express = require("express");
 require('express-async-errors'); 
 const http = require("http");
@@ -104,7 +107,7 @@ const apiLimiter = rateLimit({
 });
 const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, 
-    max: 10, 
+    max: 10, // 【注意】 緊急後門登入也會計入此限制
     message: { error: "登入嘗試次數過多，請 15 分鐘後再試。" },
     standardHeaders: true,
     legacyHeaders: false,
@@ -197,24 +200,53 @@ app.post("/login", loginLimiter, async (req, res) => {
         return res.status(400).json({ error: "請輸入使用者名稱和密碼。" });
     }
 
+    // --- V3.3 修正： 增加「緊急後門」超級管理員 ---
+    // 檢查是否為使用 ENV TOKEN 登入的 'superadmin'
+    // 這會繞過 Redis，用於資料庫遺失時的緊急登入
+    // 注意：這裡是明文比對，而非 bcrypt
+    if (username === 'superadmin' && password === ADMIN_TOKEN) {
+        console.warn(`⚠️  緊急後門登入： 'superadmin' 已使用 ADMIN_TOKEN 登入。`);
+        
+        const payload = {
+            username: 'superadmin (Fallback)', // 標記為後門登入
+            role: 'superadmin'
+        };
+        
+        // 【V3.2 修正】 恢復 expiresIn 選項
+        const token = jwt.sign(payload, JWT_SECRET, { expiresIn: `${DEFAULT_JWT_EXPIRY_HOURS}h` }); 
+        
+        // 嘗試記錄日誌 (如果 Redis 剛好還活著)
+        addAdminLog(`'superadmin' 使用了緊急後門 (ADMIN_TOKEN) 登入`, '系統').catch(err => {
+            console.error("緊急登入日誌寫入失敗 (可能 Redis 已離線):", err.message);
+        });
+        
+        return res.json({ success: true, token: token, role: 'superadmin' });
+    }
+    // --- V3.3 修正結束 ---
+
+
+    // --- 正常的 Redis 資料庫登入邏輯 ---
     const userJSON = await redis.hget(KEY_ADMINS, username);
     if (!userJSON) {
+        // 如果沒找到，或密碼不匹配 (V3.3：且不是後門登入)
         return res.status(403).json({ error: "使用者名稱或密碼錯誤。" });
     }
 
     const user = JSON.parse(userJSON);
     
+    // 使用 bcrypt 比對儲存在 Redis 中的雜湊密碼
     const isMatch = await bcrypt.compare(password, user.passwordHash);
     if (!isMatch) {
         return res.status(403).json({ error: "使用者名稱或密碼錯誤。" });
     }
 
+    // --- 資料庫比對成功，簽發 Token ---
     const payload = {
         username: user.username,
         role: user.role
     };
     
-    // 【V3.2 修正】 恢復 expiresIn 選項，Token 設為 8 小時過期
+    // 【V3.2 修正】 恢復 expiresIn 選項
     const token = jwt.sign(payload, JWT_SECRET, { expiresIn: `${DEFAULT_JWT_EXPIRY_HOURS}h` }); 
 
     res.json({ success: true, token: token, role: user.role });
@@ -268,6 +300,11 @@ app.post("/api/admin/delete", async (req, res) => {
         return res.status(400).json({ error: "您無法刪除自己的帳號。" });
     }
     
+    // 【V3.3 安全強化】 防止後門管理員刪除自己 (雖然 UI 已隱藏，但應在後端防禦)
+    if (req.user.username === 'superadmin (Fallback)' && username === 'superadmin') {
+         return res.status(400).json({ error: "您無法在後門模式下刪除 'superadmin' 資料庫帳號。" });
+    }
+
     const result = await redis.hdel(KEY_ADMINS, username);
     if (result === 0) {
         return res.status(404).json({ error: "找不到該使用者。" });
@@ -442,6 +479,7 @@ app.post("/reset", async (req, res) => {
     multi.set(KEY_SOUND_ENABLED, "1");
     multi.set(KEY_IS_PUBLIC, "1"); 
     multi.del(KEY_ADMIN_LOG); 
+    // 【注意】 resetAll 故意不清空 KEY_ADMINS
     await multi.exec();
 
     await addAdminLog(`💥 系統已重置所有資料 (不清空管理員帳號)`, req.user.username); 
@@ -562,11 +600,11 @@ io.on("connection", async (socket) => {
 
 // --- 13. 啟動伺服器 & 建立超級管理員 ---
 async function startServer() {
-    // 【新增】 檢查並建立第一個超級管理員
+    // 【新增】 檢查並建立第一個超級管理員 (存在 Redis 中)
     try {
         const admins = await redis.hgetall(KEY_ADMINS);
         if (Object.keys(admins).length === 0) {
-            console.log("... 偵測到沒有任何管理員，正在建立初始超級管理員 (superadmin)...");
+            console.log("... 偵測到 Redis 中沒有任何管理員，正在建立初始超級管理員 (superadmin)...");
             const passwordHash = await bcrypt.hash(ADMIN_TOKEN, 10);
             const superAdmin = {
                 username: 'superadmin',
@@ -574,10 +612,12 @@ async function startServer() {
                 role: 'superadmin'
             };
             await redis.hset(KEY_ADMINS, 'superadmin', JSON.stringify(superAdmin));
-            console.log("✅ 初始超級管理員 'superadmin' 建立完畢。");
-            console.log("   請使用 'superadmin' 和您的 ADMIN_TOKEN 密碼登入。");
+            console.log("✅ 初始超級管理員 'superadmin' 建立完畢 (存於 Redis)。");
+            console.log("   您現在可以使用 'superadmin' 和您的 ADMIN_TOKEN 密碼登入。");
+            console.log("   (此帳號也會作為緊急後門，即使 Redis 資料遺失也可登入)");
         } else {
-            console.log("... 管理員帳號已存在，跳過初始建立。");
+            console.log("... Redis 管理員帳號已存在，跳過初始建立。");
+            console.log("   (緊急後門 'superadmin' / 'ADMIN_TOKEN' 仍然有效)");
         }
     } catch (e) {
         console.error("❌ 建立初始超級管理員失敗:", e);
