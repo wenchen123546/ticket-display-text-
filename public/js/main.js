@@ -51,30 +51,24 @@ socket.on("updateSoundSetting", (isEnabled) => {
 
 socket.on("updatePublicStatus", (status) => {
     console.log("Public status updated:", status);
-    const wasPublic = isPublic; // 記錄舊狀態
     isPublic = status;
     
     // 切換維護遮罩
     document.body.classList.toggle("is-closed", !isPublic); 
 
     if (isPublic) {
-        // 從維護模式切換回開放
+        // 【修改】 如果系統變為「公開」，
+        // 1. 主動連線
         socket.connect();
         
-        // 【新增邏輯】 強制移除連線中斷條 (以防 connect 事件延遲)
-        statusBar.classList.remove("visible"); 
-        
-        // 【新增邏輯】 清理前台 UI 狀態，並顯示載入中提示
-        if (!wasPublic) {
-            passedListEl.innerHTML = "";
-            featuredContainerEl.innerHTML = "";
-            numberEl.textContent = "載入中..."; // 視覺提示正在獲取數據
-            lastUpdatedEl.textContent = "連線已恢復";
-        }
+        // 2. (statusBar 會由 'connect' 事件自動處理)
         
     } else {
-        // 從開放切換到維護
+        // 【修改】 如果系統變為「維護中」，
+        // 1. 主動斷線，防止自動重連
         socket.disconnect();
+        
+        // 2. 隱藏「連線中斷」橫幅，因為這是預期中的斷線
         statusBar.classList.remove("visible");
     }
 });
