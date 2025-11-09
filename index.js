@@ -2,17 +2,10 @@
  * ==========================================
  * 伺服器 (index.js)
  * ... (舊註解) ...
- * * 11.【重構 v2】
- * * - 實作多使用者系統 (Admin / Super Admin)
- * * - 導入 bcryptjs 進行密碼雜湊
- * * - 導入 JWT (JSON Web Token) 進行認證
- * * - 新增 Super Admin 管理 API
- * * 12.【修正 v2.1】
- * * - 修正 io.use() 中介軟體，允許公開使用者 (無 Token) 連線
- * * 13.【優化】
- * * - 管理員日誌加入日期時間戳記
  * * 14.【新增/優化】
  * * - JWT 期限可由超級管理員在後台設定 (預設 8 小時)
+ * * 15.【修正】
+ * * - 新增 'trust proxy' 設定，解決 X-Forwarded-For 錯誤
  * ==========================================
  */
 
@@ -23,12 +16,15 @@ const http = require("http");
 const socketio = require("socket.io");
 const Redis = require("ioredis");
 const helmet = require('helmet'); 
-const rateLimit = require('express-rate-limit'); 
+const rateLimit = require("express-rate-limit");
 const bcrypt = require('bcryptjs'); 
 const jwt = require('jsonwebtoken'); 
 
 // --- 2. 伺服器實體化 ---
 const app = express();
+// 【修正】 設定 'trust proxy' 為 true，解決部署環境中的 X-Forwarded-For 錯誤
+app.set('trust proxy', true);
+
 const server = http.createServer(app);
 const io = socketio(server);
 
