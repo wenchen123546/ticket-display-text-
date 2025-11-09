@@ -146,6 +146,8 @@ socket.on("connect_error", (err) => {
 });
 
 // --- 伺服器日誌監聽器 ---
+
+// 【修改】 初始日誌載入 (舊→新)
 socket.on("initAdminLogs", (logs) => {
     adminLogUI.innerHTML = "";
     if (!logs || logs.length === 0) {
@@ -153,15 +155,17 @@ socket.on("initAdminLogs", (logs) => {
         return;
     }
     const fragment = document.createDocumentFragment();
-    logs.forEach(logMsg => {
+    // 伺服器傳來的是 [新...舊]，反轉陣列使其變為 [舊...新]
+    logs.reverse().forEach(logMsg => {
         const li = document.createElement("li");
         li.textContent = logMsg;
-        fragment.appendChild(li);
+        fragment.appendChild(li); // 依序附加 (舊的在最上面)
     });
-    adminLogUI.appendChild(fragment);
-    adminLogUI.scrollTop = adminLogUI.scrollHeight; 
+    adminLogUI.appendChild(fragment); // (新的在最下面)
+    adminLogUI.scrollTop = adminLogUI.scrollHeight; // 滾動到底部 (顯示最新)
 });
 
+// 【修改】 新日誌 (附加到最下面)
 socket.on("newAdminLog", (logMessage) => {
     const firstLi = adminLogUI.querySelector("li");
     if (firstLi && firstLi.textContent.includes("[目前尚無日誌]")) {
@@ -170,8 +174,10 @@ socket.on("newAdminLog", (logMessage) => {
     
     const li = document.createElement("li");
     li.textContent = logMessage;
-    adminLogUI.prepend(li); 
+    adminLogUI.appendChild(li); // 【修改】 改為 appendChild (附加到最下面)
+    adminLogUI.scrollTop = adminLogUI.scrollHeight; // 【修改】 自動滾動到底部
 });
+
 
 // --- 在線管理員監聽器 ---
 socket.on("updateOnlineAdmins", (admins) => {
@@ -579,7 +585,7 @@ const userListUI = document.getElementById("user-list-ui");
 const newUserUsernameInput = document.getElementById("new-user-username");
 const newUserPasswordInput = document.getElementById("new-user-password");
 const addUserBtn = document.getElementById("add-user-btn");
-const newUserNicknameInput = document.getElementById("new-user-nickname"); // 【新】 取得綽號 DOM
+const newUserNicknameInput = document.getElementById("new-user-nickname"); // 取得綽號 DOM
 
 // 綽號表單 DOM
 const setNickUsernameInput = document.getElementById("set-nick-username");
@@ -641,7 +647,7 @@ if (addUserBtn) {
     addUserBtn.onclick = async () => {
         const newUsername = newUserUsernameInput.value;
         const newPassword = newUserPasswordInput.value;
-        const newNickname = newUserNicknameInput.value.trim(); // 【新】 取得綽號
+        const newNickname = newUserNicknameInput.value.trim(); // 取得綽號
 
         if (!newUsername || !newPassword) {
             alert("帳號和密碼皆為必填。"); // 綽號為選填，故不檢查
@@ -649,18 +655,18 @@ if (addUserBtn) {
         }
 
         addUserBtn.disabled = true;
-        // 【修改】 傳送新綽號至 API
+        // 傳送新綽號至 API
         const success = await apiRequest("/api/admin/add-user", { 
             newUsername, 
             newPassword,
-            newNickname // 【新】
+            newNickname 
         });
         
         if (success) {
             showToast(`✅ 已新增用戶: ${newUsername}`, "success");
             newUserUsernameInput.value = "";
             newUserPasswordInput.value = "";
-            newUserNicknameInput.value = ""; // 【新】 清空綽號欄位
+            newUserNicknameInput.value = ""; // 清空綽號欄位
             await loadAdminUsers(); 
         }
         addUserBtn.disabled = false;
