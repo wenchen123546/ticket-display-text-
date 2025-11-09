@@ -488,9 +488,14 @@ textarea { height: 80px; text-align: left; padding: 10px; }
     flex-shrink: 0;
 }
 
-#card-superadmin input[type="password"] {
+/* --- 【排版衝突修正】 --- */
+/* 將規則改為更具體的 #set-password-group，
+   以避免影響到 .input-group 中的密碼框 */
+#set-password-group input[type="password"] {
     margin-top: 10px;
 }
+/* --- 【排版衝突修正 結束】 --- */
+
 
 /* --- 15. 修正 V3.2 CSP 造成的行內樣式錯誤 --- */
 /* (原始規則) */
