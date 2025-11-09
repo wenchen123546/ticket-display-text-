@@ -19,12 +19,13 @@ const publicToggle = document.getElementById("public-toggle");
 const adminLogUI = document.getElementById("admin-log-ui");
 const clearLogBtn = document.getElementById("clear-log-btn");
 const resetAllBtn = document.getElementById("resetAll");
-const onlineUsersList = document.getElementById("online-users-list"); // 【新】
+const onlineUsersList = document.getElementById("online-users-list"); 
 
 // --- 2. 全域變數 ---
 let token = ""; // 儲存 Session Token
 let userRole = "normal"; 
-let username = ""; 
+let username = ""; // 【修改】 這將儲存「綽號」 (顯示名稱)
+let uniqueUsername = ""; // 【新】 這將儲存「帳號」 (唯一 ID)
 let toastTimer = null; 
 let publicToggleConfirmTimer = null; 
 
@@ -48,7 +49,7 @@ function showLogin() {
 async function showPanel() {
     loginContainer.style.display = "none";
     adminPanel.style.display = "block";
-    document.title = `後台管理 - ${username}`; 
+    document.title = `後台管理 - ${username}`; // 【修改】 顯示綽號
     socket.connect();
 
     // 根據角色顯示「用戶管理」面板
@@ -62,13 +63,13 @@ async function showPanel() {
 }
 
 // 登入邏輯
-async function attemptLogin(username, password) {
+async function attemptLogin(usernameInput, password) { // 【修改】 參數名稱避免衝突
     loginError.textContent = "驗證中...";
     try {
         const res = await fetch("/login", { 
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ username, password }), 
+            body: JSON.stringify({ username: usernameInput, password }), // 【修改】
         });
         
         const data = await res.json();
@@ -80,7 +81,8 @@ async function attemptLogin(username, password) {
             // 登入成功
             token = data.token;       
             userRole = data.role;     
-            username = data.username; 
+            username = data.nickname; // 【修改】 儲存綽號
+            uniqueUsername = data.username; // 【新】 儲存唯一帳號
             socket.auth.token = token; 
             await showPanel();
         }
@@ -127,7 +129,7 @@ function showToast(message, type = 'info') {
 socket.on("connect", () => {
     console.log("Socket.io 已連接");
     statusBar.classList.remove("visible");
-    showToast(`✅ 已連線 (${username})`, "success");
+    showToast(`✅ 已連線 (${username})`, "success"); // 【修改】 顯示綽號
 });
 socket.on("disconnect", () => {
     console.warn("Socket.io 已斷線");
@@ -350,7 +352,7 @@ function renderFeaturedListUI(contents) {
     featuredListUI.appendChild(fragment);
 }
 
-// 【新】 渲染在線管理員列表
+// 【修改】 渲染在線管理員列表
 function renderOnlineAdmins(admins) {
     if (!onlineUsersList) return;
     
@@ -363,21 +365,23 @@ function renderOnlineAdmins(admins) {
     
     // 排序：自己 > 超管 > 其他 (按字母)
     admins.sort((a, b) => {
-        if (a.username === username) return -1;
-        if (b.username === username) return 1;
+        // 【修改】 使用 uniqueUsername 判斷 "自己"
+        if (a.username === uniqueUsername) return -1;
+        if (b.username === uniqueUsername) return 1;
         if (a.role === 'super' && b.role !== 'super') return -1;
         if (a.role !== 'super' && b.role === 'super') return 1;
-        return a.username.localeCompare(b.username);
+        return a.nickname.localeCompare(b.nickname); // 按綽號排序
     });
 
     const fragment = document.createDocumentFragment();
     admins.forEach(admin => {
         const li = document.createElement("li");
         const icon = admin.role === 'super' ? '👑' : '👤';
-        const isSelf = admin.username === username;
+        const isSelf = admin.username === uniqueUsername; // 【修改】 使用 uniqueUsername 判斷
         const selfClass = isSelf ? 'is-self' : '';
         
-        li.innerHTML = `<span class="role-icon">${icon}</span> <span class="username ${selfClass}">${admin.username}</span>`;
+        // 【修改】 顯示 admin.nickname
+        li.innerHTML = `<span class="role-icon">${icon}</span> <span class="username ${selfClass}">${admin.nickname}</span>`;
         fragment.appendChild(li);
     });
     onlineUsersList.appendChild(fragment);
@@ -575,6 +579,11 @@ const userListUI = document.getElementById("user-list-ui");
 const newUserUsernameInput = document.getElementById("new-user-username");
 const newUserPasswordInput = document.getElementById("new-user-password");
 const addUserBtn = document.getElementById("add-user-btn");
+// 【新】 綽號表單 DOM
+const setNickUsernameInput = document.getElementById("set-nick-username");
+const setNickNicknameInput = document.getElementById("set-nick-nickname");
+const setNicknameBtn = document.getElementById("set-nickname-btn");
+
 
 // 載入用戶列表
 async function loadAdminUsers() {
@@ -584,33 +593,42 @@ async function loadAdminUsers() {
     
     if (data && data.users) {
         userListUI.innerHTML = "";
-        if (data.users.length === 0) {
-            userListUI.innerHTML = "<li>(尚無普通管理員)</li>";
-            return;
-        }
         
+        // 【修改】 排序 (超管優先，然後按帳號)
+        data.users.sort((a, b) => {
+            if (a.role === 'super' && b.role !== 'super') return -1;
+            if (a.role !== 'super' && b.role === 'super') return 1;
+            return a.username.localeCompare(b.username);
+        });
+
         data.users.forEach(user => {
             const li = document.createElement("li");
-            li.innerHTML = `<span>${user}</span>`;
+            const icon = user.role === 'super' ? '👑' : '👤';
+            // 【修改】 顯示 綽號 (帳號)
+            li.innerHTML = `<span>${icon} <strong>${user.nickname}</strong> (${user.username})</span>`;
             
-            const deleteBtn = document.createElement("button");
-            deleteBtn.type = "button";
-            deleteBtn.className = "delete-item-btn";
-            deleteBtn.textContent = "×";
-            
-            const actionCallback = async () => {
-                deleteBtn.disabled = true;
-                const success = await apiRequest("/api/admin/del-user", { delUsername: user });
-                if (success) {
-                    showToast(`✅ 已刪除用戶: ${user}`, "success");
-                    await loadAdminUsers(); 
-                } else {
-                    deleteBtn.disabled = false;
-                }
-            };
-            
-            setupConfirmationButton(deleteBtn, "×", "⚠️", actionCallback);
-            li.appendChild(deleteBtn);
+            // 【修改】 超管自己不能刪除自己
+            if (user.role !== 'super') {
+                const deleteBtn = document.createElement("button");
+                deleteBtn.type = "button";
+                deleteBtn.className = "delete-item-btn";
+                deleteBtn.textContent = "×";
+                
+                const actionCallback = async () => {
+                    deleteBtn.disabled = true;
+                    // 【修改】 使用 user.username 進行刪除
+                    const success = await apiRequest("/api/admin/del-user", { delUsername: user.username });
+                    if (success) {
+                        showToast(`✅ 已刪除用戶: ${user.username}`, "success");
+                        await loadAdminUsers(); 
+                    } else {
+                        deleteBtn.disabled = false;
+                    }
+                };
+                
+                setupConfirmationButton(deleteBtn, "×", "⚠️", actionCallback);
+                li.appendChild(deleteBtn);
+            }
             userListUI.appendChild(li);
         });
     }
@@ -637,5 +655,29 @@ if (addUserBtn) {
             await loadAdminUsers(); 
         }
         addUserBtn.disabled = false;
+    };
+}
+
+// 【新】 綁定設定綽號按鈕
+if (setNicknameBtn) {
+    setNicknameBtn.onclick = async () => {
+        const targetUsername = setNickUsernameInput.value.trim();
+        const nickname = setNickNicknameInput.value.trim();
+
+        if (!targetUsername || !nickname) {
+            alert("目標帳號和新綽號皆為必填。");
+            return;
+        }
+
+        setNicknameBtn.disabled = true;
+        const success = await apiRequest("/api/admin/set-nickname", { targetUsername, nickname });
+        
+        if (success) {
+            showToast(`✅ 已更新 ${targetUsername} 的綽號`, "success");
+            setNickUsernameInput.value = "";
+            setNickNicknameInput.value = "";
+            await loadAdminUsers(); // 重新載入列表
+        }
+        setNicknameBtn.disabled = false;
     };
 }
