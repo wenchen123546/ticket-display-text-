@@ -437,3 +437,36 @@ textarea { height: 80px; text-align: left; padding: 10px; }
     background: var(--color-danger);
     color: white;
 }
+
+/* --- 14. 【新增】 超級管理員卡片樣式 --- */
+
+#card-superadmin select {
+    font-size: 1rem;
+    padding: 8px;
+    width: 100%;
+    text-align: left;
+    border-radius: 6px;
+    border: 1px solid var(--color-border);
+    margin-top: 10px;
+    box-sizing: border-box;
+}
+
+#card-superadmin .list-editor {
+    /* 讓日誌和列表編輯器高度一致 */
+    max-height: 250px; 
+    display: flex;
+    flex-direction: column;
+}
+#card-superadmin .list-editor ul {
+    flex-grow: 1; /* 讓列表填滿空間 */
+    max-height: 150px;
+}
+#card-superadmin .list-editor button {
+    margin-top: 10px;
+    width: 100%;
+    flex-shrink: 0;
+}
+
+#card-superadmin input[type="password"] {
+    margin-top: 10px;
+}
