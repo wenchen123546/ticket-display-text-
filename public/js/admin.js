@@ -19,7 +19,7 @@ const publicToggle = document.getElementById("public-toggle");
 const adminLogUI = document.getElementById("admin-log-ui");
 const clearLogBtn = document.getElementById("clear-log-btn");
 const resetAllBtn = document.getElementById("resetAll");
-const onlineUsersList = document.getElementById("online-users-list"); 
+const onlineUsersList = document.getElementById("online-users-list"); // 【新】
 
 // --- 2. 全域變數 ---
 let token = ""; // 儲存 Session Token
@@ -171,7 +171,7 @@ socket.on("newAdminLog", (logMessage) => {
     adminLogUI.prepend(li); 
 });
 
-// --- 在線管理員監聽器 ---
+// --- 【新】 在線管理員監聽器 ---
 socket.on("updateOnlineAdmins", (admins) => {
     console.log("在線列表更新:", admins);
     renderOnlineAdmins(admins);
@@ -350,7 +350,7 @@ function renderFeaturedListUI(contents) {
     featuredListUI.appendChild(fragment);
 }
 
-// 渲染在線管理員列表
+// 【新】 渲染在線管理員列表
 function renderOnlineAdmins(admins) {
     if (!onlineUsersList) return;
     
@@ -576,7 +576,7 @@ const newUserUsernameInput = document.getElementById("new-user-username");
 const newUserPasswordInput = document.getElementById("new-user-password");
 const addUserBtn = document.getElementById("add-user-btn");
 
-// 【修改】 載入用戶列表 (包含重設密碼按鈕)
+// 載入用戶列表
 async function loadAdminUsers() {
     if (userRole !== 'super' || !userListUI) return;
     
@@ -589,50 +589,14 @@ async function loadAdminUsers() {
             return;
         }
         
-        const fragment = document.createDocumentFragment();
         data.users.forEach(user => {
             const li = document.createElement("li");
             li.innerHTML = `<span>${user}</span>`;
             
-            // --- 按鈕容器 ---
-            const buttonGroup = document.createElement("div");
-            buttonGroup.style.display = "flex";
-            buttonGroup.style.gap = "5px";
-
-            // --- 【新】重設密碼按鈕 (🔑) ---
-            const setPassBtn = document.createElement("button");
-            setPassBtn.type = "button";
-            setPassBtn.className = "delete-item-btn"; // 借用樣式
-            setPassBtn.innerHTML = "🔑"; // Key Emoji
-            setPassBtn.style.backgroundColor = "var(--color-cyan)"; // 改為藍色
-            setPassBtn.setAttribute("title", "重設密碼");
-            
-            setPassBtn.onclick = async () => {
-                const newPassword = prompt(`請輸入 ${user} 的新密碼：\n(警告：此操作無法復原)`);
-                
-                if (!newPassword || newPassword.trim() === "") {
-                    alert("已取消或密碼為空。");
-                    return;
-                }
-                
-                setPassBtn.disabled = true;
-                const success = await apiRequest("/api/admin/set-password", { 
-                    usernameToChange: user, 
-                    newPassword: newPassword 
-                });
-                
-                if (success) {
-                    showToast(`✅ 已更新 ${user} 的密碼`, "success");
-                }
-                setPassBtn.disabled = false;
-            };
-
-            // --- 刪除按鈕 (×) ---
             const deleteBtn = document.createElement("button");
             deleteBtn.type = "button";
             deleteBtn.className = "delete-item-btn";
             deleteBtn.textContent = "×";
-            deleteBtn.setAttribute("title", "刪除用戶");
             
             const actionCallback = async () => {
                 deleteBtn.disabled = true;
@@ -646,15 +610,9 @@ async function loadAdminUsers() {
             };
             
             setupConfirmationButton(deleteBtn, "×", "⚠️", actionCallback);
-            
-            // 將按鈕加入容器，再加入 li
-            buttonGroup.appendChild(setPassBtn);
-            buttonGroup.appendChild(deleteBtn);
-            li.appendChild(buttonGroup);
-
-            fragment.appendChild(li);
+            li.appendChild(deleteBtn);
+            userListUI.appendChild(li);
         });
-        userListUI.appendChild(fragment); // 一次性渲染
     }
 }
 
