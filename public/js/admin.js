@@ -27,7 +27,7 @@ let userRole = "normal";
 let username = ""; // 這將儲存「綽號」 (顯示名稱)
 let uniqueUsername = ""; // 這將儲存「帳號」 (唯一 ID)
 let toastTimer = null; 
-let publicToggleConfirmTimer = null; 
+// let publicToggleConfirmTimer = null; // 【優化】 已移除
 
 
 // --- 3. Socket.io ---
@@ -532,6 +532,7 @@ soundToggle.addEventListener("change", () => {
     apiRequest("/set-sound-enabled", { enabled: isEnabled });
 });
 
+// 【優化 4】 簡化 Public Toggle 邏輯
 const publicToggleLabel = document.getElementById("public-toggle-label");
 const originalToggleText = "對外開放前台";
 
@@ -539,55 +540,24 @@ publicToggle.addEventListener("change", () => {
     const isPublic = publicToggle.checked;
 
     if (isPublic) {
-        // 從「關閉」切換回「開啟」
-        if (publicToggleConfirmTimer) {
-            clearTimeout(publicToggleConfirmTimer.timer);
-            clearInterval(publicToggleConfirmTimer.interval);
-            publicToggleConfirmTimer = null;
-            publicToggleLabel.textContent = originalToggleText;
-            publicToggleLabel.classList.remove("is-confirming-label");
-        }
+        // "開啟" 網站不需要確認，直接執行
         apiRequest("/set-public-status", { isPublic: true });
     } else {
-        // 從「開啟」切換到「關閉」
-        if (publicToggleConfirmTimer) {
-            // 正在確認中，執行動作
-            clearTimeout(publicToggleConfirmTimer.timer);
-            clearInterval(publicToggleConfirmTimer.interval);
-            publicToggleConfirmTimer = null;
-            publicToggleLabel.textContent = originalToggleText;
-            publicToggleLabel.classList.remove("is-confirming-label");
-            
+        // "關閉" 網站需要確認
+        const confirmed = window.confirm(
+            "您確定要關閉前台，啟用維護模式嗎？\n所有公開用戶將會斷線。"
+        );
+        
+        if (confirmed) {
+            // 用戶確認，執行 API
             apiRequest("/set-public-status", { isPublic: false });
-            
         } else {
-            // 首次點擊，開始確認
-            publicToggle.checked = true; // 立即取消
-            
-            let countdown = 5;
-            publicToggleLabel.textContent = `⚠️ 點此確認關閉 (${countdown}s)`;
-            publicToggleLabel.classList.add("is-confirming-label");
-
-            const interval = setInterval(() => {
-                countdown--;
-                if (countdown > 0) {
-                    publicToggleLabel.textContent = `⚠️ 點此確認關閉 (${countdown}s)`;
-                } else {
-                    clearInterval(interval);
-                }
-            }, 1000);
-
-            const timer = setTimeout(() => {
-                clearInterval(interval);
-                publicToggleLabel.textContent = originalToggleText;
-                publicToggleLabel.classList.remove("is-confirming-label");
-                publicToggleConfirmTimer = null;
-            }, 5000);
-            
-            publicToggleConfirmTimer = { timer, interval };
+            // 用戶取消，將開關切回 "checked" (開啟)
+            publicToggle.checked = true; 
         }
     }
 });
+
 
 // --- 14. 超級管理員功能 ---
 
@@ -665,7 +635,7 @@ if (addUserBtn) {
         }
 
         addUserBtn.disabled = true;
-        // 傳送新綽號至 API
+        // T傳送新綽號至 API
         const success = await apiRequest("/api/admin/add-user", { 
             newUsername, 
             newPassword,
