@@ -139,9 +139,13 @@
                     <label class="input-group-label">新增管理員</label>
                     <div class="input-group">
                         <label for="new-user-username" class="sr-only">新帳號</label>
-                        <input type="text" id="new-user-username" placeholder="新帳號">
+                        <input type="text" id="new-user-username" placeholder="新帳號 (必填)">
+                        
+                        <label for="new-user-nickname" class="sr-only">綽號</label>
+                        <input type="text" id="new-user-nickname" placeholder="綽號 (選填)">
+
                         <label for="new-user-password" class="sr-only">新密碼</label>
-                        <input type="password" id="new-user-password" placeholder="新密碼">
+                        <input type="password" id="new-user-password" placeholder="新密碼 (必填)">
                         <button id="add-user-btn" type="button" class="btn-add">+</button>
                     </div>
 
@@ -164,6 +168,6 @@
 
 <div id="toast-notification"></div>
 
-<script src="/js/admin.js?v=12"></script> 
+<script src="/js/admin.js?v=13"></script> 
 </body>
 </html>
