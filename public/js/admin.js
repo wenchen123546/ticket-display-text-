@@ -67,11 +67,10 @@ function showLogin() {
     sessionStorage.removeItem('admin_username'); 
 
     // --- 【!!! 關鍵錯誤修正 !!!】 ---
-    // *不要* 呼叫 socket.disconnect()。
-    // `disconnect()` 會永久銷毀監聽器。
-    // 我們只想清除 Token。Socket 會在下次重連時
-    // 自動因為「缺少 Token」而被伺服器拒絕。
-    // socket.disconnect(); // <-- 刪除此行
+    // *必須* 呼叫 disconnect() 來停止 Socket
+    // 以防止它使用 null Token 重新連線
+    // 成為「公開使用者」。
+    socket.disconnect(); // <-- 【已加回此行】
     // --- 【修正結束】 ---
 }
 
@@ -170,15 +169,14 @@ socket.on("connect_error", (err) => {
         // --- 這是「永久」的認證錯誤 (例如 Token 過期) ---
         
         // 【!!! 關鍵錯誤修正 !!!】
-        // *不要* 呼叫 socket.disconnect()。
-        // 只需要呼叫 showLogin() 來清除 Token 即可。
-        // socket.disconnect(); // <-- 刪除此行
+        // *必須* 呼叫 disconnect() 來停止自動重試
+        socket.disconnect(); // <-- 【已加回此行】
         
         let alertMessage = `後台即時連線(Socket.io)失敗。\n\n錯誤: ${err.message}\n\n`;
         alertMessage += "原因：您的認證無效或已過期，請您重新登入。";
         
         alert(alertMessage);
-        showLogin(); // <-- showLogin() 會清除 Token
+        showLogin(); // <-- showLogin() 會清除 Token (並再次確保 disconnect)
         
     } else {
         // --- 這是「暫時」的網路錯誤 ---
@@ -260,6 +258,7 @@ async function loadInitialDataViaAPI() {
         renderAdminLogs(data.logs); // 使用新的渲染函式
 
         // (如果 superadmin 卡片已顯示，就載入管理員列表)
+        // (*** 優化：建議將此邏輯移至 showPanel() ***)
         if (superAdminCard.style.display === "block") {
             loadAdmins();
         }
