@@ -19,12 +19,12 @@ const adminLogUI = document.getElementById("admin-log-ui");
 const clearLogBtn = document.getElementById("clear-log-btn");
 const resetAllBtn = document.getElementById("resetAll");
 const resetAllConfirmBtn = document.getElementById("resetAllConfirm");
-// const saveLayoutBtn = document.getElementById("save-layout-btn"); // 【修改】 移除
+// const saveLayoutBtn = document.getElementById("save-layout-btn"); // 移除
 
 // --- 2. 全域變數 ---
 let token = "";
 let resetAllTimer = null;
-let grid = null; // GridStack 物件
+// let grid = null; // 【修改】 移除 GridStack 物件
 let toastTimer = null; 
 
 // --- 3. Socket.io ---
@@ -49,22 +49,10 @@ async function showPanel() {
     document.title = "後台管理 - 控制台";
     socket.connect();
 
-    // 【修改】 移除讀取已儲存排版的 try...catch 區塊
+    // 【修改】 移除讀取排版和 GridStack.init 的所有程式碼
     showToast("ℹ️ 使用預設排版", "info");
-
-    setTimeout(() => {
-        grid = GridStack.init({
-            column: 12, 
-            cellHeight: 'auto', 
-            margin: 10,         
-            minRow: 1,          
-            float: true,      
-            removable: false,   
-            static: true // 【修改】 鎖定儀表板，使其不可拖曳或調整大小
-        });
-        
-        // 【修改】 移除 if (savedLayout) { ... } 區塊
-    }, 100); 
+    
+    // 【修改】 移除 setTimeout(...) 和 GridStack.init(...) 區塊
 }
 
 async function checkToken(tokenToCheck) {
@@ -103,7 +91,8 @@ function showToast(message, type = 'info') {
     if (!toast) return;
     
     toast.textContent = message;
-    toast.className = type;
+    toast.className = type; 
+    
     toast.classList.add("show");
     
     if (toastTimer) clearTimeout(toastTimer);
@@ -414,4 +403,3 @@ publicToggle.addEventListener("change", () => {
 });
 
 // --- 13. 【修改】 移除 GridStack 儲存按鈕的綁定 ---
-// (if (saveLayoutBtn) { ... } 整個區塊已被刪除)
