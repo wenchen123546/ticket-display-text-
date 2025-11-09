@@ -21,10 +21,12 @@ const adminLogUI = document.getElementById("admin-log-ui");
 const clearLogBtn = document.getElementById("clear-log-btn");
 const resetAllBtn = document.getElementById("resetAll");
 const resetAllConfirmBtn = document.getElementById("resetAllConfirm");
-// 【新增】 登出按鈕
-const logoutBtn = document.getElementById("logout-btn");
+const logoutBtn = document.getElementById("logout-btn"); // 登出按鈕
+// 【新增】 JWT 期限設定相關 DOM
+const jwtExpiryHoursInput = document.getElementById("jwt-expiry-hours");
+const currentJwtExpiryEl = document.getElementById("current-jwt-expiry");
+const setJwtExpiryBtn = document.getElementById("set-jwt-expiry-btn");
 
-// 【修正】 移除頂部 Super Admin 元素的宣告，改在函式內取得。
 const superAdminCard = document.getElementById("card-superadmin");
 
 
@@ -79,7 +81,6 @@ async function showPanel() {
     if (userRole === 'superadmin') {
         superAdminCard.style.display = "block";
         initSuperAdminBindings(); 
-        // 【修正】確保 DOM 顯示後再載入管理員列表
         loadAdmins(); 
     } else {
         superAdminCard.style.display = "none";
@@ -381,7 +382,6 @@ document.getElementById("resetPassed").onclick = resetPassed_fixed;
 resetAllBtn.onclick = requestResetAll;
 resetAllConfirmBtn.onclick = confirmResetAll;
 clearLogBtn.onclick = clearAdminLog; 
-// 【新增】登出按鈕事件
 if (logoutBtn) logoutBtn.onclick = showLogin;
 
 addPassedBtn.onclick = async () => {
@@ -441,11 +441,9 @@ publicToggle.addEventListener("change", () => {
     apiRequest("/set-public-status", { isPublic: isPublic });
 });
 
-// --- 13. 【新增/重構】 Super Admin 功能函式和綁定 ---
+// --- 13. Super Admin 功能函式和綁定 ---
 
-// 【優化/重構】 將 Super Admin 的核心功能函式提升到全域作用域
 async function loadAdmins() {
-    // 每次呼叫都重新取得元素，確保 DOM 存在
     const adminListUI = document.getElementById("admin-list-ui");
     if (!adminListUI) return; 
     
@@ -530,18 +528,55 @@ async function deleteAdmin(username) {
     }
 }
 
+// 【新增】 JWT 期限設定功能
+async function loadJwtExpiry() {
+    const data = await apiRequest("/api/admin/get-jwt-expiry", {}, true);
+    if (data && data.hours) {
+        currentJwtExpiryEl.textContent = data.hours;
+        jwtExpiryHoursInput.value = data.hours;
+    } else {
+        currentJwtExpiryEl.textContent = "載入失敗";
+    }
+}
+
+async function setJwtExpiry() {
+    const hours = Number(jwtExpiryHoursInput.value);
+    
+    if (isNaN(hours) || hours < 1 || hours > 720 || !Number.isInteger(hours)) {
+        showToast("❌ 期限必須是 1 到 720 之間的整數", "error");
+        return;
+    }
+    
+    if (!confirm(`確定要將 JWT 期限設定為 ${hours} 小時嗎？\n (所有用戶需重新登入才生效)`)) return;
+    
+    const success = await apiRequest("/api/admin/set-jwt-expiry", { hours });
+    if (success) {
+        showToast(`✅ JWT 期限已設為 ${hours} 小時`, "success");
+        currentJwtExpiryEl.textContent = hours;
+        
+        // 【重要】 提醒 Super Admin 重新登入以立即更新自己的 Token
+        if (confirm("為了讓此設定立即對您的帳號生效，您需要重新登入。\n是否立即登出？")) {
+             showLogin();
+        }
+    }
+}
+
 
 // 【最終修正】 初始化 Super Admin 按鈕綁定
 function initSuperAdminBindings() {
-    // 這次直接在函式內部取得元素，確保它們在 DOM 顯示後才被引用。
     const refreshAdminListBtn = document.getElementById("refresh-admin-list");
     const addAdminBtn = document.getElementById("add-admin-btn");
     const setPwBtn = document.getElementById("set-pw-btn");
     
-    // 綁定事件，並使用提升的函式
     if (refreshAdminListBtn) refreshAdminListBtn.onclick = loadAdmins;
     if (addAdminBtn) addAdminBtn.onclick = addAdmin;
     if (setPwBtn) setPwBtn.onclick = setAdminPassword;
+    
+    // 【新增】 綁定 JWT 期限設定
+    if (setJwtExpiryBtn) setJwtExpiryBtn.onclick = setJwtExpiry;
+    
+    // 【新增】 載入目前的 JWT 期限設定
+    loadJwtExpiry();
 }
 
 
