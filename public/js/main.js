@@ -106,9 +106,11 @@ function playNotificationSound() {
 }
 
 socket.on("update", (num) => {
+    // 【修改】 將音效播放移到 if 判斷之外，強制每次 update 都播放
+    playNotificationSound(); 
+
     if (numberEl.textContent !== String(num)) {
         numberEl.textContent = num;
-        playNotificationSound(); 
         document.title = `目前號碼 ${num} - 候位顯示`;
         numberEl.classList.add("updated");
         setTimeout(() => { numberEl.classList.remove("updated"); }, 500);
