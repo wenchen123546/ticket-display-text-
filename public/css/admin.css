@@ -268,20 +268,65 @@ input[type="url"] {
 
 .input-group { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; width: 100%; }
 .input-group input { flex: 1; min-width: 150px; margin: 5px; max-width: 100%; }
+
+/* 【修改】 讓 .input-group 內的按鈕有共同基礎 */
+.input-group button {
+    margin: 5px;
+    flex-shrink: 0;
+    padding: 0;
+    height: 40px; /* 統一高度 (配合 input 預設) */
+    border-radius: 50%; /* 預設圓形 */
+    box-sizing: border-box; /* 確保 padding 不影響高度 */
+}
+
 .input-group .btn-add { 
     font-size: 1.5rem; 
     font-weight: bold; 
     background: var(--color-success); 
     color: white; 
     width: 40px; 
-    height: 40px; 
-    border-radius: 50%; 
-    padding: 0; 
-    margin: 5px; 
     min-width: 40px; 
-    flex-shrink: 0; 
-    width: 40px !important; 
+    width: 40px !important; /* 覆蓋全域 button 寬度 */
 }
+
+/* 【新】 .input-group 內的 "動作" 按鈕 (例如: 設定) */
+.input-group .btn-action {
+    font-size: 1rem; /* 較小字體 */
+    /* 顏色繼承自 .btn-secondary (在 HTML 中) */
+    color: white;
+    min-width: 60px; /* 最小寬度 */
+    width: auto; /* 自動寬度 */
+    padding: 0 15px; /* 左右內距 */
+    border-radius: 8px; /* 圓角矩形 */
+}
+/* 覆蓋 .btn-secondary 的全域 margin */
+.input-group .btn-secondary.btn-action {
+    margin: 5px; 
+}
+
+
+/* 【新】 list-editor 內的子標籤 (用於分隔 "新增" 和 "設定綽號") */
+.list-editor .input-group-label {
+    display: block; /* 確保獨佔一行 */
+    font-size: 0.9rem;
+    font-weight: bold;
+    color: var(--color-neutral);
+    margin-top: 20px; /* 與上方區塊拉開距離 */
+    margin-bottom: 0px; /* 緊貼下方的 input-group */
+    text-align: left;
+    width: 100%;
+    padding-left: 5px;
+    box-sizing: border-box;
+}
+/* 第一個 label 不加 margin-top */
+.list-editor .input-group-label:first-of-type {
+    margin-top: 5px; /* 只需一點點間距 */
+}
+/* 讓 input-group 緊隨 label */
+.list-editor .input-group {
+    margin-top: 5px;
+}
+
 
 /* --- 5. 按鈕顏色 (使用 Class) --- */
 
