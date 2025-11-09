@@ -1,12 +1,13 @@
 /*
  * ==========================================
  * 伺服器 (index.js)
+ * * 【修改 V3.7 - 部署修正】
+ * * 增加 Socket.io 的 CORS 設定 (origin: "*")
+ * * 這是修復在 Render 平台上 WebSocket (WSS) 連線被拒絕的關鍵
  * * 【修改 V3.6 - 部署修正】
- * * 修正 ERR_ERL_PERMISSIVE_TRUST_PROXY 崩潰錯誤。
  * * 將 app.set('trust proxy', true) 修改為 app.set('trust proxy', 1)
  * * * * 【修改 V3.3 - 修正】
  * * 1. 增加「緊急後門」：允許 'superadmin' 使用 'ADMIN_TOKEN' 作為密碼登入
- * * (用於 Redis 資料遺失時的災難還原)
  * * 【修改 V3.2 - 修正】 
  * * 1. 增加 JWT 過期時間 (8h)，並在 middleware 中處理 TokenExpiredError
  * * 2. 收緊 Helmet CSP，移除 'unsafe-inline' style-src
@@ -33,7 +34,18 @@ const app = express();
 app.set('trust proxy', 1);
 
 const server = http.createServer(app);
-const io = socketio(server);
+
+// --- 【V3.7 部署修正】 ---
+// 告訴 Socket.io 接受來自所有來源的 WebSocket 連線
+// 這是修復 Render 平台上 WSS 被 CORS 阻擋的關鍵
+const io = socketio(server, {
+    cors: {
+        origin: "*", // 允許所有來源
+        methods: ["GET", "POST"]
+    }
+});
+// --- V3.7 修正結束 ---
+
 
 // --- 3. 核心設定 & 安全性 ---
 const PORT = process.env.PORT || 3000;
@@ -150,7 +162,7 @@ const authMiddleware = (req, res, next) => {
 
 const isSuperAdminMiddleware = (req, res, next) => {
     if (!req.user || req.user.role !== 'superadmin') {
-        return res.status(4.03).json({ error: "權限不足，此操作僅限超級管理員。" });
+        return res.status(403).json({ error: "權限不足，此操作僅限超級管理員。" });
     }
     next();
 };
