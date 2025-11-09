@@ -9,6 +9,8 @@
  * * - 新增 Super Admin 管理 API
  * * 12.【修正 v2.1】
  * * - 修正 io.use() 中介軟體，允許公開使用者 (無 Token) 連線
+ * * 13.【優化】
+ * * - 管理員日誌加入日期時間戳記
  * ==========================================
  */
 
@@ -160,7 +162,16 @@ async function broadcastFeaturedContents() {
 
 async function addAdminLog(message, username = '系統') {
     try {
-        const timestamp = new Date().toLocaleTimeString('zh-TW', { hour12: false });
+        // 【優化】 增加日期，使用 toLocaleString 確保格式一致性
+        const timestamp = new Date().toLocaleString('zh-TW', { 
+            year: 'numeric', 
+            month: '2-digit', 
+            day: '2-digit', 
+            hour: '2-digit', 
+            minute: '2-digit', 
+            second: '2-digit', 
+            hour12: false 
+        });
         const logMessage = `[${timestamp}] (${username}) ${message}`;
         
         await redis.lpush(KEY_ADMIN_LOG, logMessage);
@@ -501,10 +512,14 @@ io.on("connection", async (socket) => {
         pipeline.get(KEY_IS_PUBLIC); 
         
         const results = await pipeline.exec();
-        if (results.some(res => res[0] !== null)) {
-            const firstError = results.find(res => res[0] !== null)[0];
+        // 【修正】確保正確檢查 Redis multi 的錯誤
+        if (results.some(res => res[0])) {
+            // 嘗試找到第一個錯誤並拋出
+            const firstErrorResult = results.find(res => res[0]);
+            const firstError = firstErrorResult ? firstErrorResult[0] : new Error("Unknown Redis Multi Error");
             throw new Error(`Redis multi 執行失敗: ${firstError.message}`);
         }
+        
         const [
             [err0, currentNumberRaw],
             [err1, passedNumbersRaw],
