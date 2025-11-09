@@ -52,8 +52,23 @@ socket.on("updateSoundSetting", (isEnabled) => {
 socket.on("updatePublicStatus", (status) => {
     console.log("Public status updated:", status);
     isPublic = status;
-    document.body.classList.toggle("is-closed", !isPublic);
-    if (!isPublic) {
+    
+    // 切換維護遮罩
+    document.body.classList.toggle("is-closed", !isPublic); 
+
+    if (isPublic) {
+        // 【修改】 如果系統變為「公開」，
+        // 1. 主動連線
+        socket.connect();
+        
+        // 2. (statusBar 會由 'connect' 事件自動處理)
+        
+    } else {
+        // 【修改】 如果系統變為「維護中」，
+        // 1. 主動斷線，防止自動重連
+        socket.disconnect();
+        
+        // 2. 隱藏「連線中斷」橫幅，因為這是預期中的斷線
         statusBar.classList.remove("visible");
     }
 });
