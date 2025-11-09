@@ -8,7 +8,7 @@
  * * 增加 Socket.io 的 CORS 設定 (origin: "*")
  * * 【修改 V3.6 - 部署修正】
  * * 將 app.set('trust proxy', 1)
- * * 【修改 V3.3 - 修正】
+ * * 【修改 V3.3 - 修正】 
  * * 增加「緊急後門」
  * * 【修改 V3.2 - 修正】 
  * * 增加 JWT 過期時間 (8h)
@@ -230,35 +230,15 @@ app.post("/login", loginLimiter, async (req, res) => {
         return res.status(400).json({ error: "請輸入使用者名稱和密碼。" });
     }
 
-    // --- V3.3 修正： 增加「緊急後門」超級管理員 ---
-    // 檢查是否為使用 ENV TOKEN 登入的 'superadmin'
-    // 這會繞過 Redis，用於資料庫遺失時的緊急登入
-    // 注意：這裡是明文比對，而非 bcrypt
-    if (username === 'superadmin' && password === ADMIN_TOKEN) {
-        console.warn(`⚠️  緊急後門登入： 'superadmin' 已使用 ADMIN_TOKEN 登入。`);
-        
-        const payload = {
-            username: 'superadmin (Fallback)', // 標記為後門登入
-            role: 'superadmin'
-        };
-        
-        // 【V3.2 修正】 恢復 expiresIn 選項
-        const token = jwt.sign(payload, JWT_SECRET, { expiresIn: `${DEFAULT_JWT_EXPIRY_HOURS}h` }); 
-        
-        // 嘗試記錄日誌 (如果 Redis 剛好還活著)
-        addAdminLog(`'superadmin' 使用了緊急後門 (ADMIN_TOKEN) 登入`, '系統').catch(err => {
-            console.error("緊急登入日誌寫入失敗 (可能 Redis 已離線):", err.message);
-        });
-        
-        return res.json({ success: true, token: token, role: 'superadmin' });
-    }
+    // --- V3.3 修正： 【高風險 - 已移除】 ---
+    // 移除了使用 ADMIN_TOKEN 明文比對的緊急後門
     // --- V3.3 修正結束 ---
 
 
     // --- 正常的 Redis 資料庫登入邏輯 ---
     const userJSON = await redis.hget(KEY_ADMINS, username);
     if (!userJSON) {
-        // 如果沒找到，或密碼不匹配 (V3.3：且不是後門登入)
+        // 如果沒找到，或密碼不匹配
         return res.status(403).json({ error: "使用者名稱或密碼錯誤。" });
     }
 
@@ -279,7 +259,12 @@ app.post("/login", loginLimiter, async (req, res) => {
     // 【V3.2 修正】 恢復 expiresIn 選項
     const token = jwt.sign(payload, JWT_SECRET, { expiresIn: `${DEFAULT_JWT_EXPIRY_HOURS}h` }); 
 
-    res.json({ success: true, token: token, role: user.role });
+    res.json({ 
+        success: true, 
+        token: token, 
+        role: user.role,
+        username: user.username // <-- 【安全修正】 回傳使用者名稱
+    });
 });
 
 // --- 【新增】 超級管理員 API ---
@@ -643,11 +628,12 @@ async function startServer() {
             };
             await redis.hset(KEY_ADMINS, 'superadmin', JSON.stringify(superAdmin));
             console.log("✅ 初始超級管理員 'superadmin' 建立完畢 (存於 Redis)。");
-            console.log("   您現在可以使用 'superadmin' 和您的 ADMIN_TOKEN 密碼登入。");
-            console.log("   (此帳號也會作為緊急後門，即使 Redis 資料遺失也可登入)");
+            // 【維護 修正】 不再印出明文 TOKEN
+            console.log("   您現在可以使用 'superadmin' 和您在 [ADMIN_TOKEN] 環境變數中設定的密碼登入。");
+            // 【維護 修正】 移除後門相關日誌
         } else {
             console.log("... Redis 管理員帳號已存在，跳過初始建立。");
-            console.log("   (緊急後門 'superadmin' / 'ADMIN_TOKEN' 仍然有效)");
+            // 【維護 修正】 移除後門相關日誌
         }
     } catch (e) {
         console.error("❌ 建立初始超級管理員失敗:", e);
