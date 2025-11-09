@@ -27,17 +27,21 @@ const superAdminCard = document.getElementById("card-superadmin");
 
 
 // --- 2. 全域變數 ---
-let token = sessionStorage.getItem('admin_jwt') || ""; 
+// 【錯誤修正】 移除全域 token 變數，因為它會造成狀態不同步
+// let token = sessionStorage.getItem('admin_jwt') || ""; // <-- 移除
 let userRole = sessionStorage.getItem('admin_role') || ""; 
 let resetAllTimer = null;
 let toastTimer = null; 
 let timedConfirmTimers = {}; // <-- 【UX 修正】 儲存多個計時器
 
 // --- 3. Socket.io ---
+// 【錯誤修正】
+// 1. 移除 autoConnect: false
+// 2. 修改 auth 函式，使其 *每次重連時* 都從 sessionStorage 讀取最新的 Token
+//    而不是依賴那個會被清除的全域變數。
 const socket = io({ 
-    autoConnect: false,
     auth: () => {
-        return { token: token }; 
+        return { token: sessionStorage.getItem('admin_jwt') }; 
     }
 });
 
@@ -63,18 +67,22 @@ function showLogin() {
     loginContainer.style.display = "block";
     adminPanel.style.display = "none";
     document.title = "後台管理 - 登入";
-    token = ""; 
+    // token = ""; // <-- 移除 (全域變數已刪除)
     userRole = ""; 
     sessionStorage.removeItem('admin_jwt'); 
     sessionStorage.removeItem('admin_role');
     sessionStorage.removeItem('admin_username'); // <-- 【安全修正】 登出時清除
-    socket.disconnect();
+    socket.disconnect(); // 主動斷開連線
 }
 
 async function showPanel() {
     loginContainer.style.display = "none";
     adminPanel.style.display = "block";
     document.title = "後台管理 - 控制台";
+
+    // 【錯誤修正】
+    // userRole 必須從 sessionStorage 重新讀取，才是最準確的
+    userRole = sessionStorage.getItem('admin_role');
 
     if (userRole === 'superadmin') {
         superAdminCard.style.display = "block";
@@ -84,6 +92,9 @@ async function showPanel() {
         superAdminCard.style.display = "none";
     }
     
+    // 【錯誤修正】
+    // 登入成功或頁面載入時，呼叫 socket.connect() 來觸發連線
+    // (如果已連線，它會自動忽略；如果已斷線，它會觸發使用新 Token 的重連)
     if (!socket.connected) {
         socket.connect();
     }
@@ -108,15 +119,19 @@ async function attemptLogin() {
         const data = await res.json();
 
         if (res.ok && data.token) {
-            token = data.token; 
-            userRole = data.role; 
-            sessionStorage.setItem('admin_jwt', token); 
-            sessionStorage.setItem('admin_role', userRole);
-            sessionStorage.setItem('admin_username', data.username); // <-- 【安全修正】 儲存使用者名稱
-            await showPanel(); 
+            // 【錯誤修正】
+            // 登入成功時，*只* 更新 sessionStorage
+            // token = data.token; // <-- 移除 (全域變數已刪除)
+            // userRole = data.role; // <-- 移除 (全域變數已刪除)
+            
+            sessionStorage.setItem('admin_jwt', data.token); 
+            sessionStorage.setItem('admin_role', data.role);
+            sessionStorage.setItem('admin_username', data.username);
+            
+            await showPanel(); // showPanel 會處理 socket.connect()
         } else {
             loginError.textContent = data.error || "登入失敗";
-            showLogin();
+            // showLogin(); // <-- 移除，讓使用者可以重試
         }
     } catch (err) {
         console.error("Login 失敗:", err);
@@ -125,9 +140,14 @@ async function attemptLogin() {
 }
 
 document.addEventListener("DOMContentLoaded", () => { 
-    if (token && userRole) {
+    // 【錯誤修正】
+    // 檢查 sessionStorage 中是否有 token，而不是檢查全域變數
+    const tokenFromStorage = sessionStorage.getItem('admin_jwt');
+    const roleFromStorage = sessionStorage.getItem('admin_role');
+
+    if (tokenFromStorage && roleFromStorage) {
         console.log("偵測到 sessionStorage 中的 JWT，嘗試直接登入...");
-        showPanel(); 
+        showPanel(); // 這將觸發 socket.connect()
     } else {
         showLogin();
     }
@@ -149,28 +169,39 @@ socket.on("disconnect", () => {
     showToast("❌ 已從伺服器斷線", "error");
 });
 
-// --- 【V3.5 修正】 ---
-// 修正了「殭屍狀態」問題。
-// 以前：只有在 err.message 包含 "Authentication failed" 時才登出。
-// 現在：任何 Socket.io 連線失敗都會強制登出，因為後台依賴 Socket.io 運作。
+
+// --- 【!!! 關鍵錯誤修正 !!!】 ---
 socket.on("connect_error", (err) => {
     console.error("Socket 連線失敗:", err.message);
     
-    // 停止嘗試連線，並顯示一個更明確的錯誤
-    socket.disconnect(); 
-    
-    let alertMessage = `後台即時連線(Socket.io)失敗，將無法接收資料。\n\n錯誤: ${err.message}\n\n`;
-
+    // 檢查錯誤是否為「認證失敗」(由我們伺服器 index.js:453 回傳的)
     if (err.message.includes("Authentication failed")) {
-        alertMessage += "原因：認證無效或已過期，請您重新登入。";
+        // --- 這是「永久」的認證錯誤 (例如 Token 過期) ---
+        // 1. 停止重試
+        socket.disconnect(); 
+        
+        // 2. 準備錯誤訊息
+        let alertMessage = `後台即時連線(Socket.io)失敗。\n\n錯誤: ${err.message}\n\n`;
+        alertMessage += "原因：您的認證無效或已過期，請您重新登入。";
+        
+        // 3. 提示使用者並強制登出
+        alert(alertMessage);
+        showLogin(); 
+        
     } else {
-        alertMessage += "原因：可能是網路防火牆、代理伺服器或伺服器端設定阻擋了 WebSocket (WSS) 連線。請檢查您的網路環境。";
+        // --- 這是「暫時」的網路錯誤 ---
+        // (例如 "xhr poll error", "websocket error", 502 Bad Gateway)
+        //
+        // 4. 【!!!】 *不要* 呼叫 showLogin()！
+        //
+        // 我們什麼都不做，只在控制台顯示警告。
+        // `socket.io` 會在背景自動重試連線。
+        // 當 Render 伺服器喚醒後，重試就會成功。
+        console.warn("偵測到暫時性網路錯誤，Socket.io 將在背景自動重試...");
+        // (此時 'disconnect' 事件會自動觸發，顯示紅色狀態列)
     }
-    
-    alert(alertMessage);
-    showLogin(); // 強制登出以避免「殭屍狀態」
 });
-// --- V3.5 修正結束 ---
+// --- 【錯誤修正結束】 ---
 
 
 socket.on("initAdminLogs", (logs) => {
@@ -224,12 +255,16 @@ socket.on("updateTimestamp", (timestamp) => {
 
 // --- 7. API 請求函式 ---
 async function apiRequest(endpoint, body, a_returnResponse = false) {
+    // 【錯誤修正】 
+    // API 請求的 Token 應 *永遠* 從 sessionStorage 讀取
+    const tokenFromStorage = sessionStorage.getItem('admin_jwt');
+
     try {
         const res = await fetch(endpoint, {
             method: "POST",
             headers: { 
                 "Content-Type": "application/json",
-                "Authorization": `Bearer ${token}` 
+                "Authorization": `Bearer ${tokenFromStorage}` // <-- 使用最新的 Token
             },
             body: JSON.stringify(body), 
         });
@@ -237,15 +272,16 @@ async function apiRequest(endpoint, body, a_returnResponse = false) {
         const responseData = await res.json(); 
 
         if (!res.ok) {
-            // 【V3.2 修正】 更新提示訊息以包含「過期」
             
             // 【UX 修正】 改用 showToast
             if (res.status === 401 || res.status === 403) {
-                // alert("認證無效或已過期，請重新登入。 (API 請求失敗)"); // <-- 移除
-                showToast("❌ 認證無效或已過期，請重新登入", "error"); // <-- 替換
+                showToast("❌ 認證無效或已過期，請重新登入", "error"); 
                 
-                // 增加一個短延遲，讓使用者能看到 toast，然後再登出
+                // 【錯誤修正】
+                // 如果 API 請求失敗 (例如 Token 過期)，我們應呼叫 showLogin()
+                // 但要延遲一下，讓使用者看到 toast
                 setTimeout(showLogin, 2000); 
+
             } else {
                 const errorMsg = responseData.error || "未知錯誤";
                 showToast(`❌ API 錯誤: ${errorMsg}`, "error");
@@ -385,26 +421,9 @@ async function resetNumber() {
 
 // 【UX 修正】 移除以下三個舊的函式
 /*
-async function resetPassed_fixed() {
-    if (!confirm("確定要清空「已叫號碼(過號)」列表嗎？")) return;
-    const success = await apiRequest("/api/passed/clear", {});
-    if (success) {
-        showToast("✅ 過號列表已清空", "success");
-    }
-}
-async function resetFeaturedContents_fixed() {
-    if (!confirm("確定要清空「精選連結」嗎？")) return;
-    const success = await apiRequest("/api/featured/clear", {});
-    if (success) {
-        showToast("✅ 精選連結已清空", "success");
-    }
-}
-async function clearAdminLog() {
-    if (confirm("確定要永久清除「所有」管理員的操作日誌嗎？\n此動作無法復原。")) {
-        showToast("🧼 正在清除日誌...", "info");
-        await apiRequest("/api/logs/clear", {});
-    }
-}
+async function resetPassed_fixed() { ... }
+async function resetFeaturedContents_fixed() { ... }
+async function clearAdminLog() { ... }
 */
 
 function cancelResetAll() {
@@ -463,7 +482,6 @@ document.getElementById("clear-log-btn").onclick = () => {
 
 resetAllBtn.onclick = requestResetAll;
 resetAllConfirmBtn.onclick = confirmResetAll;
-// clearLogBtn.onclick = clearLogBtn; // <-- 已被上面的新邏輯取代
 if (logoutBtn) logoutBtn.onclick = showLogin;
 
 addPassedBtn.onclick = async () => {
@@ -542,9 +560,6 @@ async function loadAdmins() {
             const li = document.createElement("li");
             li.innerHTML = `<span>${admin.username} (<strong>${admin.role}</strong>)</span>`;
             
-            // 【安全修正】 移除不安全的 jwt_decode
-            // const myUsername = jwt_decode(token) ? jwt_decode(token).username : null; // <-- 移除
-
             if (admin.username !== myUsername) { 
                 const deleteBtn = document.createElement("button");
                 deleteBtn.type = "button";
@@ -629,17 +644,5 @@ function initSuperAdminBindings() {
 
 // 【安全修正】 移除整個不安全的 jwt_decode 函式
 /*
-// (簡易的 JWT 解碼函式)
-function jwt_decode(token) {
-    try {
-        const base64Url = token.split('.')[1];
-        const base6B4 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-        const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
-            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-        }).join(''));
-        return JSON.parse(jsonPayload);
-    } catch (e) {
-        return null;
-    }
-}
+function jwt_decode(token) { ... }
 */
