@@ -36,10 +36,11 @@ let timedConfirmTimers = {}; // <-- 【UX 修正】 儲存多個計時器
 
 // --- 3. Socket.io ---
 // 【錯誤修正】
-// 1. 移除 autoConnect: false
+// 1. 移除 autoConnect: false (讓 socket.io 自動管理連線)
 // 2. 修改 auth 函式，使其 *每次重連時* 都從 sessionStorage 讀取最新的 Token
 //    而不是依賴那個會被清除的全域變數。
 const socket = io({ 
+    // autoConnect: false, // <-- 移除
     auth: () => {
         return { token: sessionStorage.getItem('admin_jwt') }; 
     }
@@ -87,14 +88,16 @@ async function showPanel() {
     if (userRole === 'superadmin') {
         superAdminCard.style.display = "block";
         initSuperAdminBindings(); 
-        loadAdmins(); 
+        // loadAdmins(); // <-- 移除 (將由 loadInitialDataViaAPI 觸發)
     } else {
         superAdminCard.style.display = "none";
     }
+
+    // --- 【架構修正】 ---
+    // 1. 先透過 API 載入所有初始資料
+    await loadInitialDataViaAPI();
     
-    // 【錯誤修正】
-    // 登入成功或頁面載入時，呼叫 socket.connect() 來觸發連線
-    // (如果已連線，它會自動忽略；如果已斷線，它會觸發使用新 Token 的重連)
+    // 2. 再手動觸發 Socket.io 連線，以接收「即時」更新
     if (!socket.connected) {
         socket.connect();
     }
@@ -128,7 +131,7 @@ async function attemptLogin() {
             sessionStorage.setItem('admin_role', data.role);
             sessionStorage.setItem('admin_username', data.username);
             
-            await showPanel(); // showPanel 會處理 socket.connect()
+            await showPanel(); // showPanel 會處理 socket.connect() 和 API 載入
         } else {
             loginError.textContent = data.error || "登入失敗";
             // showLogin(); // <-- 移除，讓使用者可以重試
@@ -147,7 +150,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (tokenFromStorage && roleFromStorage) {
         console.log("偵測到 sessionStorage 中的 JWT，嘗試直接登入...");
-        showPanel(); // 這將觸發 socket.connect()
+        showPanel(); // 這將觸發 API 載入和 socket.connect()
     } else {
         showLogin();
     }
@@ -204,7 +207,8 @@ socket.on("connect_error", (err) => {
 // --- 【錯誤修正結束】 ---
 
 
-socket.on("initAdminLogs", (logs) => {
+// --- 【架構修正】 新增日誌渲染函式 ---
+function renderAdminLogs(logs) {
     adminLogUI.innerHTML = "";
     if (!logs || logs.length === 0) {
         adminLogUI.innerHTML = "<li>[目前尚無日誌]</li>";
@@ -218,7 +222,10 @@ socket.on("initAdminLogs", (logs) => {
     });
     adminLogUI.appendChild(fragment);
     adminLogUI.scrollTop = adminLogUI.scrollHeight; 
-});
+}
+// 【架構修正】 移除舊的 Socket.io 監聽器
+// socket.on("initAdminLogs", renderAdminLogs);
+
 
 socket.on("newAdminLog", (logMessage) => {
     const firstLi = adminLogUI.querySelector("li");
@@ -228,7 +235,7 @@ socket.on("newAdminLog", (logMessage) => {
     
     const li = document.createElement("li");
     li.textContent = logMessage;
-    adminLogUI.prepend(li); 
+    adminLogUI.prepend(li); // 保持新日誌在最上方
 });
 
 socket.on("update", (num) => {
@@ -254,10 +261,48 @@ socket.on("updateTimestamp", (timestamp) => {
 
 
 // --- 7. API 請求函式 ---
+
+// --- 【架構修正】 新增 API 函式載入初始資料 ---
+async function loadInitialDataViaAPI() {
+    console.log("正在透過 API 載入初始資料...");
+    showToast("🔄 正在載入資料...", "info");
+    
+    // (使用 true 參數來獲取回傳的 data)
+    const data = await apiRequest("/api/get-all-state", {}, true);
+
+    if (data && data.success) {
+        console.log("API 資料載入成功");
+        numberEl.textContent = data.currentNumber;
+        renderPassedListUI(data.passedNumbers);
+        renderFeaturedListUI(data.featuredContents);
+        soundToggle.checked = data.isSoundEnabled;
+        publicToggle.checked = data.isPublic;
+        renderAdminLogs(data.logs); // 使用新的渲染函式
+
+        // (如果 superadmin 卡片已顯示，就載入管理員列表)
+        if (superAdminCard.style.display === "block") {
+            loadAdmins();
+        }
+        showToast("✅ 資料載入完畢", "success");
+
+    } else {
+        console.error("API 資料載入失敗", data);
+        showToast("❌ 初始資料載入失敗", "error");
+        // (即使 API 失敗，我們也不登出，因為 Socket.io 可能會連上)
+    }
+}
+
+
 async function apiRequest(endpoint, body, a_returnResponse = false) {
     // 【錯誤修正】 
     // API 請求的 Token 應 *永遠* 從 sessionStorage 讀取
     const tokenFromStorage = sessionStorage.getItem('admin_jwt');
+    
+    // 【錯誤修正】 如果連 Token 都沒有，就不要嘗試發送 API
+    if (endpoint !== "/login" && !tokenFromStorage) {
+        console.warn("apiRequest 已中止，因為 sessionStorage 中沒有 Token。");
+        return false;
+    }
 
     try {
         const res = await fetch(endpoint, {
@@ -290,10 +335,10 @@ async function apiRequest(endpoint, body, a_returnResponse = false) {
         }
 
         if (a_returnResponse) {
-            return responseData; 
+            return responseData; // <-- 回傳 data (例如 { success: true, currentNumber: ... })
         }
         
-        return true; 
+        return true; // (對於 "設定" 類型的 API，回傳 true)
     } catch (err) {
         showToast(`❌ 網路連線失敗: ${err.message}`, "error");
         return false;
