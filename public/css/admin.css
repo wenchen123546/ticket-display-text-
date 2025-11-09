@@ -262,7 +262,16 @@ input[type="url"] {
     margin: 0; 
     min-width: 30px; 
     width: 30px !important; 
+    transition: background-color 0.2s, color 0.2s, transform 0.2s; /* 【新】 Add transition */
 }
+
+/* 【新】 列表刪除按鈕的確認中樣式 */
+.list-editor li .delete-item-btn.is-confirming {
+    background: var(--color-warning-dark) !important;
+    color: white;
+    font-size: 1rem; /* 讓 "⚠️" 符號能塞進去 */
+}
+
 .input-group { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; width: 100%; }
 .input-group input { flex: 1; min-width: 150px; margin: 5px; max-width: 100%; }
 .input-group .btn-add { 
@@ -407,6 +416,20 @@ input[type="url"] {
     width: 100%;
     box-sizing: border-box;
     margin-bottom: 20px;
+}
+
+/* 【新】 Toggle 開關的 Label 確認中樣式 */
+.system-toggle-group label.is-confirming-label {
+    color: var(--color-warning-dark);
+    font-weight: bold;
+    animation: pulse 1s infinite;
+}
+
+/* 【新】 動畫 for Toggle Label */
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.7; }
+    100% { opacity: 1; }
 }
 
 
