@@ -263,6 +263,24 @@ textarea { height: 80px; text-align: left; padding: 10px; }
     width: 40px !important; 
 }
 
+/* --- 【排版修正】 新增此規則 --- */
+.input-group select {
+    flex: 1;
+    min-width: 150px;
+    margin: 5px;
+    max-width: 100%;
+    
+    /* (複製 Section 14 的樣式) */
+    font-size: 1rem;
+    padding: 8px;
+    text-align: left;
+    border-radius: 6px;
+    border: 1px solid var(--color-border);
+    box-sizing: border-box;
+}
+/* --- 【排版修正 結束】 --- */
+
+
 /* --- 5. 【B. 改善】按鈕顏色 (使用 Class) --- */
 
 .btn-primary { background-color: var(--color-primary); }
@@ -440,16 +458,19 @@ textarea { height: 80px; text-align: left; padding: 10px; }
 
 /* --- 14. 【新增】 超級管理員卡片樣式 --- */
 
+/* --- 【排版修正】 修改此規則 --- */
 #card-superadmin select {
     font-size: 1rem;
     padding: 8px;
-    width: 100%;
+    /* width: 100%; */ /* <-- 移除 */
     text-align: left;
     border-radius: 6px;
     border: 1px solid var(--color-border);
-    margin-top: 10px;
+    /* margin-top: 10px; */ /* <-- 移除 */
     box-sizing: border-box;
 }
+/* --- 【排版修正 結束】 --- */
+
 
 #card-superadmin .list-editor {
     /* 讓日誌和列表編輯器高度一致 */
