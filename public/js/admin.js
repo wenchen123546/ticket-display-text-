@@ -18,13 +18,11 @@ const publicToggle = document.getElementById("public-toggle");
 const adminLogUI = document.getElementById("admin-log-ui");
 const clearLogBtn = document.getElementById("clear-log-btn");
 const resetAllBtn = document.getElementById("resetAll");
-const resetAllConfirmBtn = document.getElementById("resetAllConfirm");
-// saveLayoutBtn 已移除
+// resetAllConfirmBtn 已移除
 
 // --- 2. 全域變數 ---
 let token = "";
-let resetAllTimer = null;
-// grid (GridStack 物件) 已移除
+// resetAllTimer 已移除
 let toastTimer = null; // 【新】 Toast 計時器
 
 // --- 3. Socket.io ---
@@ -164,7 +162,7 @@ socket.on("updateSoundSetting", (isEnabled) => {
     soundToggle.checked = isEnabled;
 });
 socket.on("updatePublicStatus", (isPublic) => {
-    console.log("收到公開狀態:", isPublic);
+    console.log("收到公開狀態:", isEnabled);
     publicToggle.checked = isPublic;
 });
 socket.on("updateTimestamp", (timestamp) => {
@@ -271,6 +269,81 @@ function renderFeaturedListUI(contents) {
 }
 
 // --- 9. 控制台按鈕功能 ---
+
+// 【新】 按鈕確認邏輯
+function setupConfirmationButton(buttonEl, originalText, confirmText, actionCallback) {
+    if (!buttonEl) return;
+    
+    let timer = null;
+    let isConfirming = false;
+
+    buttonEl.textContent = originalText; // 確保初始文字正確
+
+    buttonEl.addEventListener("click", () => {
+        if (isConfirming) {
+            // --- 執行動作 ---
+            if (timer) clearTimeout(timer);
+            actionCallback();
+            buttonEl.textContent = originalText;
+            buttonEl.classList.remove("is-confirming");
+            isConfirming = false;
+        } else {
+            // --- 進入確認 ---
+            isConfirming = true;
+            buttonEl.textContent = confirmText;
+            buttonEl.classList.add("is-confirming");
+
+            timer = setTimeout(() => {
+                // --- 5秒後自動恢復 ---
+                buttonEl.textContent = originalText;
+                buttonEl.classList.remove("is-confirming");
+                isConfirming = false;
+                timer = null;
+            }, 5000);
+        }
+    });
+}
+
+// 【新】 重置按鈕的實際執行動作
+const actionResetNumber = async () => {
+    const success = await apiRequest("/set-number", { number: 0 });
+    if (success) {
+        document.getElementById("manualNumber").value = "";
+        showToast("✅ 號碼已重置為 0", "success");
+    }
+};
+const actionResetPassed = async () => {
+    const success = await apiRequest("/api/passed/clear", {});
+    if (success) {
+        showToast("✅ 過號列表已清空", "success");
+    }
+};
+const actionResetFeatured = async () => {
+    const success = await apiRequest("/api/featured/clear", {});
+    if (success) {
+        showToast("✅ 精選連結已清空", "success");
+    }
+};
+const actionResetAll = async () => {
+    const success = await apiRequest("/reset", {});
+    if (success) {
+        document.getElementById("manualNumber").value = "";
+        showToast("💥 所有資料已重置", "success");
+        location.reload(); // 重載以獲取新排版和日誌
+    }
+};
+
+
+// 【舊】 移除 confirm() 相關的舊函式
+// resetNumber()
+// resetPassed_fixed()
+// resetFeaturedContents_fixed()
+// cancelResetAll()
+// confirmResetAll()
+// requestResetAll()
+
+
+// --- 其他按鈕功能 ---
 async function changeNumber(direction) {
     await apiRequest("/change-number", { direction });
 }
@@ -283,55 +356,10 @@ async function setNumber() {
         showToast("✅ 號碼已設定", "success");
     }
 }
-async function resetNumber() {
-    if (!confirm("確定要將「目前號碼」重置為 0 嗎？")) return;
-    const success = await apiRequest("/set-number", { number: 0 });
-    if (success) {
-        document.getElementById("manualNumber").value = "";
-        showToast("✅ 號碼已重置為 0", "success");
-    }
-}
-async function resetPassed_fixed() {
-    if (!confirm("確定要清空「已叫號碼(過號)」列表嗎？")) return;
-    const success = await apiRequest("/api/passed/clear", {});
-    if (success) {
-        showToast("✅ 過號列表已清空", "success");
-    }
-}
-async function resetFeaturedContents_fixed() {
-    if (!confirm("確定要清空「精選連結」嗎？")) return;
-    const success = await apiRequest("/api/featured/clear", {});
-    if (success) {
-        showToast("✅ 精選連結已清空", "success");
-    }
-}
-function cancelResetAll() {
-    resetAllConfirmBtn.style.display = "none";
-    resetAllBtn.style.display = "block";
-    if (resetAllTimer) {
-        clearTimeout(resetAllTimer);
-        resetAllTimer = null;
-    }
-}
-async function confirmResetAll() {
-    const success = await apiRequest("/reset", {});
-    if (success) {
-        document.getElementById("manualNumber").value = "";
-        showToast("💥 所有資料已重置", "success");
-        location.reload(); // 重載以獲取新排版和日誌
-    }
-    cancelResetAll();
-}
-function requestResetAll() {
-    resetAllBtn.style.display = "none";
-    resetAllConfirmBtn.style.display = "block";
-    resetAllTimer = setTimeout(() => {
-        cancelResetAll();
-    }, 5000);
-}
 
 // 【修改】 清除日誌功能
 async function clearAdminLog() {
+    // (此按鈕保留 confirm，因為它不是重置按鈕)
     if (confirm("確定要永久清除「所有」管理員的操作日誌嗎？\n此動作無法復原。")) {
         showToast("🧼 正在清除日誌...", "info");
         await apiRequest("/api/logs/clear", {});
@@ -343,12 +371,36 @@ async function clearAdminLog() {
 document.getElementById("next").onclick = () => changeNumber("next");
 document.getElementById("prev").onclick = () => changeNumber("prev");
 document.getElementById("setNumber").onclick = setNumber;
-document.getElementById("resetNumber").onclick = resetNumber;
-document.getElementById("resetFeaturedContents").onclick = resetFeaturedContents_fixed;
-document.getElementById("resetPassed").onclick = resetPassed_fixed;
-resetAllBtn.onclick = requestResetAll;
-resetAllConfirmBtn.onclick = confirmResetAll;
-clearLogBtn.onclick = clearAdminLog; // 已更新
+clearLogBtn.onclick = clearAdminLog; // (保留)
+
+// 【新】 綁定重置按鈕的新邏輯
+setupConfirmationButton(
+    document.getElementById("resetNumber"),
+    "重置號碼",
+    "⚠️ 點此確認重置",
+    actionResetNumber
+);
+setupConfirmationButton(
+    document.getElementById("resetPassed"),
+    "重置過號列表",
+    "⚠️ 點此確認重置",
+    actionResetPassed
+);
+setupConfirmationButton(
+    document.getElementById("resetFeaturedContents"),
+    "重置精選連結",
+    "⚠️ 點此確認重置",
+    actionResetFeatured
+);
+setupConfirmationButton(
+    document.getElementById("resetAll"),
+    "💥 重置所有 (點擊確認)",
+    "⚠️ 點此確認重置 ⚠️",
+    actionResetAll
+);
+
+
+// (舊的 .onclick 綁定已移除)
 
 addPassedBtn.onclick = async () => {
     const num = Number(newPassedNumberInput.value);
@@ -406,5 +458,3 @@ publicToggle.addEventListener("change", () => {
     }
     apiRequest("/set-public-status", { isPublic: isPublic });
 });
-
-// --- 13. 綁定 GridStack 儲存按鈕 --- (已移除)
