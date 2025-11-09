@@ -1,7 +1,10 @@
 /*
  * ==========================================
  * 伺服器 (index.js)
- * * 【修改 V3.3 - 修正】
+ * * 【修改 V3.6 - 部署修正】
+ * * 修正 ERR_ERL_PERMISSIVE_TRUST_PROXY 崩潰錯誤。
+ * * 將 app.set('trust proxy', true) 修改為 app.set('trust proxy', 1)
+ * * * * 【修改 V3.3 - 修正】
  * * 1. 增加「緊急後門」：允許 'superadmin' 使用 'ADMIN_TOKEN' 作為密碼登入
  * * (用於 Redis 資料遺失時的災難還原)
  * * 【修改 V3.2 - 修正】 
@@ -23,8 +26,11 @@ const jwt = require('jsonwebtoken');
 
 // --- 2. 伺服器實體化 ---
 const app = express();
-// 【修正】 設定 'trust proxy' 為 true，解決部署環境中的 X-Forwarded-For 錯誤
-app.set('trust proxy', true);
+
+// 【V3.6 部署修正】 
+// 將 'true' (不安全) 修改為 '1' (信任第一層 Proxy，例如 Render)
+// 這將修復 ERR_ERL_PERMISSIVE_TRUST_PROXY 崩潰錯誤
+app.set('trust proxy', 1);
 
 const server = http.createServer(app);
 const io = socketio(server);
@@ -103,7 +109,9 @@ const apiLimiter = rateLimit({
     message: { error: "請求過於頻繁，請稍後再試。" },
     standardHeaders: true, 
     legacyHeaders: false, 
-    trustProxy: 1 // <-- 【關鍵修復 V3.1】 告訴 limiter 信任第一層 proxy
+    // 【關鍵修復 V3.1】 告訴 limiter 信任第一層 proxy
+    // (這必須與 app.set('trust proxy', 1) 配合)
+    trustProxy: 1 
 });
 const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, 
@@ -111,7 +119,9 @@ const loginLimiter = rateLimit({
     message: { error: "登入嘗試次數過多，請 15 分鐘後再試。" },
     standardHeaders: true,
     legacyHeaders: false,
-    trustProxy: 1 // <-- 【關鍵修復 V3.1】 告訴 limiter 信任第一層 proxy
+    // 【關鍵修復 V3.1】 告訴 limiter 信任第一層 proxy
+    // (這必須與 app.set('trust proxy', 1) 配合)
+    trustProxy: 1 
 });
 
 // --- 8. 【重構】 認證中介軟體 (JWT) ---
@@ -140,7 +150,7 @@ const authMiddleware = (req, res, next) => {
 
 const isSuperAdminMiddleware = (req, res, next) => {
     if (!req.user || req.user.role !== 'superadmin') {
-        return res.status(403).json({ error: "權限不足，此操作僅限超級管理員。" });
+        return res.status(4.03).json({ error: "權限不足，此操作僅限超級管理員。" });
     }
     next();
 };
