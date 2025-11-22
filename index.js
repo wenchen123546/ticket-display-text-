@@ -1,7 +1,7 @@
 /*
  * ==========================================
- * 伺服器 (index.js) - v7.0 Upgrade
- * 功能：CSV 導出、預估等待時間、Confetti 支援
+ * 伺服器 (index.js) - v8.0 LINE Bot Integrated
+ * 功能：Socket.io 即時叫號 + Redis 數據儲存 + LINE Bot 推播通知
  * ==========================================
  */
 
@@ -14,6 +14,7 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit'); 
 const { v4: uuidv4 } = require('uuid'); 
 const bcrypt = require('bcrypt'); 
+const line = require('@line/bot-sdk'); // 【新增】 LINE SDK
 
 // --- 2. 伺服器實體化 ---
 const app = express();
@@ -29,9 +30,25 @@ const ADMIN_TOKEN = process.env.ADMIN_TOKEN;
 const REDIS_URL = process.env.UPSTASH_REDIS_URL;
 const SALT_ROUNDS = 10; 
 
+// 【新增】 LINE Bot 設定
+const lineConfig = {
+    channelAccessToken: process.env.LINE_ACCESS_TOKEN,
+    channelSecret: process.env.LINE_CHANNEL_SECRET
+};
+
+// 檢查環境變數
 if (!ADMIN_TOKEN || !REDIS_URL) {
-    console.error("❌ 錯誤： 環境變數未設定");
+    console.error("❌ 錯誤： 環境變數 (ADMIN_TOKEN, UPSTASH_REDIS_URL) 未設定");
     process.exit(1);
+}
+
+// 建立 LINE Client (若未設定則顯示警告但不崩潰)
+let lineClient = null;
+if (lineConfig.channelAccessToken && lineConfig.channelSecret) {
+    lineClient = new line.Client(lineConfig);
+    console.log("✅ LINE Bot Client 已初始化");
+} else {
+    console.warn("⚠️ 警告：未設定 LINE_ACCESS_TOKEN 或 LINE_CHANNEL_SECRET，LINE 功能將無法使用");
 }
 
 // --- 5. 連線到 Upstash Redis ---
@@ -67,6 +84,8 @@ const KEY_NICKNAMES = 'callsys:nicknames';
 const SESSION_PREFIX = 'callsys:session:';
 const KEY_HISTORY_STATS = 'callsys:stats:history';
 const KEY_STATS_HOURLY_PREFIX = 'callsys:stats:hourly:'; 
+// 【新增】 LINE 訂閱儲存 Key
+const KEY_LINE_SUB_PREFIX = 'callsys:line:notify:';
 
 const onlineAdmins = new Map();
 
@@ -81,8 +100,21 @@ app.use(helmet({
       },
     },
 }));
+
+// 【新增】 LINE Webhook 路由 (必須在 express.json() 之前)
+if (lineClient) {
+    app.post('/callback', line.middleware(lineConfig), (req, res) => {
+        Promise.all(req.body.events.map(handleLineEvent))
+            .then((result) => res.json(result))
+            .catch((err) => {
+                console.error("Line Webhook Error:", err);
+                res.status(500).end();
+            });
+    });
+}
+
 app.use(express.static("public"));
-app.use(express.json());
+app.use(express.json()); // 解析一般 API JSON
 
 const apiLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 1000 });
 const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20 });
@@ -152,15 +184,14 @@ async function addAdminLog(nickname, message) {
     } catch (e) { console.error("Log error:", e); }
 }
 
-// 【功能 2：智慧化預測】 計算平均等待時間 (分鐘/號)
+// 計算平均等待時間 (分鐘/號)
 async function calculateAverageWaitTime() {
     try {
         // 取出最近 5 筆紀錄
         const historyRaw = await redis.lrange(KEY_HISTORY_STATS, 0, 4); 
-        if (historyRaw.length < 2) return 0; // 數據不足
+        if (historyRaw.length < 2) return 0; 
 
         const history = historyRaw.map(JSON.parse);
-        // 計算首尾的時間差 / 號碼差
         const newest = history[0];
         const oldest = history[history.length - 1];
         
@@ -168,8 +199,7 @@ async function calculateAverageWaitTime() {
         const numDiff = Math.abs(newest.num - oldest.num);
         
         if (numDiff === 0 || timeDiff <= 0) return 0;
-        
-        return timeDiff / numDiff; // 平均每號幾分鐘
+        return timeDiff / numDiff; 
     } catch (e) {
         console.error("Calc wait time error:", e);
         return 0;
@@ -195,6 +225,109 @@ async function logHistory(number, operator, delta = 1) {
 
 function broadcastOnlineAdmins() {
     io.emit("updateOnlineAdmins", Array.from(onlineAdmins.values()));
+}
+
+// --- 【新增】 LINE 事件處理函式 ---
+async function handleLineEvent(event) {
+    if (event.type !== 'message' || event.message.type !== 'text') {
+        return Promise.resolve(null);
+    }
+
+    const text = event.message.text.trim();
+    const userId = event.source.userId;
+
+    // 1. 查詢功能
+    if (text === '查詢' || text === '號碼' || text === '進度' || text === '?' || text === '？') {
+        const currentNum = await redis.get(KEY_CURRENT_NUMBER) || 0;
+        const waitTime = await calculateAverageWaitTime(); 
+        
+        let replyMsg = `📊 目前叫號：${currentNum} 號`;
+        if (waitTime > 0) {
+            replyMsg += `\n⏳ 平均等待：約 ${Math.ceil(waitTime)} 分鐘/號`;
+        } else {
+            replyMsg += `\n🚀 目前處理速度極快或剛開始叫號`;
+        }
+        replyMsg += `\n\n💡 輸入「提醒 100」或「100」可設定到號通知！`;
+        
+        return lineClient.replyMessage(event.replyToken, { type: 'text', text: replyMsg });
+    }
+
+    // 2. 設定提醒 (支援 "提醒 100", "設定 100", "100")
+    const match = text.match(/^(?:提醒|設定)?\s*(\d+)$/);
+    if (match) {
+        const targetNum = parseInt(match[1]);
+        const currentNum = parseInt(await redis.get(KEY_CURRENT_NUMBER)) || 0;
+
+        if (targetNum <= currentNum) {
+            return lineClient.replyMessage(event.replyToken, { 
+                type: 'text', 
+                text: `❌ 目前已經是 ${currentNum} 號囉！\n如果您持有 ${targetNum} 號，請直接前往櫃台。` 
+            });
+        }
+
+        // 存入 Redis Set: callsys:line:notify:100 -> {userId1, userId2...}
+        const subKey = `${KEY_LINE_SUB_PREFIX}${targetNum}`;
+        await redis.sadd(subKey, userId);
+        await redis.expire(subKey, 86400); // 24小時後過期，避免累積
+
+        const diff = targetNum - currentNum;
+        return lineClient.replyMessage(event.replyToken, { 
+            type: 'text', 
+            text: `✅ 設定成功！\n\n您的號碼：${targetNum} 號\n目前號碼：${currentNum} 號\n\n當叫到 ${Math.max(currentNum, targetNum - 3)} 號時，我會發送通知給您。` 
+        });
+    }
+
+    // 3. 預設回覆
+    return lineClient.replyMessage(event.replyToken, {
+        type: 'text',
+        text: '👋 您好！我是叫號小幫手。\n\n🔹 輸入「查詢」：查看目前進度\n🔹 輸入數字 (如 88)：設定到號提醒'
+    });
+}
+
+// --- 【新增】 LINE 通知檢查與推播 ---
+async function checkAndNotifyLineUsers(currentNum) {
+    if (!lineClient) return;
+    try {
+        currentNum = parseInt(currentNum);
+        
+        // 邏輯 A: 提前 3 號通知 (例如現在叫到 97，通知設定了 100 的人)
+        const notifyTarget = currentNum + 3; 
+        const subKey = `${KEY_LINE_SUB_PREFIX}${notifyTarget}`;
+        const subscribers = await redis.smembers(subKey);
+
+        if (subscribers.length > 0) {
+            const messages = subscribers.map(userId => ({
+                to: userId,
+                messages: [{ 
+                    type: 'text', 
+                    text: `🔔 叫號提醒！\n\n目前已叫號至 ${currentNum} 號。\n您的 ${notifyTarget} 號即將輪到 (剩 3 組)，請準備前往現場！` 
+                }]
+            }));
+            
+            await Promise.all(messages.map(msg => lineClient.pushMessage(msg.to, msg.messages)));
+            // 注意：這裡不刪除 key，因為等一下到號還要通知一次 (或是您可以選擇刪除)
+        }
+
+        // 邏輯 B: 準確到號通知 (現在叫到 100，通知設定了 100 的人)
+        const exactKey = `${KEY_LINE_SUB_PREFIX}${currentNum}`;
+        const exactSubscribers = await redis.smembers(exactKey);
+        
+        if (exactSubscribers.length > 0) {
+             const messages = exactSubscribers.map(userId => ({
+                to: userId,
+                messages: [{ 
+                    type: 'text', 
+                    text: `🎉 輪到您了！\n\n目前號碼：${currentNum} 號\n請立即前往櫃台辦理。` 
+                }]
+            }));
+            await Promise.all(messages.map(msg => lineClient.pushMessage(msg.to, msg.messages)));
+            // 到號後移除訂閱
+            await redis.del(exactKey);
+        }
+
+    } catch (e) {
+        console.error("Line Notify Error:", e);
+    }
 }
 
 // --- 9. API Routes ---
@@ -227,19 +360,16 @@ const protectedAPIs = [
     "/set-sound-enabled", "/set-public-status", "/reset",
     "/api/logs/clear", "/api/admin/stats", "/api/admin/broadcast",
     "/api/admin/stats/adjust", "/api/admin/stats/clear",
-    "/api/admin/export-csv" // 新增 CSV 導出路由
+    "/api/admin/export-csv" 
 ];
 app.use(protectedAPIs, apiLimiter, authMiddleware);
 
-// 【功能 1：數據價值化】 CSV 導出
 app.post("/api/admin/export-csv", superAdminAuthMiddleware, async (req, res) => {
     try {
         const { dateStr } = getTaiwanDateInfo();
         const historyRaw = await redis.lrange(KEY_HISTORY_STATS, 0, -1);
         
         const history = historyRaw.map(JSON.parse);
-        
-        // CSV Header (加入 BOM \uFEFF 防止 Excel 中文亂碼)
         let csvContent = "\uFEFF時間,號碼,操作員\n";
         
         history.forEach(item => {
@@ -247,9 +377,7 @@ app.post("/api/admin/export-csv", superAdminAuthMiddleware, async (req, res) => 
             csvContent += `${time},${item.num},${item.operator}\n`;
         });
 
-        // 回傳 CSV 字串
         res.json({ success: true, csvData: csvContent, fileName: `stats_${dateStr}.csv` });
-        
         addAdminLog(req.user.nickname, "📥 下載了 CSV 報表");
     } catch (e) {
         res.status(500).json({ error: "Export Error: " + e.message });
@@ -271,7 +399,11 @@ app.post("/change-number", async (req, res) => {
         } else {
             num = await redis.get(KEY_CURRENT_NUMBER) || 0;
         }
+        
         io.emit("update", num);
+
+        // 【新增】 檢查並發送 LINE 通知
+        checkAndNotifyLineUsers(num);
         
         // 更新等待時間
         const avgTime = await calculateAverageWaitTime();
@@ -298,6 +430,9 @@ app.post("/set-number", async (req, res) => {
         
         addAdminLog(req.user.nickname, `手動設定為 ${newNum} (統計增加 ${delta})`);
         io.emit("update", newNum);
+        
+        // 【新增】 檢查並發送 LINE 通知
+        checkAndNotifyLineUsers(newNum);
         
         // 更新等待時間
         const avgTime = await calculateAverageWaitTime();
@@ -445,6 +580,10 @@ app.post("/reset", async (req, res) => {
     multi.set(KEY_IS_PUBLIC, "1");
     multi.del(KEY_ADMIN_LOG);
     multi.del(KEY_HISTORY_STATS); 
+    // 【新增】 清空所有 LINE 訂閱 (可選，避免重置後仍通知舊號碼)
+    const keys = await redis.keys(`${KEY_LINE_SUB_PREFIX}*`);
+    if(keys.length > 0) multi.del(keys);
+
     await multi.exec();
     addAdminLog(req.user.nickname, `💥 系統全域重置`);
     io.emit("update", 0);
@@ -453,7 +592,7 @@ app.post("/reset", async (req, res) => {
     io.emit("updateSoundSetting", false);
     io.emit("updatePublicStatus", true);
     io.emit("initAdminLogs", []);
-    io.emit("updateWaitTime", 0); // 重置時間
+    io.emit("updateWaitTime", 0); 
     await updateTimestamp();
     res.json({ success: true });
 });
@@ -533,7 +672,6 @@ io.on("connection", async (socket) => {
         socket.emit("updateSoundSetting", results[4][1] === "1");
         socket.emit("updatePublicStatus", results[5][1] !== "0");
         
-        // 傳送初始平均時間
         const avgTime = await calculateAverageWaitTime();
         socket.emit("updateWaitTime", avgTime);
 
@@ -550,5 +688,5 @@ process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
 
 server.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Server v7.0 (Enhanced) ready on port ${PORT}`);
+    console.log(`🚀 Server v8.0 (LINE Integrated) ready on port ${PORT}`);
 });
