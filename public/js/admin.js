@@ -25,7 +25,7 @@ const onlineUsersList = document.getElementById("online-users-list");
 const statsTodayCount = document.getElementById("stats-today-count");
 const statsListUI = document.getElementById("stats-list-ui");
 const btnRefreshStats = document.getElementById("btn-refresh-stats");
-const hourlyChartEl = document.getElementById("hourly-chart"); // 【新】
+const hourlyChartEl = document.getElementById("hourly-chart");
 const broadcastInput = document.getElementById("broadcast-msg");
 const broadcastBtn = document.getElementById("btn-broadcast");
 
@@ -67,7 +67,7 @@ async function showPanel() {
     adminPanel.style.display = "block";
     document.title = `後台管理 - ${username}`; 
     
-    await loadStats();
+    await loadStats(); // 登入後立即載入統計
     socket.connect();
 }
 
@@ -163,7 +163,13 @@ socket.on("newAdminLog", (logMessage) => {
     adminLogUI.scrollTop = adminLogUI.scrollHeight; 
 });
 socket.on("updateOnlineAdmins", (admins) => renderOnlineAdmins(admins));
-socket.on("update", (num) => numberEl.textContent = num);
+
+// 【修正】 當即時號碼變更時，一併更新統計數據
+socket.on("update", (num) => {
+    numberEl.textContent = num;
+    loadStats(); // 自動刷新統計圖表
+});
+
 socket.on("updatePassed", (numbers) => renderPassedListUI(numbers));
 socket.on("updateFeaturedContents", (contents) => renderFeaturedListUI(contents));
 socket.on("updateSoundSetting", (isEnabled) => soundToggle.checked = isEnabled);
@@ -509,7 +515,11 @@ if (setNicknameBtn) {
 // --- 13. 數據分析 (更新為小時圖表) ---
 async function loadStats() {
     if (!statsListUI) return;
-    statsListUI.innerHTML = "<li>載入中...</li>";
+    
+    // 只有在首次載入或列表為空時才顯示 Loading (避免自動更新時畫面閃爍)
+    if (statsListUI.children.length === 0 || statsListUI.textContent.includes("點擊按鈕")) {
+        statsListUI.innerHTML = "<li>載入中...</li>";
+    }
     
     const data = await apiRequest("/api/admin/stats", {}, true);
     
@@ -517,8 +527,8 @@ async function loadStats() {
         // 1. 更新今日總數
         statsTodayCount.textContent = data.todayCount;
         
-        // 2. 繪製長條圖
-        renderHourlyChart(data.hourlyCounts);
+        // 2. 繪製長條圖 (傳入 serverHour 以確保時區正確)
+        renderHourlyChart(data.hourlyCounts, data.serverHour);
 
         // 3. 更新列表
         statsListUI.innerHTML = "";
@@ -529,7 +539,8 @@ async function loadStats() {
         const fragment = document.createDocumentFragment();
         data.history.forEach(item => {
             const li = document.createElement("li");
-            const time = new Date(item.time).toLocaleTimeString('zh-TW');
+            // 這裡我們使用本地時間顯示細節，方便查看相對時間
+            const time = new Date(item.time).toLocaleTimeString('zh-TW', { hour12: false });
             li.textContent = `${time} - 號碼 ${item.num} (${item.operator})`;
             li.style.borderBottom = "1px solid #ccc"; li.style.padding = "4px 0";
             fragment.appendChild(li);
@@ -541,12 +552,14 @@ async function loadStats() {
 }
 
 // 繪製長條圖函式
-function renderHourlyChart(counts) {
+function renderHourlyChart(counts, serverHour) {
     if (!hourlyChartEl || !Array.isArray(counts)) return;
     hourlyChartEl.innerHTML = "";
 
     const maxVal = Math.max(...counts, 1);
-    const currentHour = new Date().getHours();
+    
+    // 使用伺服器回傳的台灣小時 (serverHour)，如果沒傳則 fallback 到本地
+    const currentHour = (typeof serverHour === 'number') ? serverHour : new Date().getHours();
 
     const fragment = document.createDocumentFragment();
     for (let i = 0; i < 24; i++) {
@@ -577,6 +590,7 @@ function renderHourlyChart(counts) {
     }
     hourlyChartEl.appendChild(fragment);
     
+    // 捲動到當前小時
     setTimeout(() => {
         const currentEl = hourlyChartEl.querySelector(".chart-col.current");
         if (currentEl) {
@@ -587,7 +601,8 @@ function renderHourlyChart(counts) {
 }
 
 if (btnRefreshStats) {
-    btnRefreshStats.addEventListener("click", () => {
-        loadStats(); showToast("數據已更新", "info");
+    btnRefreshStats.addEventListener("click", async () => {
+        await loadStats(); 
+        showToast("數據已更新", "info");
     });
 }
