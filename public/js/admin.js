@@ -21,10 +21,11 @@ const clearLogBtn = document.getElementById("clear-log-btn");
 const resetAllBtn = document.getElementById("resetAll");
 const onlineUsersList = document.getElementById("online-users-list"); 
 
-// 【新】 統計與廣播介面 DOM
+// 統計與廣播介面 DOM
 const statsTodayCount = document.getElementById("stats-today-count");
 const statsListUI = document.getElementById("stats-list-ui");
 const btnRefreshStats = document.getElementById("btn-refresh-stats");
+const hourlyChartEl = document.getElementById("hourly-chart"); // 【新】
 const broadcastInput = document.getElementById("broadcast-msg");
 const broadcastBtn = document.getElementById("btn-broadcast");
 
@@ -70,7 +71,6 @@ async function showPanel() {
     socket.connect();
 }
 
-// 登入邏輯
 async function attemptLogin(loginName, loginPass) {
     loginError.textContent = "驗證中...";
     try {
@@ -139,7 +139,6 @@ socket.on("connect_error", (err) => {
     }
 });
 
-// 日誌與資料監聽
 socket.on("initAdminLogs", (logs) => {
     adminLogUI.innerHTML = "";
     if (!logs || logs.length === 0) {
@@ -367,7 +366,7 @@ addFeaturedBtn.onclick = async () => {
     addFeaturedBtn.disabled = false;
 };
 
-// 【新】 語音廣播
+// 語音廣播
 if (broadcastBtn) {
     broadcastBtn.onclick = async () => {
         const msg = broadcastInput.value.trim();
@@ -507,13 +506,21 @@ if (setNicknameBtn) {
     };
 }
 
-// --- 13. 數據分析 ---
+// --- 13. 數據分析 (更新為小時圖表) ---
 async function loadStats() {
     if (!statsListUI) return;
     statsListUI.innerHTML = "<li>載入中...</li>";
+    
     const data = await apiRequest("/api/admin/stats", {}, true);
+    
     if (data && data.success) {
+        // 1. 更新今日總數
         statsTodayCount.textContent = data.todayCount;
+        
+        // 2. 繪製長條圖
+        renderHourlyChart(data.hourlyCounts);
+
+        // 3. 更新列表
         statsListUI.innerHTML = "";
         if (!data.history || data.history.length === 0) {
             statsListUI.innerHTML = "<li>尚無數據</li>";
@@ -528,8 +535,57 @@ async function loadStats() {
             fragment.appendChild(li);
         });
         statsListUI.appendChild(fragment);
-    } else { statsListUI.innerHTML = "<li>載入失敗</li>"; }
+    } else {
+        statsListUI.innerHTML = "<li>載入失敗</li>";
+    }
 }
+
+// 繪製長條圖函式
+function renderHourlyChart(counts) {
+    if (!hourlyChartEl || !Array.isArray(counts)) return;
+    hourlyChartEl.innerHTML = "";
+
+    const maxVal = Math.max(...counts, 1);
+    const currentHour = new Date().getHours();
+
+    const fragment = document.createDocumentFragment();
+    for (let i = 0; i < 24; i++) {
+        const val = counts[i];
+        const percent = (val / maxVal) * 100;
+        
+        const col = document.createElement("div");
+        col.className = "chart-col";
+        if (i === currentHour) col.classList.add("current");
+
+        const valDiv = document.createElement("div");
+        valDiv.className = "chart-val";
+        valDiv.textContent = val > 0 ? val : "";
+
+        const barDiv = document.createElement("div");
+        barDiv.className = "chart-bar";
+        barDiv.style.height = `${Math.max(percent, 2)}%`; 
+        if (val === 0) barDiv.style.backgroundColor = "#e5e7eb"; 
+
+        const labelDiv = document.createElement("div");
+        labelDiv.className = "chart-label";
+        labelDiv.textContent = i.toString().padStart(2, '0');
+
+        col.appendChild(valDiv);
+        col.appendChild(barDiv);
+        col.appendChild(labelDiv);
+        fragment.appendChild(col);
+    }
+    hourlyChartEl.appendChild(fragment);
+    
+    setTimeout(() => {
+        const currentEl = hourlyChartEl.querySelector(".chart-col.current");
+        if (currentEl) {
+            const scrollLeft = currentEl.offsetLeft - (hourlyChartEl.clientWidth / 2) + (currentEl.clientWidth / 2);
+            hourlyChartEl.scrollTo({ left: scrollLeft, behavior: 'smooth' });
+        }
+    }, 100);
+}
+
 if (btnRefreshStats) {
     btnRefreshStats.addEventListener("click", () => {
         loadStats(); showToast("數據已更新", "info");
