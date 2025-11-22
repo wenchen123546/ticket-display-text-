@@ -41,11 +41,20 @@
         <div class="card-wrapper" id="card-control">
             <div class="admin-card">
                 <h3><span class="card-icon">🕹️</span> 主要控制</h3>
+                
                 <div class="control-group sound-toggle-group">
                 <label for="sound-toggle">啟用前台音效</label>
                 <input type="checkbox" id="sound-toggle">
                 </div>
                 
+                <div class="control-group form-group-boxed">
+                    <label>📢 語音廣播 (TTS)</label>
+                    <div class="input-group">
+                        <input type="text" id="broadcast-msg" placeholder="輸入內容 (如:請貴賓回座)" style="flex:2;">
+                        <button id="btn-broadcast" type="button" class="btn-secondary" style="flex:1; min-width:80px;">發送</button>
+                    </div>
+                </div>
+
                 <div class="control-group form-group-boxed">
                     <label for="manualNumber">手動設定號碼</label>
                     <input type="number" id="manualNumber" placeholder="輸入號碼" />
@@ -185,6 +194,6 @@
 
 <div id="toast-notification"></div>
 
-<script src="/js/admin.js?v=13"></script> 
+<script src="/js/admin.js?v=14"></script> 
 </body>
 </html>
