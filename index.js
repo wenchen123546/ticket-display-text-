@@ -1,7 +1,7 @@
 /*
  * ==========================================
- * 伺服器 (index.js) - v6 Enhanced
- * 功能：Redis 原子計數統計、語音廣播、WakeLock 支援、優雅關機、安全性增強
+ * 伺服器 (index.js) - v6.1 Enhanced
+ * 功能：每小時數據統計、廣播、WakeLock、優雅關機
  * ==========================================
  */
 
@@ -19,8 +19,8 @@ const bcrypt = require('bcrypt');
 const app = express();
 const server = http.createServer(app);
 const io = socketio(server, {
-    cors: { origin: "*" }, // 建議在生產環境鎖定特定網域
-    pingTimeout: 60000     // 增加容錯
+    cors: { origin: "*" },
+    pingTimeout: 60000
 });
 
 // --- 3. 核心設定 & 安全性 ---
@@ -38,15 +38,11 @@ if (!ADMIN_TOKEN || !REDIS_URL) {
 // --- 5. 連線到 Upstash Redis ---
 const redis = new Redis(REDIS_URL, {
     tls: { rejectUnauthorized: false },
-    retryStrategy: (times) => Math.min(times * 50, 2000) // 自動重連策略
+    retryStrategy: (times) => Math.min(times * 50, 2000)
 });
 redis.on('connect', () => console.log("✅ Redis 連線成功"));
-redis.on('error', (err) => {
-    console.error("❌ Redis 錯誤:", err);
-    // 不要在這裡 exit，讓 retryStrategy 處理
-});
+redis.on('error', (err) => console.error("❌ Redis 錯誤:", err));
 
-// Lua 腳本：確保扣除號碼時不會變成負數
 redis.defineCommand("decrIfPositive", {
     numberOfKeys: 1,
     lua: `
@@ -71,7 +67,8 @@ const KEY_USERS = 'callsys:users';
 const KEY_NICKNAMES = 'callsys:nicknames';
 const SESSION_PREFIX = 'callsys:session:';
 const KEY_HISTORY_STATS = 'callsys:stats:history';
-const KEY_STATS_DAILY_PREFIX = 'callsys:stats:daily:'; // 【新】每日計數器前綴
+// 【修改】 改用 Hourly Hash 儲存每小時數據
+const KEY_STATS_HOURLY_PREFIX = 'callsys:stats:hourly:'; 
 
 const onlineAdmins = new Map();
 
@@ -82,7 +79,7 @@ app.use(helmet({
         ...helmet.contentSecurityPolicy.getDefaultDirectives(),
         "script-src": ["'self'", "https://cdn.jsdelivr.net", "https://cdnjs.cloudflare.com"],
         "style-src": ["'self'", "https://cdn.jsdelivr.net", "'unsafe-inline'"],
-        "connect-src": ["'self'", "https://cdn.jsdelivr.net", "wss:", "ws:"] // 允許 WebSocket
+        "connect-src": ["'self'", "https://cdn.jsdelivr.net", "wss:", "ws:"]
       },
     },
 }));
@@ -92,7 +89,6 @@ app.use(express.json());
 const apiLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 1000 });
 const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, message: { error: "登入嘗試過多" } });
 
-// 驗證 Middleware
 const authMiddleware = async (req, res, next) => {
     try {
         const { token } = req.body; 
@@ -103,7 +99,7 @@ const authMiddleware = async (req, res, next) => {
         if (!sessionData) return res.status(403).json({ error: "Session 已過期" });
 
         req.user = JSON.parse(sessionData); 
-        await redis.expire(sessionKey, 8 * 60 * 60); // 續約 8 小時
+        await redis.expire(sessionKey, 8 * 60 * 60); 
         next();
     } catch (e) {
         console.error("Auth error:", e);
@@ -129,7 +125,6 @@ async function updateTimestamp() {
     io.emit("updateTimestamp", now);
 }
 
-// 統一廣播資料 helper
 async function broadcastData(key, eventName, isJSON = false) {
     try {
         const raw = isJSON ? await redis.lrange(key, 0, -1) : await redis.zrange(key, 0, -1);
@@ -143,27 +138,32 @@ async function addAdminLog(nickname, message) {
     try {
         const log = `[${new Date().toLocaleTimeString('zh-TW', { hour12: false })}] [${nickname}] ${message}`;
         await redis.lpush(KEY_ADMIN_LOG, log);
-        await redis.ltrim(KEY_ADMIN_LOG, 0, 99); // 保留最近 100 筆
+        await redis.ltrim(KEY_ADMIN_LOG, 0, 99); 
         io.emit("newAdminLog", log);
     } catch (e) { console.error("Log error:", e); }
 }
 
-// 【優化】 統計功能：同時寫入 List 和 Daily Counter (O(1) 寫入)
+// 【修改】 統計功能：每小時詳細計數
 async function logHistory(number, operator) {
     try {
         const now = new Date();
-        // 取得 YYYY-MM-DD 格式 (使用 UTC 或伺服器本地時間)
-        // 這裡簡單使用 ISO string 的前段，若需特定時區建議引入 date-fns 或 dayjs
+        // 取得 YYYY-MM-DD
         const dateStr = now.toISOString().split('T')[0]; 
+        // 取得當前小時 (0-23)
+        const hour = now.getHours(); 
+
         const record = { num: number, time: now.toISOString(), operator };
         
         const pipeline = redis.multi();
         pipeline.lpush(KEY_HISTORY_STATS, JSON.stringify(record));
-        pipeline.ltrim(KEY_HISTORY_STATS, 0, 999); // 列表保留 1000 筆細節
-        // 【優化】 使用 INCR 操作實現 O(1) 每日計數
-        pipeline.incr(`${KEY_STATS_DAILY_PREFIX}${dateStr}`); 
-        // 設定過期時間 (保留 30 天的每日數據)
-        pipeline.expire(`${KEY_STATS_DAILY_PREFIX}${dateStr}`, 30 * 86400);
+        pipeline.ltrim(KEY_HISTORY_STATS, 0, 999); 
+        
+        // 【關鍵】 使用 HINCRBY 針對該小時欄位 +1
+        // Key: callsys:stats:hourly:YYYY-MM-DD, Field: hour, Value: count
+        pipeline.hincrby(`${KEY_STATS_HOURLY_PREFIX}${dateStr}`, hour, 1); 
+        
+        // 設定過期時間 (保留 30 天)
+        pipeline.expire(`${KEY_STATS_HOURLY_PREFIX}${dateStr}`, 30 * 86400);
         
         await pipeline.exec();
     } catch (e) { console.error("Log history error:", e); }
@@ -196,7 +196,6 @@ app.post("/login", loginLimiter, async (req, res) => {
         const sessionToken = uuidv4();
         let nickname = await redis.hget(KEY_NICKNAMES, username);
         
-        // 確保 superadmin 也有暱稱
         if (!nickname && username === 'superadmin') {
             nickname = 'Super Admin';
             await redis.hset(KEY_NICKNAMES, 'superadmin', nickname);
@@ -211,7 +210,6 @@ app.post("/login", loginLimiter, async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// 保護路由群組
 const protectedAPIs = [
     "/change-number", "/set-number",
     "/api/passed/add", "/api/passed/remove", "/api/passed/clear",
@@ -253,37 +251,49 @@ app.post("/set-number", async (req, res) => {
     res.json({ success: true });
 });
 
-// 【新】 廣播功能 API
 app.post("/api/admin/broadcast", async (req, res) => {
     const { message } = req.body;
     if (!message) return res.status(400).json({ error: "訊息內容為空" });
-    
-    const cleanMsg = sanitize(message).substring(0, 50); // 限制長度 50 字
+    const cleanMsg = sanitize(message).substring(0, 50); 
     io.emit("adminBroadcast", cleanMsg);
     addAdminLog(req.user.nickname, `📢 發送廣播: "${cleanMsg}"`);
     res.json({ success: true });
 });
 
-// 【優化】 統計 API
+// 【修改】 統計 API：回傳每小時數據
 app.post("/api/admin/stats", async (req, res) => {
     try {
         const dateStr = new Date().toISOString().split('T')[0];
         
-        // 平行執行 Redis 查詢以提升效能
-        const [historyRaw, todayCount] = await Promise.all([
+        const [historyRaw, hourlyData] = await Promise.all([
             redis.lrange(KEY_HISTORY_STATS, 0, 99),
-            redis.get(`${KEY_STATS_DAILY_PREFIX}${dateStr}`)
+            redis.hgetall(`${KEY_STATS_HOURLY_PREFIX}${dateStr}`)
         ]);
+
+        // 轉換為長度 24 的陣列
+        const hourlyCounts = new Array(24).fill(0);
+        let todayTotal = 0;
+
+        if (hourlyData) {
+            for (const [hour, count] of Object.entries(hourlyData)) {
+                const h = parseInt(hour);
+                const c = parseInt(count);
+                if (h >= 0 && h < 24) {
+                    hourlyCounts[h] = c;
+                    todayTotal += c;
+                }
+            }
+        }
 
         res.json({ 
             success: true, 
             history: historyRaw.map(JSON.parse), 
-            todayCount: Number(todayCount || 0) 
+            hourlyCounts: hourlyCounts, // [0, 0, ..., 5, 2, ...]
+            todayCount: todayTotal 
         });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// 過號與精選連結
 app.post("/api/passed/add", async (req, res) => {
     const num = parseInt(req.body.number);
     if (!num) return res.status(400).json({ error: "無效數字" });
@@ -332,7 +342,6 @@ app.post("/api/featured/clear", async (req, res) => {
     res.json({ success: true });
 });
 
-// 系統設定
 app.post("/set-sound-enabled", async (req, res) => {
     const { enabled } = req.body;
     await redis.set(KEY_SOUND_ENABLED, enabled ? "1" : "0");
@@ -358,12 +367,9 @@ app.post("/reset", async (req, res) => {
     multi.set(KEY_IS_PUBLIC, "1");
     multi.del(KEY_ADMIN_LOG);
     multi.del(KEY_HISTORY_STATS); 
-    // 不刪除 users 和 nicknames
-    // 不刪除 daily stats
     await multi.exec();
     
     addAdminLog(req.user.nickname, `💥 系統全域重置`);
-    
     io.emit("update", 0);
     io.emit("updatePassed", []);
     io.emit("updateFeaturedContents", []);
@@ -387,7 +393,6 @@ app.use(["/api/admin/users", "/api/admin/add-user", "/api/admin/del-user", "/api
 app.post("/api/admin/users", async (req, res) => {
     const nicknames = await redis.hgetall(KEY_NICKNAMES) || {};
     const normalUsers = await redis.hkeys(KEY_USERS) || [];
-    
     const list = [{ 
         username: 'superadmin', 
         nickname: nicknames['superadmin'] || 'Super Admin', 
@@ -400,11 +405,9 @@ app.post("/api/admin/users", async (req, res) => {
 app.post("/api/admin/add-user", async (req, res) => {
     const { newUsername, newPassword, newNickname } = req.body;
     if(await redis.hexists(KEY_USERS, newUsername)) return res.status(400).json({error: "帳號已存在"});
-    
     const hash = await bcrypt.hash(newPassword, SALT_ROUNDS);
     await redis.hset(KEY_USERS, newUsername, hash);
     await redis.hset(KEY_NICKNAMES, newUsername, sanitize(newNickname) || newUsername);
-    
     addAdminLog(req.user.nickname, `新增管理員 ${newUsername}`);
     res.json({ success: true });
 });
@@ -445,7 +448,6 @@ io.on("connection", async (socket) => {
         }
     }
 
-    // 發送初始狀態
     try {
         const pipeline = redis.multi();
         pipeline.get(KEY_CURRENT_NUMBER);
@@ -461,16 +463,16 @@ io.on("connection", async (socket) => {
         socket.emit("updateFeaturedContents", (results[2][1] || []).map(JSON.parse));
         socket.emit("updateTimestamp", results[3][1] || new Date().toISOString());
         socket.emit("updateSoundSetting", results[4][1] === "1");
-        socket.emit("updatePublicStatus", results[5][1] !== "0"); // 預設為 true
+        socket.emit("updatePublicStatus", results[5][1] !== "0");
         
     } catch(e) { console.error("Socket init error:", e); }
 });
 
-// --- 12. Graceful Shutdown (優雅關機) ---
+// --- 12. Graceful Shutdown ---
 async function shutdown() {
     console.log('🛑 正在關閉伺服器...');
-    io.close(); // 關閉 socket 連線
-    await redis.quit(); // 關閉 Redis
+    io.close();
+    await redis.quit();
     server.close(() => {
         console.log('✅ HTTP 伺服器已關閉');
         process.exit(0);
@@ -481,5 +483,5 @@ process.on('SIGINT', shutdown);
 
 // --- 13. Start ---
 server.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Server v6 ready on port ${PORT}`);
+    console.log(`🚀 Server v6.1 ready on port ${PORT}`);
 });
