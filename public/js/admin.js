@@ -25,9 +25,18 @@ const onlineUsersList = document.getElementById("online-users-list");
 const statsTodayCount = document.getElementById("stats-today-count");
 const statsListUI = document.getElementById("stats-list-ui");
 const btnRefreshStats = document.getElementById("btn-refresh-stats");
+const btnClearStats = document.getElementById("btn-clear-stats"); // 【新】
 const hourlyChartEl = document.getElementById("hourly-chart");
 const broadcastInput = document.getElementById("broadcast-msg");
 const broadcastBtn = document.getElementById("btn-broadcast");
+
+// Modal 相關 DOM
+const modalOverlay = document.getElementById("edit-stats-overlay");
+const modalTitle = document.getElementById("modal-title");
+const modalCurrentCount = document.getElementById("modal-current-count");
+const btnStatsMinus = document.getElementById("btn-stats-minus");
+const btnStatsPlus = document.getElementById("btn-stats-plus");
+const btnModalClose = document.getElementById("btn-modal-close");
 
 // --- 2. 全域變數 ---
 let token = ""; 
@@ -37,6 +46,8 @@ let uniqueUsername = "";
 let toastTimer = null; 
 let publicToggleConfirmTimer = null; 
 
+// 用於編輯的暫存變數
+let editingHour = null;
 
 // --- 3. Socket.io ---
 const socket = io({ 
@@ -67,7 +78,7 @@ async function showPanel() {
     adminPanel.style.display = "block";
     document.title = `後台管理 - ${username}`; 
     
-    await loadStats(); // 登入後立即載入統計
+    await loadStats(); 
     socket.connect();
 }
 
@@ -120,7 +131,7 @@ function showToast(message, type = 'info') {
     toastTimer = setTimeout(() => { toast.classList.remove("show"); }, 3000);
 }
 
-// --- 6. 控制台 Socket 監聽器 ---
+// --- 6. Socket 監聽器 ---
 socket.on("connect", () => {
     console.log("Socket.io 已連接");
     statusBar.classList.remove("visible");
@@ -164,10 +175,9 @@ socket.on("newAdminLog", (logMessage) => {
 });
 socket.on("updateOnlineAdmins", (admins) => renderOnlineAdmins(admins));
 
-// 【修正】 當即時號碼變更時，一併更新統計數據
 socket.on("update", (num) => {
     numberEl.textContent = num;
-    loadStats(); // 自動刷新統計圖表
+    loadStats(); // 自動刷新統計
 });
 
 socket.on("updatePassed", (numbers) => renderPassedListUI(numbers));
@@ -175,7 +185,7 @@ socket.on("updateFeaturedContents", (contents) => renderFeaturedListUI(contents)
 socket.on("updateSoundSetting", (isEnabled) => soundToggle.checked = isEnabled);
 socket.on("updatePublicStatus", (isPublic) => publicToggle.checked = isPublic);
 
-// --- 7. API 請求函式 ---
+// --- 7. API 請求 ---
 async function apiRequest(endpoint, body, a_returnResponse = false) {
     try {
         const res = await fetch(endpoint, {
@@ -200,7 +210,7 @@ async function apiRequest(endpoint, body, a_returnResponse = false) {
     }
 }
 
-// --- 8. 按鈕確認邏輯 ---
+// --- 8. 確認按鈕 ---
 function setupConfirmationButton(buttonEl, originalText, confirmText, actionCallback) {
     if (!buttonEl) return;
     let timer = null;
@@ -237,7 +247,7 @@ function setupConfirmationButton(buttonEl, originalText, confirmText, actionCall
     });
 }
 
-// --- 9. GUI 渲染函式 ---
+// --- 9. 渲染 ---
 function renderPassedListUI(numbers) {
     passedListUI.innerHTML = ""; 
     if (!Array.isArray(numbers)) return;
@@ -247,7 +257,6 @@ function renderPassedListUI(numbers) {
         li.innerHTML = `<span>${number}</span>`;
         const deleteBtn = document.createElement("button");
         deleteBtn.type = "button"; deleteBtn.className = "delete-item-btn"; deleteBtn.textContent = "×";
-        
         const actionCallback = async () => {
             deleteBtn.disabled = true;
             await apiRequest("/api/passed/remove", { number: number });
@@ -268,10 +277,8 @@ function renderFeaturedListUI(contents) {
         const span = document.createElement("span");
         span.innerHTML = `${item.linkText}<br><small style="color:#666">${item.linkUrl}</small>`;
         li.appendChild(span);
-
         const deleteBtn = document.createElement("button");
         deleteBtn.type = "button"; deleteBtn.className = "delete-item-btn"; deleteBtn.textContent = "×";
-        
         const actionCallback = async () => {
             deleteBtn.disabled = true;
             await apiRequest("/api/featured/remove", { linkText: item.linkText, linkUrl: item.linkUrl });
@@ -308,7 +315,7 @@ function renderOnlineAdmins(admins) {
     onlineUsersList.appendChild(fragment);
 }
 
-// --- 10. 控制台按鈕功能 ---
+// --- 10. 控制台按鈕 ---
 const actionResetNumber = async () => {
     if (await apiRequest("/set-number", { number: 0 })) {
         document.getElementById("manualNumber").value = "";
@@ -342,7 +349,7 @@ const actionClearAdminLog = async () => {
     await apiRequest("/api/logs/clear", {});
 }
 
-// --- 11. 綁定按鈕事件 ---
+// --- 11. 綁定事件 ---
 document.getElementById("next").onclick = () => changeNumber("next");
 document.getElementById("prev").onclick = () => changeNumber("prev");
 document.getElementById("setNumber").onclick = setNumber;
@@ -372,7 +379,6 @@ addFeaturedBtn.onclick = async () => {
     addFeaturedBtn.disabled = false;
 };
 
-// 語音廣播
 if (broadcastBtn) {
     broadcastBtn.onclick = async () => {
         const msg = broadcastInput.value.trim();
@@ -394,10 +400,7 @@ newPassedNumberInput.addEventListener("keyup", (event) => { if (event.key === "E
 newLinkTextInput.addEventListener("keyup", (event) => { if (event.key === "Enter") newLinkUrlInput.focus(); });
 newLinkUrlInput.addEventListener("keyup", (event) => { if (event.key === "Enter") addFeaturedBtn.click(); });
 
-// 綁定開關
-soundToggle.addEventListener("change", () => {
-    apiRequest("/set-sound-enabled", { enabled: soundToggle.checked });
-});
+soundToggle.addEventListener("change", () => { apiRequest("/set-sound-enabled", { enabled: soundToggle.checked }); });
 const publicToggleLabel = document.getElementById("public-toggle-label");
 const originalToggleText = "對外開放前台";
 publicToggle.addEventListener("change", () => {
@@ -512,11 +515,9 @@ if (setNicknameBtn) {
     };
 }
 
-// --- 13. 數據分析 (更新為小時圖表) ---
+// --- 13. 數據分析 ---
 async function loadStats() {
     if (!statsListUI) return;
-    
-    // 只有在首次載入或列表為空時才顯示 Loading (避免自動更新時畫面閃爍)
     if (statsListUI.children.length === 0 || statsListUI.textContent.includes("點擊按鈕")) {
         statsListUI.innerHTML = "<li>載入中...</li>";
     }
@@ -524,13 +525,9 @@ async function loadStats() {
     const data = await apiRequest("/api/admin/stats", {}, true);
     
     if (data && data.success) {
-        // 1. 更新今日總數
         statsTodayCount.textContent = data.todayCount;
-        
-        // 2. 繪製長條圖 (傳入 serverHour 以確保時區正確)
         renderHourlyChart(data.hourlyCounts, data.serverHour);
 
-        // 3. 更新列表
         statsListUI.innerHTML = "";
         if (!data.history || data.history.length === 0) {
             statsListUI.innerHTML = "<li>尚無數據</li>";
@@ -539,7 +536,6 @@ async function loadStats() {
         const fragment = document.createDocumentFragment();
         data.history.forEach(item => {
             const li = document.createElement("li");
-            // 這裡我們使用本地時間顯示細節，方便查看相對時間
             const time = new Date(item.time).toLocaleTimeString('zh-TW', { hour12: false });
             li.textContent = `${time} - 號碼 ${item.num} (${item.operator})`;
             li.style.borderBottom = "1px solid #ccc"; li.style.padding = "4px 0";
@@ -551,14 +547,11 @@ async function loadStats() {
     }
 }
 
-// 繪製長條圖函式
 function renderHourlyChart(counts, serverHour) {
     if (!hourlyChartEl || !Array.isArray(counts)) return;
     hourlyChartEl.innerHTML = "";
 
     const maxVal = Math.max(...counts, 1);
-    
-    // 使用伺服器回傳的台灣小時 (serverHour)，如果沒傳則 fallback 到本地
     const currentHour = (typeof serverHour === 'number') ? serverHour : new Date().getHours();
 
     const fragment = document.createDocumentFragment();
@@ -569,6 +562,9 @@ function renderHourlyChart(counts, serverHour) {
         const col = document.createElement("div");
         col.className = "chart-col";
         if (i === currentHour) col.classList.add("current");
+
+        // 【新】 綁定點擊事件開啟 Modal
+        col.onclick = () => openEditModal(i, val);
 
         const valDiv = document.createElement("div");
         valDiv.className = "chart-val";
@@ -590,7 +586,6 @@ function renderHourlyChart(counts, serverHour) {
     }
     hourlyChartEl.appendChild(fragment);
     
-    // 捲動到當前小時
     setTimeout(() => {
         const currentEl = hourlyChartEl.querySelector(".chart-col.current");
         if (currentEl) {
@@ -600,9 +595,59 @@ function renderHourlyChart(counts, serverHour) {
     }, 100);
 }
 
+// --- Modal & Edit Logic ---
+
+function openEditModal(hour, count) {
+    editingHour = hour;
+    modalTitle.textContent = `編輯 ${hour}:00 - ${hour}:59 數據`;
+    modalCurrentCount.textContent = count;
+    modalOverlay.style.display = "flex";
+}
+
+function closeEditModal() {
+    modalOverlay.style.display = "none";
+    editingHour = null;
+}
+
+async function adjustStat(delta) {
+    if (editingHour === null) return;
+    
+    // 預先更新 UI 讓使用者覺得反應快
+    let current = parseInt(modalCurrentCount.textContent);
+    let next = current + delta;
+    if (next < 0) next = 0;
+    modalCurrentCount.textContent = next;
+
+    await apiRequest("/api/admin/stats/adjust", { hour: editingHour, delta: delta });
+    await loadStats(); // 刷新背景的圖表
+}
+
+const actionClearStats = async () => {
+    if (await apiRequest("/api/admin/stats/clear", {})) {
+        showToast("🗑️ 統計數據已清空", "success");
+        await loadStats();
+    }
+}
+
+// 綁定 Modal 按鈕
+if (btnModalClose) btnModalClose.onclick = closeEditModal;
+if (btnStatsMinus) btnStatsMinus.onclick = () => adjustStat(-1);
+if (btnStatsPlus) btnStatsPlus.onclick = () => adjustStat(1);
+
+// 點擊 Modal 背景關閉
+if (modalOverlay) {
+    modalOverlay.onclick = (e) => {
+        if (e.target === modalOverlay) closeEditModal();
+    }
+}
+
 if (btnRefreshStats) {
     btnRefreshStats.addEventListener("click", async () => {
         await loadStats(); 
         showToast("數據已更新", "info");
     });
+}
+
+if (btnClearStats) {
+    setupConfirmationButton(btnClearStats, "清空紀錄", "⚠️ 確認清空", actionClearStats);
 }
