@@ -1,6 +1,6 @@
 /*
  * ==========================================
- * admin.css - v7.0 Responsive Grid Layout
+ * admin.css - v7.1 Layout Overflow Fix
  * ==========================================
  */
 
@@ -32,6 +32,10 @@ body {
     margin: 0; 
     padding: 20px; 
     padding-top: 30px; 
+    /* 【修復】防止水平捲軸溢出 */
+    max-width: 100vw;
+    overflow-x: hidden;
+    box-sizing: border-box;
 }
 
 .sr-only {
@@ -89,13 +93,13 @@ body {
     margin-top: 15px;
 }
 
-/* --- 2. 【修改】 CSS Grid 卡片佈局 --- */
+/* --- 2. CSS Grid 卡片佈局 (修復版) --- */
 
 #admin-panel { 
     display: none; 
     padding-top: 0; 
     width: 100%;
-    max-width: 1600px; /* 加寬最大寬度，適應大螢幕 */
+    max-width: 1400px; 
     margin: 0 auto; 
     box-sizing: border-box;
 }
@@ -104,17 +108,18 @@ body {
 
 .card-container {
     display: grid;
-    /* 自動填滿：每欄最小 380px，空間夠就自動增加欄數 */
-    grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+    /* 【修復】將最小寬度降為 300px，適應 iPhone SE 等小螢幕 */
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
     gap: 20px;
     align-items: start;
     width: 100%;
+    box-sizing: border-box;
 }
 
-/* 移除 dashboard-column 樣式，直接使用 .card-wrapper */
+/* 防止 Grid Item 溢出 */
 .card-wrapper {
     width: 100%;
-    min-width: 0; /* 防止 grid item 溢出 */
+    min-width: 0; 
 }
 
 .admin-card {
@@ -127,6 +132,8 @@ body {
     box-sizing: border-box; 
     display: flex;
     flex-direction: column; 
+    /* 【修復】防止內容撐開卡片 */
+    overflow: hidden;
 }
 
 .admin-card h3 {
@@ -250,7 +257,9 @@ input[type="url"] {
     margin-bottom: 8px; 
     font-size: 1.1rem; 
     text-align: left; 
-    word-break: break-all; 
+    /* 【修復】長網址自動斷行，防止撐開版面 */
+    word-break: break-all;
+    word-wrap: break-word;
 }
 .list-editor li span { margin-right: 10px; color: #555; }
 .list-editor li .delete-item-btn { 
@@ -363,25 +372,33 @@ input[type="url"] {
 #resetAll { width: 100%; }
 #resetAllConfirm { width: 100%; }
 
-/* --- 7. RWD 優化 --- */
+/* --- 7. RWD 強力優化 --- */
 
-/* 在手機上，強制單欄 */
-@media (max-width: 600px) {
-    .card-container {
-        grid-template-columns: 1fr; /* 單欄 */
-    }
-}
-
+/* 平板與手機：強制單欄，並減少內距 */
 @media (max-width: 768px) { 
     body { 
         padding: 10px; 
-        padding-top: 30px; 
+        padding-top: 20px; 
+        width: 100vw;
     }
+    
+    #admin-panel {
+        width: 100%;
+        margin: 0;
+    }
+
+    .card-container {
+        /* 【重要】手機板強制單欄，避免被 minmax 撐開 */
+        grid-template-columns: 1fr; 
+        gap: 15px;
+    }
+
     .admin-card {
         padding: 15px; 
     }
+    
     #login-container { margin: 30px auto; padding: 20px; } 
-    #admin-panel h1 { font-size: 2.2rem; } 
+    #admin-panel h1 { font-size: 2rem; } 
     #number { font-size: 4rem; } 
     .list-editor { padding: 10px; } 
 }
@@ -495,6 +512,9 @@ input[type="url"] {
     font-family: "Consolas", "Monaco", monospace; 
     font-size: 0.9rem; 
     box-sizing: border-box; 
+    /* 防止長 Log 撐開版面 */
+    word-break: break-all;
+    white-space: pre-wrap; 
 }
 #admin-log-ui li { padding-bottom: 3px; margin-bottom: 3px; border-bottom: 1px solid var(--color-log-border); }
 #admin-log-ui li:first-child { color: var(--color-success); font-weight: bold; }
