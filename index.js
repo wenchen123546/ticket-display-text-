@@ -1,6 +1,6 @@
 /*
  * ==========================================
- * 伺服器 (index.js) - v8.0 Kiosk & Line Edition
+ * 伺服器 (index.js) - v8.1 Fixed (Trust Proxy)
  * ==========================================
  */
 
@@ -13,10 +13,14 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit'); 
 const { v4: uuidv4 } = require('uuid'); 
 const bcrypt = require('bcrypt'); 
-const line = require('@line/bot-sdk'); // 新增 Line SDK
+const line = require('@line/bot-sdk'); 
 
 // --- 2. 伺服器實體化 ---
 const app = express();
+
+// 【關鍵修復】告訴 Express 信任 Render 的 Proxy，解決 Rate Limit 報錯
+app.set('trust proxy', 1); 
+
 const server = http.createServer(app);
 const io = socketio(server, {
     cors: { origin: "*" },
@@ -29,7 +33,7 @@ const ADMIN_TOKEN = process.env.ADMIN_TOKEN;
 const REDIS_URL = process.env.UPSTASH_REDIS_URL;
 const SALT_ROUNDS = 10; 
 
-// LINE 設定 (若無設定則不會崩潰，只是功能無效)
+// LINE 設定
 const lineConfig = {
     channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN || 'YOUR_TOKEN',
     channelSecret: process.env.LINE_CHANNEL_SECRET || 'YOUR_SECRET'
@@ -49,9 +53,8 @@ redis.on('connect', () => console.log("✅ Redis 連線成功"));
 redis.on('error', (err) => console.error("❌ Redis 錯誤:", err));
 
 // Lua Script: Kiosk 模式下的下一號邏輯
-// 只有當 current < lastIssued 時才增加 current
 redis.defineCommand("nextNumberKiosk", {
-    numberOfKeys: 2, // KEY_CURRENT, KEY_LAST_ISSUED
+    numberOfKeys: 2, 
     lua: `
         local current = tonumber(redis.call("GET", KEYS[1])) or 0
         local issued = tonumber(redis.call("GET", KEYS[2])) or 0
@@ -59,15 +62,15 @@ redis.defineCommand("nextNumberKiosk", {
         if current < issued then
             return redis.call("INCR", KEYS[1])
         else
-            return -1 -- 表示無人候位
+            return -1 
         end
     `
 });
 
 // --- 5. Redis Keys ---
 const KEY_CURRENT_NUMBER = 'callsys:number';
-const KEY_LAST_ISSUED = 'callsys:issued'; // 【新】最後發出的號碼
-const KEY_KIOSK_MODE = 'callsys:kioskMode'; // 【新】Kiosk 模式開關
+const KEY_LAST_ISSUED = 'callsys:issued'; 
+const KEY_KIOSK_MODE = 'callsys:kioskMode'; 
 const KEY_PASSED_NUMBERS = 'callsys:passed';
 const KEY_FEATURED_CONTENTS = 'callsys:featured';
 const KEY_LAST_UPDATED = 'callsys:updated';
@@ -102,20 +105,22 @@ app.use(helmet({
 }));
 app.use(express.static("public"));
 
-// Line Webhook 必須在 express.json() 之前處理 raw body (但此範例用 SDK middleware 簡化)
-// 這裡為了簡單，針對 API 路由使用 json parser
+// JSON Parser (針對特定路由，避免干擾 LINE webhook)
 app.use('/api', express.json());
 app.use('/login', express.json());
 app.use('/change-number', express.json());
 app.use('/set-number', express.json());
 app.use('/set-sound-enabled', express.json());
 app.use('/set-public-status', express.json());
-app.use('/set-kiosk-mode', express.json()); // 新路由
+app.use('/set-kiosk-mode', express.json());
 app.use('/reset', express.json());
 
+// Rate Limiters
 const apiLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 1000 });
 const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20 });
+const kioskLimiter = rateLimit({ windowMs: 1 * 60 * 1000, max: 60, message: { error: "取號太頻繁" } });
 
+// Auth Middleware
 const authMiddleware = async (req, res, next) => {
     try {
         const { token } = req.body; 
@@ -209,8 +214,8 @@ async function syncStateToSocket(socket) {
     const isKiosk = res[2][1] === "1";
 
     socket.emit("update", current);
-    socket.emit("updateIssued", issued); // 【新】同步發號
-    socket.emit("updateKioskMode", isKiosk); // 【新】同步模式
+    socket.emit("updateIssued", issued); 
+    socket.emit("updateKioskMode", isKiosk); 
     socket.emit("updatePassed", (res[3][1] || []).map(Number));
     socket.emit("updateFeaturedContents", (res[4][1] || []).map(JSON.parse));
     socket.emit("updateSoundSetting", res[5][1] === "1");
@@ -250,6 +255,7 @@ app.post('/callback', line.middleware(lineConfig), async (req, res) => {
     }
 });
 
+// Login
 app.post("/login", loginLimiter, async (req, res) => {
     const { username, password } = req.body;
     try {
@@ -269,6 +275,7 @@ app.post("/login", loginLimiter, async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Protected APIs
 const protectedAPIs = [
     "/change-number", "/set-number", "/set-kiosk-mode",
     "/api/passed/add", "/api/passed/remove", "/api/passed/clear",
@@ -279,31 +286,24 @@ const protectedAPIs = [
 ];
 app.use(protectedAPIs, apiLimiter, authMiddleware);
 
-// 前台自助取號 API (Rate Limited 嚴格一點)
-const kioskLimiter = rateLimit({ windowMs: 1 * 60 * 1000, max: 60, message: { error: "取號太頻繁" } });
+// Kiosk API
 app.post("/api/kiosk/take-number", kioskLimiter, async (req, res) => {
     const isKiosk = await redis.get(KEY_KIOSK_MODE);
     if (isKiosk !== "1") return res.status(403).json({ error: "自助取號功能未開啟" });
     
-    // 取號邏輯：lastIssued + 1
     const newIssued = await redis.incr(KEY_LAST_ISSUED);
-    
-    // 如果 current 比 issued 還大 (異常狀態)，稍微修正一下，但通常不會發生
-    // 這裡只需廣播 updateIssued
     io.emit("updateIssued", newIssued);
     
-    // 計算等待人數
     const current = Number(await redis.get(KEY_CURRENT_NUMBER) || 0);
     const waiting = newIssued - current;
-
     res.json({ success: true, yourNumber: newIssued, waitingCount: waiting });
 });
 
+// Admin Settings
 app.post("/set-kiosk-mode", superAdminAuthMiddleware, async (req, res) => {
     const { enabled } = req.body;
     await redis.set(KEY_KIOSK_MODE, enabled ? "1" : "0");
     
-    // 如果開啟 Kiosk，且 lastIssued 小於 current，強制同步
     if (enabled) {
         const current = await redis.get(KEY_CURRENT_NUMBER) || 0;
         const issued = await redis.get(KEY_LAST_ISSUED) || 0;
@@ -311,14 +311,10 @@ app.post("/set-kiosk-mode", superAdminAuthMiddleware, async (req, res) => {
             await redis.set(KEY_LAST_ISSUED, current);
         }
     }
-
     addAdminLog(req.user.nickname, `自助取號模式設為 ${enabled ? '開啟' : '關閉'}`);
     io.emit("updateKioskMode", enabled);
-    
-    // 重新廣播一次狀態以確保同步
     const issued = await redis.get(KEY_LAST_ISSUED) || 0;
     io.emit("updateIssued", Number(issued));
-    
     res.json({ success: true });
 });
 
@@ -330,12 +326,10 @@ app.post("/change-number", async (req, res) => {
 
         if (direction === "next") {
             if (isKiosk) {
-                // Kiosk 模式：不能超過 Issued
                 const result = await redis.nextNumberKiosk(KEY_CURRENT_NUMBER, KEY_LAST_ISSUED);
                 if (result === -1) return res.status(400).json({ error: "目前無人候位 (已達取號上限)" });
                 num = result;
             } else {
-                // 一般模式：直接增加，同時同步 Issued，避免切換模式時錯亂
                 num = await redis.incr(KEY_CURRENT_NUMBER);
                 await redis.set(KEY_LAST_ISSUED, num); 
                 io.emit("updateIssued", num);
@@ -343,7 +337,6 @@ app.post("/change-number", async (req, res) => {
             await logHistory(num, req.user.nickname, 1);
             addAdminLog(req.user.nickname, `號碼增加為 ${num}`);
         } else if (direction === "prev") {
-            // 上一號邏輯不變
             num = await redis.decrIfPositive(KEY_CURRENT_NUMBER);
             await logHistory(num, req.user.nickname, 0); 
             addAdminLog(req.user.nickname, `號碼回退為 ${num}`);
@@ -366,7 +359,6 @@ app.post("/set-number", async (req, res) => {
         const oldNum = parseInt(await redis.get(KEY_CURRENT_NUMBER)) || 0;
         await redis.set(KEY_CURRENT_NUMBER, newNum);
         
-        // 為了防呆，設定號碼時，把 Issued 也同步過去 (除非 Kiosk 模式下 Issued 已經比它大)
         const issued = parseInt(await redis.get(KEY_LAST_ISSUED)) || 0;
         if (newNum > issued) {
             await redis.set(KEY_LAST_ISSUED, newNum);
