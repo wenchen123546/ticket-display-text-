@@ -6,7 +6,7 @@
 <title>後台管理 - 登入</title>
 <script src="/socket.io/socket.io.js"></script>
 
-<link rel="stylesheet" href="/css/admin.css?v=10"> 
+<link rel="stylesheet" href="/css/admin.css?v=11"> 
 </head>
 <body>
 
@@ -96,11 +96,14 @@
                         <span id="stats-today-count" style="font-weight:bold; color:#2563eb; font-size:1.5rem;">0</span>
                     </div>
 
-                    <div id="hourly-chart" class="chart-container">
+                    <div id="hourly-chart" class="chart-container" title="點擊長條圖可手動增減數值">
                         <p style="margin:auto; color:#999;">載入圖表...</p>
                     </div>
                     
-                    <button id="btn-refresh-stats" type="button" class="btn-secondary" style="margin-top: 10px;">重新整理數據</button>
+                    <div style="display: flex; gap: 10px; width: 100%; margin-top: 10px;">
+                        <button id="btn-refresh-stats" type="button" class="btn-secondary" style="flex: 1;">重整</button>
+                        <button id="btn-clear-stats" type="button" class="btn-danger" style="flex: 1;">清空紀錄</button>
+                    </div>
                     
                     <label style="margin-top:20px; display:block; font-weight:bold;">最近叫號紀錄</label>
                     <ul id="stats-list-ui" style="width: 100%; max-height: 200px; overflow-y: auto; text-align: left; background: #f1f1f1; padding: 10px; list-style: none; font-size: 0.9rem; border-radius: 6px; box-sizing: border-box;">
@@ -198,8 +201,21 @@
 </div> 
 </div> 
 
+<div id="edit-stats-overlay" class="modal-overlay" style="display: none;">
+    <div class="modal-content">
+        <h3 id="modal-title">編輯數據</h3>
+        <p>調整該時段的叫號人數：</p>
+        <div style="display: flex; gap: 15px; justify-content: center; margin: 20px 0;">
+            <button id="btn-stats-minus" class="btn-warn" style="font-size: 1.5rem; width: 60px;">-1</button>
+            <span id="modal-current-count" style="font-size: 2rem; font-weight: bold; min-width: 60px;">0</span>
+            <button id="btn-stats-plus" class="btn-success" style="font-size: 1.5rem; width: 60px;">+1</button>
+        </div>
+        <button id="btn-modal-close" class="btn-secondary">關閉</button>
+    </div>
+</div>
+
 <div id="toast-notification"></div>
 
-<script src="/js/admin.js?v=16"></script> 
+<script src="/js/admin.js?v=17"></script> 
 </body>
 </html>
