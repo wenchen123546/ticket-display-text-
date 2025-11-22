@@ -1,6 +1,6 @@
 /*
  * ==========================================
- * admin.css - v8.0 Scrollable & Fit Layout
+ * admin.css - v8.1 List Layout Fix
  * ==========================================
  */
 
@@ -109,7 +109,6 @@ body {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 20px;
-    /* 讓同一列卡片等高 */
     align-items: stretch;
     width: 100%;
     box-sizing: border-box;
@@ -126,7 +125,7 @@ body {
 .card-wrapper {
     width: 100%;
     min-width: 0; 
-    height: 100%; /* 填滿 Grid 單元格 */
+    height: 100%; 
 }
 
 /* --- 卡片本體設定 --- */
@@ -136,16 +135,14 @@ body {
     box-shadow: 0 2px 8px rgba(0,0,0,0.05);
     padding: 20px;
     text-align: left; 
-    height: 100%; /* 撐滿高度 */
+    height: 100%; 
     box-sizing: border-box; 
     
-    /* 【關鍵】Flex 垂直排列 */
     display: flex;
     flex-direction: column; 
     overflow: hidden; 
 }
 
-/* 卡片標題：固定高度，不縮放 */
 .admin-card h3 {
     display: flex;
     align-items: center;
@@ -163,52 +160,28 @@ body {
     margin-right: 10px;
 }
 
-/* 通用控制組：垂直排列 */
 .admin-card .control-group { 
     margin-bottom: 20px; 
     display: flex; 
     flex-direction: column; 
     align-items: center; 
     width: 100%; 
-    flex-shrink: 0; /* 預設不縮放，除非是列表 */
+    flex-shrink: 0; 
 }
-/* 最後一個元素不需要 margin */
 .admin-card > *:last-child {
     margin-bottom: 0;
 }
 
-/* --- 3. 滾動區域設定 (Lists, Logs, Charts) --- */
+/* --- 3. 列表與編輯器 (關鍵修正) --- */
 
-/* 1. 日誌與列表容器 */
-#admin-log-ui, 
-.list-editor ul, 
-#stats-list-ui, 
-.online-users-ui {
-    width: 100%;
-    margin: 0 0 15px 0;
-    padding: 0;
-    list-style: none;
-    box-sizing: border-box;
-    
-    /* 【關鍵】自動伸縮與滾動 */
-    flex-grow: 1;           /* 有空間就伸展 */
-    flex-shrink: 1;         /* 空間不夠就收縮 */
-    min-height: 100px;      /* 最小高度 */
-    max-height: 300px;      /* 最大高度 (超過出卷軸) */
-    overflow-y: auto;       /* 垂直滾動 */
-    
-    /* 讓滾動條好看一點 */
-    scrollbar-width: thin;
-    scrollbar-color: #ccc transparent;
-}
-
-/* 2. 列表編輯器容器 (包住 ul 的 div) */
+/* 列表編輯器容器 */
 .list-editor {
     display: flex;
     flex-direction: column;
-    /* 讓內部的 ul 可以正確計算高度 */
-    flex-grow: 1;
-    min-height: 0; 
+    /* 讓它填滿卡片剩下的空間 */
+    flex-grow: 1; 
+    min-height: 200px; /* 給予基本高度 */
+    
     padding: 15px;
     background: #f9f9f9;
     border: 1px solid var(--color-border);
@@ -217,13 +190,88 @@ body {
     width: 100%;
 }
 
-/* 3. 日誌樣式特化 */
+/* 列表區域 UL */
+.list-editor ul {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 10px 0;
+    width: 100%;
+    
+    /* 讓列表佔據中間所有空間，並支援滾動 */
+    flex-grow: 1;
+    overflow-y: auto;
+    min-height: 50px; /* 至少留一點空間 */
+    
+    scrollbar-width: thin;
+    scrollbar-color: #ccc transparent;
+}
+
+/* 列表單項 LI */
+.list-editor li { 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; 
+    background: var(--color-bg-light); 
+    padding: 8px 10px; 
+    border-radius: 6px; 
+    border: 1px solid #ddd; 
+    margin-bottom: 6px; 
+    font-size: 1rem; 
+    text-align: left; 
+}
+
+/* 列表內的文字 Span */
+.list-editor li span { 
+    flex: 1; /* 佔據左側空間 */
+    margin-right: 10px; 
+    color: #333;
+    word-break: break-all; /* 防止長網址撐開 */
+    line-height: 1.2;
+}
+
+/* 列表內的刪除按鈕 */
+.list-editor li .delete-item-btn { 
+    background: var(--color-danger-light); 
+    color: white; 
+    border: none; 
+    border-radius: 50%; 
+    width: 28px; 
+    height: 28px; 
+    min-width: 28px; /* 固定寬度 */
+    font-size: 1.2rem; 
+    cursor: pointer; 
+    flex-shrink: 0; /* 防止被擠壓 */
+    padding: 0; 
+    margin: 0; 
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+}
+
+/* --- 其他滾動區域 (日誌、統計) --- */
+#admin-log-ui, 
+#stats-list-ui, 
+.online-users-ui {
+    width: 100%;
+    margin: 0 0 15px 0;
+    padding: 0;
+    list-style: none;
+    box-sizing: border-box;
+    flex-grow: 1;           
+    flex-shrink: 1;         
+    min-height: 100px;      
+    max-height: 300px;      
+    overflow-y: auto;       
+    scrollbar-width: thin;
+}
+
 #admin-log-ui {
     background: var(--color-log-bg); 
     color: var(--color-log-text); 
     border-radius: 6px; 
     padding: 10px;
-    font-family: "Consolas", "Monaco", monospace; 
+    font-family: monospace; 
     font-size: 0.9rem; 
     word-break: break-all;
     white-space: pre-wrap; 
@@ -231,7 +279,6 @@ body {
 #admin-log-ui li { padding-bottom: 3px; margin-bottom: 3px; border-bottom: 1px solid var(--color-log-border); }
 #admin-log-ui li:first-child { color: var(--color-success); font-weight: bold; }
 
-/* 4. 統計列表樣式特化 */
 #stats-list-ui {
     background: #f1f1f1; 
     padding: 10px; 
@@ -239,36 +286,22 @@ body {
     font-size: 0.9rem;
     text-align: left;
 }
-
-/* 5. 列表項目樣式 */
-.list-editor li, 
-.online-users-ui li { 
-    display: flex; 
-    justify-content: space-between; 
-    align-items: center; 
-    background: var(--color-bg-light); 
-    padding: 8px 12px; 
-    border-radius: 6px; 
-    border: 1px solid #ddd; 
-    margin-bottom: 8px; 
-    font-size: 1.1rem; 
-    text-align: left; 
-    word-break: break-all;
-    word-wrap: break-word;
+.online-users-ui li {
+    padding: 8px;
+    border-bottom: 1px solid #eee;
 }
-.list-editor li:last-child { margin-bottom: 0; }
 
-/* --- 4. 按鈕 & 輸入框 --- */
+/* --- 4. 按鈕 & 輸入框 (Input Group 修正) --- */
 
 button { 
-    font-size: 1.2rem; 
-    padding: 10px 20px; 
-    margin: 10px 5px; 
+    font-size: 1.1rem; 
+    padding: 8px 15px; 
+    margin: 5px; 
     border: none; 
-    border-radius: 8px; 
+    border-radius: 6px; 
     cursor: pointer; 
     color: white; 
-    min-width: 100px; 
+    min-width: 80px; 
     width: 100%; 
     box-sizing: border-box;
     transition: background-color 0.2s ease; 
@@ -288,11 +321,11 @@ button:disabled { background-color: #999; cursor: not-allowed; opacity: 0.7; }
     flex-grow: 1; 
 }
 
-/* 數據分析按鈕區塊 (RWD) */
+/* 數據分析按鈕 */
 .stats-actions-row {
     display: flex;
     flex-wrap: wrap; 
-    gap: 10px;
+    gap: 8px;
     width: 100%;
     margin-top: 10px;
     flex-shrink: 0;
@@ -300,8 +333,6 @@ button:disabled { background-color: #999; cursor: not-allowed; opacity: 0.7; }
 .stats-actions-row button {
     flex: 1 1 auto; 
     min-width: 70px; 
-    padding: 8px 10px;
-    font-size: 1rem;
     margin: 0;
 }
 
@@ -311,53 +342,56 @@ button.is-confirming {
 }
 
 input, textarea { 
-    font-size: 1.2rem; 
+    font-size: 1.1rem; 
     padding: 8px; 
     width: 100%; 
     text-align: center; 
     border-radius: 6px; 
     border: 1px solid var(--color-border); 
-    margin-top: 10px; 
+    margin-top: 5px; 
     box-sizing: border-box; 
     flex-shrink: 0;
 }
 
-/* 【關鍵】Textarea 高度限制與滾動 */
 textarea { 
     height: auto; 
     min-height: 80px; 
-    max-height: 150px; /* 超過高度滾動 */
+    max-height: 150px; 
     overflow-y: auto;
     text-align: left; 
-    padding: 10px; 
-    resize: vertical; /* 允許使用者手動拉 */
+    resize: vertical; 
 }
 
-input[type="text"],
-input[type="password"],
-input[type="url"] {
+input[type="text"], input[type="password"], input[type="url"] {
     text-align: left;
-    padding-left: 12px;
+    padding-left: 10px;
 }
 
-/* 輸入框按鈕組 */
+/* 輸入框按鈕組 (修正 Input 排版) */
 .input-group { 
     display: flex; 
-    flex-wrap: wrap; 
+    flex-wrap: wrap; /* 允許換行 */
     justify-content: center; 
     align-items: center; 
     width: 100%; 
+    gap: 5px;
     flex-shrink: 0;
+    margin-top: 5px;
 }
-.input-group input { flex: 1; min-width: 80px; margin: 5px; max-width: 100%; }
+
+.input-group input { 
+    flex: 1 1 40%; /* 預設佔 40%，空間不夠會換行 */
+    min-width: 100px; 
+    margin: 0; 
+}
+
 .input-group button {
-    margin: 5px;
+    margin: 0;
     flex-shrink: 0;
-    padding: 0;
     height: 40px; 
-    border-radius: 50%; 
-    box-sizing: border-box; 
+    border-radius: 6px; 
 }
+
 .input-group .btn-add { 
     font-size: 1.5rem; 
     font-weight: bold; 
@@ -370,7 +404,6 @@ input[type="url"] {
     font-size: 1rem; 
     min-width: 60px; 
     width: auto; 
-    border-radius: 8px; 
 }
 
 .list-editor .input-group-label {
@@ -400,7 +433,7 @@ input[type="url"] {
 #next { background-color: var(--color-success); }
 #setNumber { background-color: var(--color-primary); }
 
-/* --- 6. 雜項元件 (Reset Zone, Toggle) --- */
+/* --- 6. 雜項元件 --- */
 
 .reset-zone { margin-top: auto; width: 100%; text-align: center; flex-shrink: 0; }
 .btn-reset-single { 
@@ -412,7 +445,7 @@ input[type="url"] {
     margin-top: 10px; 
 }
 
-.list-editor .btn-reset-single { margin-top: 15px; }
+.list-editor .btn-reset-single { margin-top: 10px; }
 
 .control-group.sound-toggle-group,
 .control-group.system-toggle-group { 
@@ -441,7 +474,7 @@ input[type="url"] {
     margin-bottom: 20px;
     flex-shrink: 0;
 }
-.form-group-boxed .input-group { margin-top: 10px; }
+.form-group-boxed .input-group { margin-top: 5px; }
 
 #status-bar { 
     position: fixed; top: 0; left: 0; width: 100%; 
@@ -453,24 +486,14 @@ input[type="url"] {
 
 #main-number-controls { margin-top: -20px; margin-bottom: 30px; }
 
-/* --- 7. 圖表與其他 --- */
-
+/* --- 7. 圖表 --- */
 .chart-container {
-    display: flex;
-    align-items: flex-end;
-    height: 180px; 
-    width: 100%;
-    gap: 6px;
-    padding: 10px 5px;
-    box-sizing: border-box;
-    overflow-x: auto; 
-    border-bottom: 1px solid #ddd;
-    margin-bottom: 15px;
+    display: flex; align-items: flex-end; height: 180px; width: 100%;
+    gap: 6px; padding: 10px 5px; box-sizing: border-box;
+    overflow-x: auto; border-bottom: 1px solid #ddd; margin-bottom: 15px;
     background: linear-gradient(to bottom, #ffffff 0%, #f8f9fa 100%);
-    border-radius: 8px;
-    flex-shrink: 0;
+    border-radius: 8px; flex-shrink: 0;
 }
-
 .chart-col {
     display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
     flex: 1; min-width: 25px; height: 100%; position: relative; cursor: pointer; 
@@ -487,7 +510,7 @@ input[type="url"] {
 .chart-col.current .chart-bar { background-color: var(--color-danger); }
 .chart-col.current .chart-label { color: var(--color-danger); font-weight: bold; }
 
-/* Modal */
+/* Modal & Toast */
 .modal-overlay {
     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
     background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center;
@@ -497,8 +520,6 @@ input[type="url"] {
     background: white; padding: 25px; border-radius: 12px; width: 300px;
     text-align: center; box-shadow: 0 5px 15px rgba(0,0,0,0.2);
 }
-
-/* Toast */
 #toast-notification {
     position: fixed; top: 20px; right: 20px; padding: 15px 25px;
     border-radius: 8px; background: var(--color-text); color: white;
