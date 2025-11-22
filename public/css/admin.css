@@ -1,6 +1,6 @@
 /*
  * ==========================================
- * admin.css - v7.2 Layout Stability Fix
+ * admin.css - v7.3 Equal Height Cards
  * ==========================================
  */
 
@@ -92,7 +92,7 @@ body {
     margin-top: 15px;
 }
 
-/* --- 2. CSS Grid 卡片佈局 (穩定版) --- */
+/* --- 2. CSS Grid 卡片佈局 (等高修復版) --- */
 
 #admin-panel { 
     display: none; 
@@ -107,30 +107,34 @@ body {
 
 .card-container {
     display: grid;
-    /* 【修復】使用固定 3 欄，避免忽大忽小 */
     grid-template-columns: repeat(3, 1fr);
     gap: 20px;
-    align-items: start;
+    /* 【修正】改為 stretch，讓同一列的卡片高度自動拉伸一致 */
+    align-items: stretch;
     width: 100%;
     box-sizing: border-box;
 }
 
-/* RWD 斷點設定：解決版面不穩定的問題 */
+/* RWD 設定 */
 @media (max-width: 1100px) {
     .card-container {
-        grid-template-columns: repeat(2, 1fr); /* 中螢幕變 2 欄 */
+        grid-template-columns: repeat(2, 1fr); 
     }
 }
 
 @media (max-width: 768px) {
     .card-container {
-        grid-template-columns: 1fr; /* 手機變 1 欄 */
+        grid-template-columns: 1fr; 
     }
 }
 
 .card-wrapper {
     width: 100%;
     min-width: 0; 
+    /* 【修正】設定高度 100%，確保填滿 Grid 欄位高度 */
+    height: 100%;
+    display: flex;
+    flex-direction: column;
 }
 
 .admin-card {
@@ -139,11 +143,18 @@ body {
     box-shadow: 0 2px 8px rgba(0,0,0,0.05);
     padding: 20px;
     text-align: left; 
+    /* 【修正】設定高度 100%，讓卡片背景色填滿 */
     height: 100%; 
     box-sizing: border-box; 
     display: flex;
     flex-direction: column; 
     overflow: hidden; 
+}
+
+/* 讓卡片內容區塊自動撐開，把底部按鈕推到底 (可選) */
+.admin-card .control-group:last-child {
+    margin-bottom: 0;
+    margin-top: auto; /* 若希望按鈕置底可保留此行，否則移除 */
 }
 
 .admin-card h3 {
@@ -169,9 +180,6 @@ body {
     align-items: center; 
     width: 100%; 
 }
-.admin-card .control-group:last-child {
-    margin-bottom: 0;
-}
 
 /* --- 3. 按鈕 & 輸入框 --- */
 
@@ -183,7 +191,6 @@ button {
     border-radius: 8px; 
     cursor: pointer; 
     color: white; 
-    /* 全域最小寬度，但會在特定區塊覆蓋它 */
     min-width: 100px; 
     width: 100%; 
     box-sizing: border-box;
@@ -191,7 +198,6 @@ button {
 }
 button:disabled { background-color: #999; cursor: not-allowed; opacity: 0.7; }
 
-/* 頂部的大按鈕 (上一號、下一號) */
 .control-group.button-row { 
     flex-direction: row; 
     justify-content: center; 
@@ -203,17 +209,17 @@ button:disabled { background-color: #999; cursor: not-allowed; opacity: 0.7; }
     flex-grow: 1; 
 }
 
-/* 【修復】 數據分析按鈕區塊：允許換行 */
+/* 數據分析按鈕區塊 */
 .stats-actions-row {
     display: flex;
-    flex-wrap: wrap; /* 關鍵：允許換行 */
+    flex-wrap: wrap; 
     gap: 10px;
     width: 100%;
     margin-top: 10px;
 }
 .stats-actions-row button {
-    flex: 1 1 auto; /* 彈性伸縮 */
-    min-width: 70px; /* 允許縮得更小 */
+    flex: 1 1 auto; 
+    min-width: 70px; 
     padding: 8px 10px;
     font-size: 1rem;
     margin: 0;
@@ -356,7 +362,7 @@ input[type="url"] {
     margin-top: 5px;
 }
 
-/* --- 5. 按鈕顏色 (使用 Class) --- */
+/* --- 5. 按鈕顏色 --- */
 
 .btn-primary { background-color: var(--color-primary); }
 .btn-success { background-color: var(--color-success); }
