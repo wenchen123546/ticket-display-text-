@@ -12,10 +12,12 @@ const soundPrompt = document.getElementById("sound-prompt");
 const copyLinkPrompt = document.getElementById("copy-link-prompt"); 
 const passedContainerEl = document.getElementById("passed-container");
 
-// 通知相關 UI
+// 通知與預測相關 UI
 const notifyBtn = document.getElementById("enable-notify-btn");
 const myNumInput = document.getElementById("my-number");
 const notifyStatus = document.getElementById("notify-status");
+const waitTimeEl = document.getElementById("estimated-wait");
+const waitMinutesEl = document.getElementById("wait-minutes");
 
 // --- 3. 狀態變數 ---
 let isSoundEnabled = false; 
@@ -25,7 +27,8 @@ let isPublic = true;
 let audioPermissionGranted = false;
 let ttsEnabled = false; 
 let myTargetNumber = null;
-let wakeLock = null; // 【新】 Wake Lock 物件
+let wakeLock = null; 
+let avgServiceTime = 0; // 【新】 平均服務時間
 
 // --- 4. Wake Lock API (保持螢幕常亮) ---
 async function requestWakeLock() {
@@ -41,7 +44,6 @@ async function requestWakeLock() {
         }
     }
 }
-// 當頁面可見性改變時重新申請鎖
 document.addEventListener('visibilitychange', async () => {
     if (wakeLock !== null && document.visibilityState === 'visible') {
         await requestWakeLock();
@@ -52,7 +54,7 @@ document.addEventListener('visibilitychange', async () => {
 socket.on("connect", () => {
     console.log("Socket.io 已連接");
     if (isPublic) statusBar.classList.remove("visible");
-    requestWakeLock(); // 連線成功時嘗試鎖定螢幕
+    requestWakeLock(); 
 });
 
 socket.on("disconnect", () => {
@@ -64,13 +66,17 @@ socket.on("update", (num) => {
     handleNewNumber(num);
 });
 
-// 【新】 接收管理員廣播
 socket.on("adminBroadcast", (msg) => {
-    // 無論設定如何，廣播通常優先級較高，但仍受本地靜音控制
     if (!isLocallyMuted) {
-        speakText(msg, 1.0); // 語速正常
+        speakText(msg, 1.0); 
         alert(`📢 店家公告：${msg}`);
     }
+});
+
+// 【功能 2：智慧化預測】 接收等待時間並更新 UI
+socket.on("updateWaitTime", (time) => {
+    avgServiceTime = time;
+    updateWaitTimeUI();
 });
 
 socket.on("updateSoundSetting", (isEnabled) => { isSoundEnabled = isEnabled; });
@@ -87,20 +93,19 @@ socket.on("updateTimestamp", (ts) => { lastUpdateTime = new Date(ts); updateTime
 // --- 6. 核心邏輯 ---
 
 function handleNewNumber(num) {
-    // 1. 播放提示音
     playNotificationSound();
     
-    // 2. TTS 語音 (延遲避免重疊)
     setTimeout(() => {
         if (numberEl.textContent !== String(num) && isSoundEnabled && !isLocallyMuted) {
             speakText(`現在號碼，${num}號`, 0.9);
         }
     }, 800);
 
-    // 3. 檢查是否到號
     checkMyNumber(num);
+    
+    // 【新】 每次號碼變更都重算等待時間
+    updateWaitTimeUI();
 
-    // 4. 更新 UI
     if (numberEl.textContent !== String(num)) {
         numberEl.textContent = num;
         document.title = `${num}號 - 候位中`;
@@ -111,7 +116,7 @@ function handleNewNumber(num) {
 
 function speakText(text, rate) {
     if (!ttsEnabled || !('speechSynthesis' in window)) return;
-    window.speechSynthesis.cancel(); // 取消上一句
+    window.speechSynthesis.cancel(); 
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'zh-TW';
     utterance.rate = rate || 0.9;
@@ -120,20 +125,18 @@ function speakText(text, rate) {
 
 function playNotificationSound() {
     if (!notifySound) return;
-    // 嘗試播放以觸發 Audio Context
     notifySound.play().then(() => {
         audioPermissionGranted = true;
-        ttsEnabled = true; // 獲得權限後開啟 TTS
+        ttsEnabled = true; 
         updateMuteUI(false);
         
-        // 如果系統設定靜音或本地靜音，則暫停播放
         if (!isSoundEnabled || isLocallyMuted) {
             notifySound.pause(); notifySound.currentTime = 0;
         }
     }).catch(() => {
         console.warn("Autoplay blocked");
         audioPermissionGranted = false;
-        updateMuteUI(true, true); // 顯示 "點此啟用"
+        updateMuteUI(true, true); 
     });
 }
 
@@ -141,14 +144,66 @@ function checkMyNumber(current) {
     if (!myTargetNumber) return;
     const diff = myTargetNumber - current;
     
-    // 剩餘 3 號以內或剛好到號
-    if (diff <= 3 && diff >= 0) {
-        const msg = diff === 0 ? `輪到您了！` : `剩 ${diff} 組！`;
-        // 僅在背景執行時發送通知
+    if (diff <= 3 && diff > 0) {
+        const msg = `剩 ${diff} 組！`;
         if (document.hidden && "Notification" in window && Notification.permission === "granted") {
             new Notification("叫號提醒", { body: `${msg} 目前 ${current} 號`, icon: "/icons/icon-192.png" });
         }
     }
+
+    // 【功能 3：體驗升級】 到號特效與通知
+    if (diff === 0) {
+         if (document.hidden && "Notification" in window && Notification.permission === "granted") {
+            new Notification("到號通知", { body: `輪到您了！目前 ${current} 號`, icon: "/icons/icon-192.png" });
+        }
+        
+        // 觸發彩帶
+        triggerConfetti();
+        
+        // 額外語音
+        if(isSoundEnabled && !isLocallyMuted) {
+             speakText("恭喜！輪到您了，請前往櫃台", 1.0);
+        }
+        // 到號後清除目標與預估時間
+        myTargetNumber = null;
+        myNumInput.value = "";
+        updateWaitTimeUI();
+        notifyStatus.textContent = "🎉 已到號！";
+        notifyStatus.style.color = "#2563eb";
+    }
+}
+
+// 【功能 3】 Confetti 特效函式
+function triggerConfetti() {
+    if (typeof confetti === 'undefined') return;
+    const duration = 3000;
+    const end = Date.now() + duration;
+
+    (function frame() {
+        confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0 } });
+        confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1 } });
+
+        if (Date.now() < end) {
+            requestAnimationFrame(frame);
+        }
+    })();
+}
+
+// 【功能 2】 更新等待時間 UI
+function updateWaitTimeUI() {
+    const currentNum = parseInt(numberEl.textContent) || 0;
+    const myNum = parseInt(myNumInput.value);
+
+    if (!myNum || myNum <= currentNum || avgServiceTime <= 0) {
+        waitTimeEl.style.display = "none";
+        return;
+    }
+
+    const diff = myNum - currentNum;
+    const estMin = Math.ceil(diff * avgServiceTime);
+    
+    waitMinutesEl.textContent = estMin;
+    waitTimeEl.style.display = "block";
 }
 
 // --- 7. UI 渲染 ---
@@ -209,7 +264,7 @@ function updateMuteUI(isMuted, needsPermission = false) {
 if (soundPrompt) {
     soundPrompt.addEventListener("click", () => {
         if (!audioPermissionGranted) {
-            playNotificationSound(); // 使用者點擊觸發音效
+            playNotificationSound(); 
         } else {
             updateMuteUI(!isLocallyMuted);
         }
@@ -226,13 +281,16 @@ if (notifyBtn) {
                     myTargetNumber = parseInt(val);
                     notifyStatus.textContent = `✅ 將於接近 ${myTargetNumber} 號時通知`;
                     notifyStatus.style.color = "#10b981";
-                    // 測試通知
                     new Notification("通知已設定", { body: "當號碼接近時我們會通知您" });
+                    updateWaitTimeUI(); // 設定後立即計算一次
                 } else alert("請輸入號碼");
             } else alert("請允許通知權限");
         });
     });
 }
+
+// 綁定輸入框變更事件，即時更新預估時間
+myNumInput.addEventListener("input", updateWaitTimeUI);
 
 if (copyLinkPrompt) {
     copyLinkPrompt.addEventListener("click", () => {
@@ -249,7 +307,6 @@ if (copyLinkPrompt) {
     });
 }
 
-// QR Code
 try {
     const qrEl = document.getElementById("qr-code-placeholder");
     if (qrEl) {
