@@ -193,7 +193,7 @@ socket.on("updateQueue", (data) => {
     const issued = data.issued;
     
     // 更新目前叫號
-    numberEl.textContent = current;
+    if(numberEl) numberEl.textContent = current;
     
     // 更新發號狀態
     if(issuedNumberEl) issuedNumberEl.textContent = issued;
@@ -204,7 +204,7 @@ socket.on("updateQueue", (data) => {
 
 // 為了相容性，保留 update
 socket.on("update", (num) => {
-    numberEl.textContent = num;
+    if(numberEl) numberEl.textContent = num;
     loadStats(); 
 });
 
