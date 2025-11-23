@@ -11,6 +11,7 @@ const numberEl = document.getElementById("number");
 const issuedNumberEl = document.getElementById("issued-number");
 const waitingCountEl = document.getElementById("waiting-count");
 
+// 列表與控制元素
 const statusBar = document.getElementById("status-bar");
 const passedListUI = document.getElementById("passed-list-ui");
 const newPassedNumberInput = document.getElementById("new-passed-number");
@@ -26,7 +27,17 @@ const clearLogBtn = document.getElementById("clear-log-btn");
 const resetAllBtn = document.getElementById("resetAll");
 const onlineUsersList = document.getElementById("online-users-list"); 
 
-// 【新】模式切換元素
+// 【修正：補回遺失的用戶管理 DOM】
+const userListUI = document.getElementById("user-list-ui");
+const newUserUsernameInput = document.getElementById("new-user-username");
+const newUserPasswordInput = document.getElementById("new-user-password");
+const newUserNicknameInput = document.getElementById("new-user-nickname"); 
+const addUserBtn = document.getElementById("add-user-btn");
+const setNickUsernameInput = document.getElementById("set-nick-username");
+const setNickNicknameInput = document.getElementById("set-nick-nickname");
+const setNicknameBtn = document.getElementById("set-nickname-btn");
+
+// 模式切換元素
 const modeSwitcherGroup = document.getElementById("mode-switcher-group");
 const modeRadios = document.getElementsByName("systemMode");
 
@@ -85,7 +96,7 @@ async function showPanel() {
         if (clearLogBtnEl) clearLogBtnEl.style.display = "block";
         if(btnExportCsv) btnExportCsv.style.display = "block";
         
-        // 【新】顯示模式切換區塊
+        // 顯示模式切換區塊
         if(modeSwitcherGroup) modeSwitcherGroup.style.display = "block";
         await loadAdminUsers(); 
     }
@@ -202,7 +213,7 @@ socket.on("updateQueue", (data) => {
 });
 socket.on("update", (num) => { if(numberEl) numberEl.textContent = num; loadStats(); });
 
-// 【新】監聽模式變更
+// 監聽模式變更
 socket.on("updateSystemMode", (mode) => {
     if (modeRadios) {
         for(let r of modeRadios) {
@@ -279,11 +290,9 @@ if (modeRadios) {
                 if(await apiRequest("/set-system-mode", { mode: val })) {
                     showToast("✅ 模式已切換", "success");
                 } else {
-                    // 切換失敗，還原 UI
-                    socket.emit("requestUpdate"); // 或是重新整理
+                    socket.emit("requestUpdate"); // 失敗則重整
                 }
             } else {
-                // 取消切換，還原 UI (這裡簡單做，重新連線或等待 Socket 更新即可，或手動設回)
                 const other = val === 'ticketing' ? 'input' : 'ticketing';
                 document.querySelector(`input[name="systemMode"][value="${other}"]`).checked = true;
             }
@@ -424,7 +433,7 @@ publicToggle.addEventListener("change", () => {
     }
 });
 
-// --- 超級管理員功能 ---
+// --- 超級管理員功能 (修正變數錯誤) ---
 async function loadAdminUsers() {
     if (userRole !== 'super' || !userListUI) return;
     const data = await apiRequest("/api/admin/users", {}, true); 
