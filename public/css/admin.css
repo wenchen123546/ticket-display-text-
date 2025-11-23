@@ -1,6 +1,6 @@
 /*
  * ==========================================
- * admin.css - v27 Layout Fix (Radio & Checkbox)
+ * admin.css - v28 Button Visibility Fix
  * ==========================================
  */
 
@@ -184,10 +184,16 @@ body {
 }
 #admin-log-ui li { padding-bottom: 3px; margin-bottom: 3px; border-bottom: 1px solid var(--color-log-border); }
 #admin-log-ui li:first-child { color: var(--color-success); font-weight: bold; }
+
+/* 【修正】清除按鈕樣式 */
 .admin-log-container .btn-clear-log {
-    width: 100%; padding: 8px 12px; font-size: 0.9rem; background-color: var(--color-neutral); 
-    color: white; margin-top: 10px; flex-shrink: 0; display: none; border-radius: 6px;
+    width: 100%; padding: 8px 12px; font-size: 0.9rem; 
+    background-color: var(--color-neutral); color: white; 
+    margin-top: 10px; flex-shrink: 0; 
+    display: none; /* 預設隱藏，JS 會開啟 */
+    border-radius: 6px;
 }
+.admin-log-container .btn-clear-log:hover { opacity: 0.9; }
 
 #stats-list-ui { background: #f1f1f1; padding: 10px; border-radius: 6px; font-size: 0.9rem; text-align: left; }
 .online-users-ui li { padding: 8px; border-bottom: 1px solid #eee; }
@@ -242,39 +248,20 @@ input[type="text"], input[type="password"], input[type="url"] { text-align: left
 .list-editor .btn-reset-single { margin-top: 10px; }
 
 .control-group.sound-toggle-group, .control-group.system-toggle-group { 
-    display: flex; /* 強制 Flex 排列 */
-    flex-direction: row; /* 水平排列 */
-    justify-content: center; 
-    align-items: center; 
-    gap: 15px; 
-    background: #f9f9f9; 
-    border: 1px solid var(--color-border); 
-    padding: 15px;
-    width: 100%; 
-    box-sizing: border-box; 
-    margin-bottom: 20px; 
-    flex-shrink: 0;
-    border-radius: 8px;
+    display: flex; flex-direction: row; justify-content: center; align-items: center; 
+    gap: 15px; background: #f9f9f9; border: 1px solid var(--color-border); 
+    padding: 15px; width: 100%; box-sizing: border-box; margin-bottom: 20px; 
+    flex-shrink: 0; border-radius: 8px;
 }
 
 .control-group.form-group-boxed { background: #f9f9f9; border: 1px solid var(--color-border); padding: 15px; border-radius: 8px; width: 100%; box-sizing: border-box; margin-bottom: 20px; flex-shrink: 0; }
 
-/* 【重要修復】防止 Checkbox 和 Radio 被全域樣式拉伸 */
 input[type="checkbox"], input[type="radio"] {
-    width: auto !important; /* 強制寬度自動 */
-    margin: 0 8px 0 0 !important; /* 右邊留點空隙 */
-    transform: scale(1.3); /* 稍微放大 */
-    cursor: pointer;
-    flex-shrink: 0; /* 防止被擠壓 */
+    width: auto !important; margin: 0 8px 0 0 !important; transform: scale(1.3); cursor: pointer; flex-shrink: 0;
 }
 
-/* 【重要修復】模式切換群組樣式 */
 #mode-switcher-group .radio-option {
-    display: flex;
-    align-items: center;
-    cursor: pointer;
-    font-size: 1rem;
-    white-space: nowrap; /* 防止文字換行 */
+    display: flex; align-items: center; cursor: pointer; font-size: 1rem; white-space: nowrap;
 }
 
 #status-bar { 
