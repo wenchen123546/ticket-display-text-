@@ -1,6 +1,6 @@
 /*
  * ==========================================
- * admin.css - v25 Merged Layout
+ * admin.css - v27 Layout Fix (Radio & Checkbox)
  * ==========================================
  */
 
@@ -236,7 +236,7 @@ input[type="text"], input[type="password"], input[type="url"] { text-align: left
 #next { background-color: var(--color-success); }
 #setNumber { background-color: var(--color-primary); }
 
-/* --- 6. 雜項元件 & 修復開關版面 --- */
+/* --- 6. 雜項元件 & 修復開關與 Radio 版面 --- */
 .reset-zone { margin-top: auto; width: 100%; text-align: center; flex-shrink: 0; }
 .btn-reset-single { background-color: var(--color-warning); font-size: 1rem; padding: 8px 15px; width: 100%; margin: 0; margin-top: 10px; }
 .list-editor .btn-reset-single { margin-top: 10px; }
@@ -257,23 +257,25 @@ input[type="text"], input[type="password"], input[type="url"] { text-align: left
     border-radius: 8px;
 }
 
-/* 防止 Checkbox 被拉伸 */
-.control-group.sound-toggle-group input[type="checkbox"], 
-.control-group.system-toggle-group input[type="checkbox"] {
-    width: auto !important; /* 強制寬度自動 */
-    margin: 0 !important;   /* 移除多餘外距 */
-    transform: scale(1.5);  /* 放大 */
-    cursor: pointer;
-}
-
-.control-group.sound-toggle-group label, 
-.control-group.system-toggle-group label {
-    margin: 0;
-    font-size: 1.1rem;
-    cursor: pointer;
-}
-
 .control-group.form-group-boxed { background: #f9f9f9; border: 1px solid var(--color-border); padding: 15px; border-radius: 8px; width: 100%; box-sizing: border-box; margin-bottom: 20px; flex-shrink: 0; }
+
+/* 【重要修復】防止 Checkbox 和 Radio 被全域樣式拉伸 */
+input[type="checkbox"], input[type="radio"] {
+    width: auto !important; /* 強制寬度自動 */
+    margin: 0 8px 0 0 !important; /* 右邊留點空隙 */
+    transform: scale(1.3); /* 稍微放大 */
+    cursor: pointer;
+    flex-shrink: 0; /* 防止被擠壓 */
+}
+
+/* 【重要修復】模式切換群組樣式 */
+#mode-switcher-group .radio-option {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    font-size: 1rem;
+    white-space: nowrap; /* 防止文字換行 */
+}
 
 #status-bar { 
     position: fixed; top: 0; left: 0; width: 100%; 
