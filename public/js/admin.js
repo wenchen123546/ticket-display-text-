@@ -6,7 +6,7 @@ const passwordInput = document.getElementById("password-input");
 const loginButton = document.getElementById("login-button");
 const loginError = document.getElementById("login-error");
 
-// 【新】儀表板元素
+// 儀表板元素
 const numberEl = document.getElementById("number");
 const issuedNumberEl = document.getElementById("issued-number");
 const waitingCountEl = document.getElementById("waiting-count");
@@ -25,6 +25,10 @@ const adminLogUI = document.getElementById("admin-log-ui");
 const clearLogBtn = document.getElementById("clear-log-btn");
 const resetAllBtn = document.getElementById("resetAll");
 const onlineUsersList = document.getElementById("online-users-list"); 
+
+// 【新】模式切換元素
+const modeSwitcherGroup = document.getElementById("mode-switcher-group");
+const modeRadios = document.getElementsByName("systemMode");
 
 // 統計與廣播介面 DOM
 const statsTodayCount = document.getElementById("stats-today-count");
@@ -76,13 +80,14 @@ function showLogin() {
 async function showPanel() {
     if (userRole === 'super') {
         const userManagementCard = document.getElementById("card-user-management");
-        if (userManagementCard) {
-            userManagementCard.style.display = "block"; 
-            await loadAdminUsers(); 
-        }
+        if (userManagementCard) userManagementCard.style.display = "block";
         const clearLogBtnEl = document.getElementById("clear-log-btn");
         if (clearLogBtnEl) clearLogBtnEl.style.display = "block";
         if(btnExportCsv) btnExportCsv.style.display = "block";
+        
+        // 【新】顯示模式切換區塊
+        if(modeSwitcherGroup) modeSwitcherGroup.style.display = "block";
+        await loadAdminUsers(); 
     }
 
     loginContainer.style.display = "none";
@@ -187,25 +192,23 @@ socket.on("newAdminLog", (logMessage) => {
 });
 socket.on("updateOnlineAdmins", (admins) => renderOnlineAdmins(admins));
 
-// 【重要修改】同時監聽 updateQueue 以顯示完整數據
 socket.on("updateQueue", (data) => {
     const current = data.current;
     const issued = data.issued;
-    
-    // 更新目前叫號
     if(numberEl) numberEl.textContent = current;
-    
-    // 更新發號狀態
     if(issuedNumberEl) issuedNumberEl.textContent = issued;
     if(waitingCountEl) waitingCountEl.textContent = Math.max(0, issued - current);
-    
     loadStats(); 
 });
+socket.on("update", (num) => { if(numberEl) numberEl.textContent = num; loadStats(); });
 
-// 為了相容性，保留 update
-socket.on("update", (num) => {
-    if(numberEl) numberEl.textContent = num;
-    loadStats(); 
+// 【新】監聽模式變更
+socket.on("updateSystemMode", (mode) => {
+    if (modeRadios) {
+        for(let r of modeRadios) {
+            if(r.value === mode) r.checked = true;
+        }
+    }
 });
 
 socket.on("updatePassed", (numbers) => renderPassedListUI(numbers));
@@ -238,14 +241,10 @@ async function apiRequest(endpoint, body, a_returnResponse = false) {
     }
 }
 
-// --- 8. 確認按鈕 ---
+// --- 8. 確認按鈕與事件綁定 ---
 function setupConfirmationButton(buttonEl, originalText, confirmText, actionCallback) {
     if (!buttonEl) return;
-    let timer = null;
-    let interval = null;
-    let isConfirming = false;
-    let countdown = 5;
-
+    let timer = null; let interval = null; let isConfirming = false; let countdown = 5;
     const showCountdown = confirmText.includes("點此") || confirmText.includes("重置");
     const resetBtn = () => {
         clearInterval(interval); clearTimeout(timer);
@@ -254,15 +253,11 @@ function setupConfirmationButton(buttonEl, originalText, confirmText, actionCall
         buttonEl.classList.remove("is-confirming");
         interval = null; timer = null;
     };
-
     buttonEl.addEventListener("click", () => {
-        if (isConfirming) {
-            actionCallback(); resetBtn();
-        } else {
+        if (isConfirming) { actionCallback(); resetBtn(); } else {
             isConfirming = true; countdown = 5;
             buttonEl.textContent = showCountdown ? `${confirmText} (${countdown}s)` : confirmText;
             buttonEl.classList.add("is-confirming");
-
             if (showCountdown) {
                 interval = setInterval(() => {
                     countdown--;
@@ -272,6 +267,27 @@ function setupConfirmationButton(buttonEl, originalText, confirmText, actionCall
             }
             timer = setTimeout(() => { resetBtn(); }, 5000);
         }
+    });
+}
+
+// 模式切換事件綁定
+if (modeRadios) {
+    modeRadios.forEach(radio => {
+        radio.addEventListener("change", async () => {
+            const val = radio.value;
+            if(confirm(`確定要切換為「${val === 'ticketing' ? '線上取號' : '手動輸入'}」模式嗎？`)) {
+                if(await apiRequest("/set-system-mode", { mode: val })) {
+                    showToast("✅ 模式已切換", "success");
+                } else {
+                    // 切換失敗，還原 UI
+                    socket.emit("requestUpdate"); // 或是重新整理
+                }
+            } else {
+                // 取消切換，還原 UI (這裡簡單做，重新連線或等待 Socket 更新即可，或手動設回)
+                const other = val === 'ticketing' ? 'input' : 'ticketing';
+                document.querySelector(`input[name="systemMode"][value="${other}"]`).checked = true;
+            }
+        });
     });
 }
 
@@ -285,10 +301,7 @@ function renderPassedListUI(numbers) {
         li.innerHTML = `<span>${number}</span>`;
         const deleteBtn = document.createElement("button");
         deleteBtn.type = "button"; deleteBtn.className = "delete-item-btn"; deleteBtn.textContent = "×";
-        const actionCallback = async () => {
-            deleteBtn.disabled = true;
-            await apiRequest("/api/passed/remove", { number: number });
-        };
+        const actionCallback = async () => { deleteBtn.disabled = true; await apiRequest("/api/passed/remove", { number: number }); };
         setupConfirmationButton(deleteBtn, "×", "⚠️", actionCallback);
         li.appendChild(deleteBtn);
         fragment.appendChild(li);
@@ -307,10 +320,7 @@ function renderFeaturedListUI(contents) {
         li.appendChild(span);
         const deleteBtn = document.createElement("button");
         deleteBtn.type = "button"; deleteBtn.className = "delete-item-btn"; deleteBtn.textContent = "×";
-        const actionCallback = async () => {
-            deleteBtn.disabled = true;
-            await apiRequest("/api/featured/remove", { linkText: item.linkText, linkUrl: item.linkUrl });
-        };
+        const actionCallback = async () => { deleteBtn.disabled = true; await apiRequest("/api/featured/remove", { linkText: item.linkText, linkUrl: item.linkUrl }); };
         setupConfirmationButton(deleteBtn, "×", "⚠️", actionCallback);
         li.appendChild(deleteBtn);
         fragment.appendChild(li);
@@ -321,10 +331,7 @@ function renderFeaturedListUI(contents) {
 function renderOnlineAdmins(admins) {
     if (!onlineUsersList) return;
     onlineUsersList.innerHTML = "";
-    if (!admins || admins.length === 0) {
-        onlineUsersList.innerHTML = "<li>(目前無人在線)</li>";
-        return;
-    }
+    if (!admins || admins.length === 0) { onlineUsersList.innerHTML = "<li>(目前無人在線)</li>"; return; }
     admins.sort((a, b) => {
         if (a.username === uniqueUsername) return -1;
         if (b.username === uniqueUsername) return 1;
@@ -344,38 +351,13 @@ function renderOnlineAdmins(admins) {
 }
 
 // --- 10. 控制台按鈕 ---
-const actionResetNumber = async () => {
-    if (await apiRequest("/set-number", { number: 0 })) {
-        document.getElementById("manualNumber").value = "";
-        showToast("✅ 號碼已重置為 0", "success");
-    }
-};
-const actionResetPassed = async () => {
-    if (await apiRequest("/api/passed/clear", {})) showToast("✅ 過號列表已清空", "success");
-};
-const actionResetFeatured = async () => {
-    if (await apiRequest("/api/featured/clear", {})) showToast("✅ 精選連結已清空", "success");
-};
-const actionResetAll = async () => {
-    if (await apiRequest("/reset", {})) {
-        document.getElementById("manualNumber").value = "";
-        showToast("💥 所有資料已重置", "success");
-        await loadStats();
-    }
-};
+const actionResetNumber = async () => { if (await apiRequest("/set-number", { number: 0 })) { document.getElementById("manualNumber").value = ""; showToast("✅ 號碼已重置為 0", "success"); } };
+const actionResetPassed = async () => { if (await apiRequest("/api/passed/clear", {})) showToast("✅ 過號列表已清空", "success"); };
+const actionResetFeatured = async () => { if (await apiRequest("/api/featured/clear", {})) showToast("✅ 精選連結已清空", "success"); };
+const actionResetAll = async () => { if (await apiRequest("/reset", {})) { document.getElementById("manualNumber").value = ""; showToast("💥 所有資料已重置", "success"); await loadStats(); } };
 async function changeNumber(direction) { await apiRequest("/change-number", { direction }); }
-async function setNumber() {
-    const num = document.getElementById("manualNumber").value;
-    if (num === "") return;
-    if (await apiRequest("/set-number", { number: num })) {
-        document.getElementById("manualNumber").value = "";
-        showToast("✅ 號碼已設定", "success");
-    }
-}
-const actionClearAdminLog = async () => {
-    showToast("🧼 正在清除日誌...", "info");
-    await apiRequest("/api/logs/clear", {});
-}
+async function setNumber() { const num = document.getElementById("manualNumber").value; if (num === "") return; if (await apiRequest("/set-number", { number: num })) { document.getElementById("manualNumber").value = ""; showToast("✅ 號碼已設定", "success"); } }
+const actionClearAdminLog = async () => { showToast("🧼 正在清除日誌...", "info"); await apiRequest("/api/logs/clear", {}); }
 
 // --- 11. 綁定事件 ---
 document.getElementById("next").onclick = () => changeNumber("next");
@@ -401,9 +383,7 @@ addFeaturedBtn.onclick = async () => {
     if (!text || !url) return alert("「連結文字」和「網址」必填。");
     if (!url.startsWith('http://') && !url.startsWith('https://')) return alert("網址需以 http(s):// 開頭。");
     addFeaturedBtn.disabled = true;
-    if (await apiRequest("/api/featured/add", { linkText: text, linkUrl: url })) {
-        newLinkTextInput.value = ""; newLinkUrlInput.value = "";
-    }
+    if (await apiRequest("/api/featured/add", { linkText: text, linkUrl: url })) { newLinkTextInput.value = ""; newLinkUrlInput.value = ""; }
     addFeaturedBtn.disabled = false;
 };
 
@@ -413,10 +393,7 @@ if (broadcastBtn) {
         if (!msg) return alert("請輸入廣播內容");
         broadcastBtn.disabled = true;
         broadcastBtn.textContent = "發送中...";
-        if (await apiRequest("/api/admin/broadcast", { message: msg })) {
-            showToast("📢 廣播已發送", "success");
-            broadcastInput.value = "";
-        }
+        if (await apiRequest("/api/admin/broadcast", { message: msg })) { showToast("📢 廣播已發送", "success"); broadcastInput.value = ""; }
         broadcastBtn.disabled = false;
         broadcastBtn.textContent = "發送";
     };
@@ -433,63 +410,27 @@ const originalToggleText = "對外開放前台";
 publicToggle.addEventListener("change", () => {
     const isPublic = publicToggle.checked;
     if (isPublic) {
-        if (publicToggleConfirmTimer) {
-            clearInterval(publicToggleConfirmTimer.interval);
-            clearTimeout(publicToggleConfirmTimer.timer);
-            publicToggleConfirmTimer = null;
-            publicToggleLabel.textContent = originalToggleText;
-            publicToggleLabel.classList.remove("is-confirming-label");
-        }
+        if (publicToggleConfirmTimer) { clearInterval(publicToggleConfirmTimer.interval); clearTimeout(publicToggleConfirmTimer.timer); publicToggleConfirmTimer = null; publicToggleLabel.textContent = originalToggleText; publicToggleLabel.classList.remove("is-confirming-label"); }
         apiRequest("/set-public-status", { isPublic: true });
     } else {
-        if (publicToggleConfirmTimer) {
-            clearInterval(publicToggleConfirmTimer.interval);
-            clearTimeout(publicToggleConfirmTimer.timer);
-            publicToggleConfirmTimer = null;
-            publicToggleLabel.textContent = originalToggleText;
-            publicToggleLabel.classList.remove("is-confirming-label");
-            apiRequest("/set-public-status", { isPublic: false });
-        } else {
-            publicToggle.checked = true; 
-            let countdown = 5;
+        if (publicToggleConfirmTimer) { clearInterval(publicToggleConfirmTimer.interval); clearTimeout(publicToggleConfirmTimer.timer); publicToggleConfirmTimer = null; publicToggleLabel.textContent = originalToggleText; publicToggleLabel.classList.remove("is-confirming-label"); apiRequest("/set-public-status", { isPublic: false }); } else {
+            publicToggle.checked = true; let countdown = 5;
             publicToggleLabel.textContent = `⚠️ 點此確認關閉 (${countdown}s)`;
             publicToggleLabel.classList.add("is-confirming-label");
-            const interval = setInterval(() => {
-                countdown--;
-                if (countdown > 0) publicToggleLabel.textContent = `⚠️ 點此確認關閉 (${countdown}s)`;
-                else clearInterval(interval);
-            }, 1000);
-            const timer = setTimeout(() => {
-                clearInterval(interval);
-                publicToggleLabel.textContent = originalToggleText;
-                publicToggleLabel.classList.remove("is-confirming-label");
-                publicToggleConfirmTimer = null;
-            }, 5000);
+            const interval = setInterval(() => { countdown--; if (countdown > 0) publicToggleLabel.textContent = `⚠️ 點此確認關閉 (${countdown}s)`; else clearInterval(interval); }, 1000);
+            const timer = setTimeout(() => { clearInterval(interval); publicToggleLabel.textContent = originalToggleText; publicToggleLabel.classList.remove("is-confirming-label"); publicToggleConfirmTimer = null; }, 5000);
             publicToggleConfirmTimer = { timer, interval };
         }
     }
 });
 
-// --- 12. 超級管理員功能 ---
-const userListUI = document.getElementById("user-list-ui");
-const newUserUsernameInput = document.getElementById("new-user-username");
-const newUserPasswordInput = document.getElementById("new-user-password");
-const addUserBtn = document.getElementById("add-user-btn");
-const newUserNicknameInput = document.getElementById("new-user-nickname"); 
-const setNickUsernameInput = document.getElementById("set-nick-username");
-const setNickNicknameInput = document.getElementById("set-nick-nickname");
-const setNicknameBtn = document.getElementById("set-nickname-btn");
-
+// --- 超級管理員功能 ---
 async function loadAdminUsers() {
     if (userRole !== 'super' || !userListUI) return;
     const data = await apiRequest("/api/admin/users", {}, true); 
     if (data && data.users) {
         userListUI.innerHTML = "";
-        data.users.sort((a, b) => {
-            if (a.role === 'super' && b.role !== 'super') return -1;
-            if (a.role !== 'super' && b.role === 'super') return 1;
-            return a.username.localeCompare(b.username);
-        });
+        data.users.sort((a, b) => { if (a.role === 'super' && b.role !== 'super') return -1; if (a.role !== 'super' && b.role === 'super') return 1; return a.username.localeCompare(b.username); });
         data.users.forEach(user => {
             const li = document.createElement("li");
             const icon = user.role === 'super' ? '👑' : '👤';
@@ -497,13 +438,7 @@ async function loadAdminUsers() {
             if (user.role !== 'super') {
                 const deleteBtn = document.createElement("button");
                 deleteBtn.type = "button"; deleteBtn.className = "delete-item-btn"; deleteBtn.textContent = "×";
-                const actionCallback = async () => {
-                    deleteBtn.disabled = true;
-                    if (await apiRequest("/api/admin/del-user", { delUsername: user.username })) {
-                        showToast(`✅ 已刪除: ${user.username}`, "success");
-                        await loadAdminUsers(); 
-                    } else { deleteBtn.disabled = false; }
-                };
+                const actionCallback = async () => { deleteBtn.disabled = true; if (await apiRequest("/api/admin/del-user", { delUsername: user.username })) { showToast(`✅ 已刪除: ${user.username}`, "success"); await loadAdminUsers(); } else { deleteBtn.disabled = false; } };
                 setupConfirmationButton(deleteBtn, "×", "⚠️", actionCallback);
                 li.appendChild(deleteBtn);
             }
@@ -511,55 +446,35 @@ async function loadAdminUsers() {
         });
     }
 }
-
 if (addUserBtn) {
     addUserBtn.onclick = async () => {
-        const newUsername = newUserUsernameInput.value;
-        const newPassword = newUserPasswordInput.value;
-        const newNickname = newUserNicknameInput.value.trim(); 
+        const newUsername = newUserUsernameInput.value; const newPassword = newUserPasswordInput.value; const newNickname = newUserNicknameInput.value.trim(); 
         if (!newUsername || !newPassword) return alert("帳號和密碼必填。");
         addUserBtn.disabled = true;
-        if (await apiRequest("/api/admin/add-user", { newUsername, newPassword, newNickname })) {
-            showToast(`✅ 已新增: ${newUsername}`, "success");
-            newUserUsernameInput.value = ""; newUserPasswordInput.value = ""; newUserNicknameInput.value = ""; 
-            await loadAdminUsers(); 
-        }
+        if (await apiRequest("/api/admin/add-user", { newUsername, newPassword, newNickname })) { showToast(`✅ 已新增: ${newUsername}`, "success"); newUserUsernameInput.value = ""; newUserPasswordInput.value = ""; newUserNicknameInput.value = ""; await loadAdminUsers(); }
         addUserBtn.disabled = false;
     };
 }
 if (setNicknameBtn) {
     setNicknameBtn.onclick = async () => {
-        const targetUsername = setNickUsernameInput.value.trim();
-        const nickname = setNickNicknameInput.value.trim();
+        const targetUsername = setNickUsernameInput.value.trim(); const nickname = setNickNicknameInput.value.trim();
         if (!targetUsername || !nickname) return alert("必填欄位不可為空。");
         setNicknameBtn.disabled = true;
-        if (await apiRequest("/api/admin/set-nickname", { targetUsername, nickname })) {
-            showToast(`✅ 已更新 ${targetUsername} 的綽號`, "success");
-            setNickUsernameInput.value = ""; setNickNicknameInput.value = "";
-            await loadAdminUsers(); 
-        }
+        if (await apiRequest("/api/admin/set-nickname", { targetUsername, nickname })) { showToast(`✅ 已更新 ${targetUsername} 的綽號`, "success"); setNickUsernameInput.value = ""; setNickNicknameInput.value = ""; await loadAdminUsers(); }
         setNicknameBtn.disabled = false;
     };
 }
 
-// --- 13. 數據分析 & CSV 下載 ---
+// --- 數據分析 ---
 async function loadStats() {
     if (!statsListUI) return;
-    if (statsListUI.children.length === 0 || statsListUI.textContent.includes("點擊按鈕")) {
-        statsListUI.innerHTML = "<li>載入中...</li>";
-    }
-    
+    if (statsListUI.children.length === 0 || statsListUI.textContent.includes("點擊按鈕")) statsListUI.innerHTML = "<li>載入中...</li>";
     const data = await apiRequest("/api/admin/stats", {}, true);
-    
     if (data && data.success) {
         statsTodayCount.textContent = data.todayCount;
         renderHourlyChart(data.hourlyCounts, data.serverHour);
-
         statsListUI.innerHTML = "";
-        if (!data.history || data.history.length === 0) {
-            statsListUI.innerHTML = "<li>尚無數據</li>";
-            return;
-        }
+        if (!data.history || data.history.length === 0) { statsListUI.innerHTML = "<li>尚無數據</li>"; return; }
         const fragment = document.createDocumentFragment();
         data.history.forEach(item => {
             const li = document.createElement("li");
@@ -569,174 +484,39 @@ async function loadStats() {
             fragment.appendChild(li);
         });
         statsListUI.appendChild(fragment);
-    } else {
-        statsListUI.innerHTML = "<li>載入失敗</li>";
-    }
+    } else { statsListUI.innerHTML = "<li>載入失敗</li>"; }
 }
-
 function renderHourlyChart(counts, serverHour) {
     if (!hourlyChartEl || !Array.isArray(counts)) return;
     hourlyChartEl.innerHTML = "";
-
     const maxVal = Math.max(...counts, 1);
     const currentHour = (typeof serverHour === 'number') ? serverHour : new Date().getHours();
-
     const fragment = document.createDocumentFragment();
     for (let i = 0; i < 24; i++) {
-        const val = counts[i];
-        const percent = (val / maxVal) * 100;
-        
-        const col = document.createElement("div");
-        col.className = "chart-col";
+        const val = counts[i]; const percent = (val / maxVal) * 100;
+        const col = document.createElement("div"); col.className = "chart-col";
         if (i === currentHour) col.classList.add("current");
-
         col.onclick = () => openEditModal(i, val);
-
-        const valDiv = document.createElement("div");
-        valDiv.className = "chart-val";
-        valDiv.textContent = val > 0 ? val : "";
-
-        const barDiv = document.createElement("div");
-        barDiv.className = "chart-bar";
-        barDiv.style.height = `${Math.max(percent, 2)}%`; 
-        if (val === 0) barDiv.style.backgroundColor = "#e5e7eb"; 
-
-        const labelDiv = document.createElement("div");
-        labelDiv.className = "chart-label";
-        labelDiv.textContent = i.toString().padStart(2, '0');
-
-        col.appendChild(valDiv);
-        col.appendChild(barDiv);
-        col.appendChild(labelDiv);
-        fragment.appendChild(col);
+        const valDiv = document.createElement("div"); valDiv.className = "chart-val"; valDiv.textContent = val > 0 ? val : "";
+        const barDiv = document.createElement("div"); barDiv.className = "chart-bar"; barDiv.style.height = `${Math.max(percent, 2)}%`; if (val === 0) barDiv.style.backgroundColor = "#e5e7eb"; 
+        const labelDiv = document.createElement("div"); labelDiv.className = "chart-label"; labelDiv.textContent = i.toString().padStart(2, '0');
+        col.appendChild(valDiv); col.appendChild(barDiv); col.appendChild(labelDiv); fragment.appendChild(col);
     }
     hourlyChartEl.appendChild(fragment);
-    
-    setTimeout(() => {
-        const currentEl = hourlyChartEl.querySelector(".chart-col.current");
-        if (currentEl) {
-            const scrollLeft = currentEl.offsetLeft - (hourlyChartEl.clientWidth / 2) + (currentEl.clientWidth / 2);
-            hourlyChartEl.scrollTo({ left: scrollLeft, behavior: 'smooth' });
-        }
-    }, 100);
+    setTimeout(() => { const currentEl = hourlyChartEl.querySelector(".chart-col.current"); if (currentEl) { const scrollLeft = currentEl.offsetLeft - (hourlyChartEl.clientWidth / 2) + (currentEl.clientWidth / 2); hourlyChartEl.scrollTo({ left: scrollLeft, behavior: 'smooth' }); } }, 100);
 }
+function openEditModal(hour, count) { editingHour = hour; modalTitle.textContent = `編輯 ${hour}:00 - ${hour}:59 數據`; modalCurrentCount.textContent = count; modalOverlay.style.display = "flex"; }
+function closeEditModal() { modalOverlay.style.display = "none"; editingHour = null; }
+async function adjustStat(delta) { if (editingHour === null) return; let current = parseInt(modalCurrentCount.textContent); let next = current + delta; if (next < 0) next = 0; modalCurrentCount.textContent = next; await apiRequest("/api/admin/stats/adjust", { hour: editingHour, delta: delta }); await loadStats(); }
+const actionClearStats = async () => { if (await apiRequest("/api/admin/stats/clear", {})) { showToast("🗑️ 統計數據已清空", "success"); await loadStats(); } }
+async function downloadCSV() { try { const res = await fetch("/api/admin/export-csv", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }) }); if (!res.ok) throw new Error("下載失敗 (權限不足?)"); const data = await res.json(); if(data.success && data.csvData) { const blob = new Blob([data.csvData], { type: 'text/csv;charset=utf-8;' }); const url = window.URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = data.fileName || `report.csv`; document.body.appendChild(a); a.click(); a.remove(); showToast("✅ 報表下載成功", "success"); } } catch (err) { showToast("❌ 下載失敗: " + err.message, "error"); } }
+if (btnModalClose) btnModalClose.onclick = closeEditModal; if (btnStatsMinus) btnStatsMinus.onclick = () => adjustStat(-1); if (btnStatsPlus) btnStatsPlus.onclick = () => adjustStat(1);
+if (modalOverlay) { modalOverlay.onclick = (e) => { if (e.target === modalOverlay) closeEditModal(); } }
+if (btnRefreshStats) { btnRefreshStats.addEventListener("click", async () => { await loadStats(); showToast("數據已更新", "info"); }); }
+if (btnClearStats) { setupConfirmationButton(btnClearStats, "清空紀錄", "⚠️ 確認清空", actionClearStats); }
+if (btnExportCsv) { btnExportCsv.onclick = downloadCSV; }
 
-// --- Modal & Edit Logic ---
-
-function openEditModal(hour, count) {
-    editingHour = hour;
-    modalTitle.textContent = `編輯 ${hour}:00 - ${hour}:59 數據`;
-    modalCurrentCount.textContent = count;
-    modalOverlay.style.display = "flex";
-}
-
-function closeEditModal() {
-    modalOverlay.style.display = "none";
-    editingHour = null;
-}
-
-async function adjustStat(delta) {
-    if (editingHour === null) return;
-    
-    let current = parseInt(modalCurrentCount.textContent);
-    let next = current + delta;
-    if (next < 0) next = 0;
-    modalCurrentCount.textContent = next;
-
-    await apiRequest("/api/admin/stats/adjust", { hour: editingHour, delta: delta });
-    await loadStats(); 
-}
-
-const actionClearStats = async () => {
-    if (await apiRequest("/api/admin/stats/clear", {})) {
-        showToast("🗑️ 統計數據已清空", "success");
-        await loadStats();
-    }
-}
-
-async function downloadCSV() {
-    try {
-        const res = await fetch("/api/admin/export-csv", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ token }) 
-        });
-        
-        if (!res.ok) throw new Error("下載失敗 (權限不足?)");
-        
-        const data = await res.json();
-        if(data.success && data.csvData) {
-            const blob = new Blob([data.csvData], { type: 'text/csv;charset=utf-8;' });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = data.fileName || `report.csv`;
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            showToast("✅ 報表下載成功", "success");
-        }
-    } catch (err) {
-        showToast("❌ 下載失敗: " + err.message, "error");
-    }
-}
-
-if (btnModalClose) btnModalClose.onclick = closeEditModal;
-if (btnStatsMinus) btnStatsMinus.onclick = () => adjustStat(-1);
-if (btnStatsPlus) btnStatsPlus.onclick = () => adjustStat(1);
-
-if (modalOverlay) {
-    modalOverlay.onclick = (e) => {
-        if (e.target === modalOverlay) closeEditModal();
-    }
-}
-
-if (btnRefreshStats) {
-    btnRefreshStats.addEventListener("click", async () => {
-        await loadStats(); 
-        showToast("數據已更新", "info");
-    });
-}
-
-if (btnClearStats) {
-    setupConfirmationButton(btnClearStats, "清空紀錄", "⚠️ 確認清空", actionClearStats);
-}
-
-if (btnExportCsv) {
-    btnExportCsv.onclick = downloadCSV;
-}
-
-// --- LINE 訊息設定邏輯 ---
-async function loadLineSettings() {
-    if (!lineMsgApproachInput) return; 
-    const data = await apiRequest("/api/admin/line-settings/get", {}, true);
-    if (data && data.success) {
-        lineMsgApproachInput.value = data.approach;
-        lineMsgArrivalInput.value = data.arrival;
-    }
-}
-
-if (btnSaveLineMsg) {
-    btnSaveLineMsg.onclick = async () => {
-        const approach = lineMsgApproachInput.value.trim();
-        const arrival = lineMsgArrivalInput.value.trim();
-        if(!approach || !arrival) return alert("內容不可為空");
-
-        btnSaveLineMsg.disabled = true;
-        if (await apiRequest("/api/admin/line-settings/save", { approach, arrival })) {
-            showToast("✅ LINE 文案已更新", "success");
-        }
-        btnSaveLineMsg.disabled = false;
-    };
-}
-
-if (btnResetLineMsg) {
-    setupConfirmationButton(btnResetLineMsg, "恢復預設值", "⚠️ 確認恢復", async () => {
-        const data = await apiRequest("/api/admin/line-settings/reset", {}, true);
-        if (data && data.success) {
-            lineMsgApproachInput.value = data.approach;
-            lineMsgArrivalInput.value = data.arrival;
-            showToast("↺ 已恢復預設文案", "success");
-        }
-    });
-}
+// LINE 訊息設定
+async function loadLineSettings() { if (!lineMsgApproachInput) return; const data = await apiRequest("/api/admin/line-settings/get", {}, true); if (data && data.success) { lineMsgApproachInput.value = data.approach; lineMsgArrivalInput.value = data.arrival; } }
+if (btnSaveLineMsg) { btnSaveLineMsg.onclick = async () => { const approach = lineMsgApproachInput.value.trim(); const arrival = lineMsgArrivalInput.value.trim(); if(!approach || !arrival) return alert("內容不可為空"); btnSaveLineMsg.disabled = true; if (await apiRequest("/api/admin/line-settings/save", { approach, arrival })) { showToast("✅ LINE 文案已更新", "success"); } btnSaveLineMsg.disabled = false; }; }
+if (btnResetLineMsg) { setupConfirmationButton(btnResetLineMsg, "恢復預設值", "⚠️ 確認恢復", async () => { const data = await apiRequest("/api/admin/line-settings/reset", {}, true); if (data && data.success) { lineMsgApproachInput.value = data.approach; lineMsgArrivalInput.value = data.arrival; showToast("↺ 已恢復預設文案", "success"); } }); }
