@@ -1,317 +1,139 @@
-// --- 1. Socket.io 初始化 ---
 const socket = io();
-
-// --- 2. 元素節點 (DOM) ---
 const numberEl = document.getElementById("number");
+const prefixEl = document.getElementById("prefix-display");
 const passedListEl = document.getElementById("passedList");
-const featuredContainerEl = document.getElementById("featured-container");
-const statusBar = document.getElementById("status-bar");
-const notifySound = document.getElementById("notify-sound");
-const lastUpdatedEl = document.getElementById("last-updated");
-const soundPrompt = document.getElementById("sound-prompt");
-const copyLinkPrompt = document.getElementById("copy-link-prompt"); 
-const passedContainerEl = document.getElementById("passed-container");
+const queueTabsEl = document.getElementById("queue-tabs");
+const queueTitleEl = document.getElementById("queue-title-display");
+const soundBtn = document.getElementById("sound-prompt");
 
-// 通知與預測相關 UI
-const notifyBtn = document.getElementById("enable-notify-btn");
-const myNumInput = document.getElementById("my-number");
-const notifyStatus = document.getElementById("notify-status");
-const waitTimeEl = document.getElementById("estimated-wait");
-const waitMinutesEl = document.getElementById("wait-minutes");
+let currentQueues = [];
+let activeQueueId = null;
+let passedData = {}; // { queueId: [1, 2] }
+let isSoundEnabled = false;
 
-// --- 3. 狀態變數 ---
-let isSoundEnabled = false; 
-let isLocallyMuted = false; 
-let lastUpdateTime = null;
-let isPublic = true;
-let audioPermissionGranted = false;
-let ttsEnabled = false; 
-let myTargetNumber = null;
-let wakeLock = null; 
-let avgServiceTime = 0; // 【新】 平均服務時間
-
-// --- 4. Wake Lock API (保持螢幕常亮) ---
-async function requestWakeLock() {
-    if ('wakeLock' in navigator) {
-        try {
-            wakeLock = await navigator.wakeLock.request('screen');
-            console.log('💡 Screen Wake Lock active');
-            wakeLock.addEventListener('release', () => {
-                console.log('💡 Screen Wake Lock released');
-            });
-        } catch (err) {
-            console.error(`${err.name}, ${err.message}`);
-        }
-    }
-}
-document.addEventListener('visibilitychange', async () => {
-    if (wakeLock !== null && document.visibilityState === 'visible') {
-        await requestWakeLock();
-    }
-});
-
-// --- 5. Socket Events ---
+// --- Socket Events ---
 socket.on("connect", () => {
-    console.log("Socket.io 已連接");
-    if (isPublic) statusBar.classList.remove("visible");
-    requestWakeLock(); 
+    document.getElementById("connection-status").textContent = "✅ 已連線";
+    document.body.classList.remove("maintenance");
 });
 
 socket.on("disconnect", () => {
-    statusBar.classList.add("visible");
-    lastUpdatedEl.textContent = "連線中斷...";
+    document.getElementById("connection-status").textContent = "❌ 連線中斷";
 });
 
-socket.on("update", (num) => {
-    handleNewNumber(num);
-});
-
-socket.on("adminBroadcast", (msg) => {
-    if (!isLocallyMuted) {
-        speakText(msg, 1.0); 
-        alert(`📢 店家公告：${msg}`);
+socket.on("updateState", (data) => {
+    // data: { queues: [], isMulti: bool, sound: bool, isPublic: bool }
+    if (!data.isPublic) {
+        document.body.classList.add("maintenance");
+        return;
+    }
+    document.body.classList.remove("maintenance");
+    
+    currentQueues = data.queues;
+    renderTabs(data.isMulti);
+    
+    // 如果目前選的 Queue 被刪除了，重置為第一個
+    if (activeQueueId && !currentQueues.find(q => q.id === activeQueueId)) {
+        activeQueueId = null;
+    }
+    if (!activeQueueId && currentQueues.length > 0) {
+        setActiveQueue(currentQueues[0].id);
+    } else {
+        updateDisplay(); // 更新當前數字
     }
 });
 
-// 【功能 2：智慧化預測】 接收等待時間並更新 UI
-socket.on("updateWaitTime", (time) => {
-    avgServiceTime = time;
-    updateWaitTimeUI();
+socket.on("updatePassed", (data) => {
+    passedData[data.queueId] = data.numbers;
+    if (activeQueueId === data.queueId) {
+        renderPassed(data.numbers);
+    }
 });
 
-socket.on("updateSoundSetting", (isEnabled) => { isSoundEnabled = isEnabled; });
-socket.on("updatePublicStatus", (status) => {
-    isPublic = status;
-    document.body.classList.toggle("is-closed", !isPublic);
-    if (isPublic) { socket.connect(); } 
-    else { socket.disconnect(); statusBar.classList.remove("visible"); }
-});
-socket.on("updatePassed", (numbers) => renderPassed(numbers));
-socket.on("updateFeaturedContents", (contents) => renderFeatured(contents));
-socket.on("updateTimestamp", (ts) => { lastUpdateTime = new Date(ts); updateTimeText(); });
-
-// --- 6. 核心邏輯 ---
-
-function handleNewNumber(num) {
-    playNotificationSound();
+// --- Logic ---
+function renderTabs(isMulti) {
+    queueTabsEl.innerHTML = "";
+    if (!isMulti) {
+        queueTabsEl.classList.add("hidden");
+        return;
+    }
+    queueTabsEl.classList.remove("hidden");
     
-    setTimeout(() => {
-        if (numberEl.textContent !== String(num) && isSoundEnabled && !isLocallyMuted) {
-            speakText(`現在號碼，${num}號`, 0.9);
-        }
-    }, 800);
+    currentQueues.forEach(q => {
+        const btn = document.createElement("div");
+        btn.className = `queue-tab ${q.id === activeQueueId ? 'active' : ''}`;
+        btn.textContent = q.name;
+        btn.onclick = () => setActiveQueue(q.id);
+        queueTabsEl.appendChild(btn);
+    });
+}
 
-    checkMyNumber(num);
+function setActiveQueue(id) {
+    activeQueueId = id;
+    const queue = currentQueues.find(q => q.id === id);
+    if (!queue) return;
+
+    // Update UI
+    queueTitleEl.textContent = queue.name;
+    prefixEl.textContent = queue.prefix;
     
-    // 【新】 每次號碼變更都重算等待時間
-    updateWaitTimeUI();
+    // Update Tabs Style
+    Array.from(queueTabsEl.children).forEach(child => {
+        child.classList.toggle('active', child.textContent === queue.name);
+    });
 
-    if (numberEl.textContent !== String(num)) {
-        numberEl.textContent = num;
-        document.title = `${num}號 - 候位中`;
+    updateDisplay();
+}
+
+function updateDisplay() {
+    const queue = currentQueues.find(q => q.id === activeQueueId);
+    if (!queue) return;
+
+    const newNum = queue.current_num;
+    if (numberEl.textContent !== String(newNum)) {
+        numberEl.textContent = newNum;
         numberEl.classList.add("updated");
         setTimeout(() => numberEl.classList.remove("updated"), 500);
-    }
-}
-
-function speakText(text, rate) {
-    if (!ttsEnabled || !('speechSynthesis' in window)) return;
-    window.speechSynthesis.cancel(); 
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'zh-TW';
-    utterance.rate = rate || 0.9;
-    window.speechSynthesis.speak(utterance);
-}
-
-function playNotificationSound() {
-    if (!notifySound) return;
-    notifySound.play().then(() => {
-        audioPermissionGranted = true;
-        ttsEnabled = true; 
-        updateMuteUI(false);
         
-        if (!isSoundEnabled || isLocallyMuted) {
-            notifySound.pause(); notifySound.currentTime = 0;
-        }
-    }).catch(() => {
-        console.warn("Autoplay blocked");
-        audioPermissionGranted = false;
-        updateMuteUI(true, true); 
-    });
-}
-
-function checkMyNumber(current) {
-    if (!myTargetNumber) return;
-    const diff = myTargetNumber - current;
+        if (isSoundEnabled) playSound(newNum);
+    }
     
-    if (diff <= 3 && diff > 0) {
-        const msg = `剩 ${diff} 組！`;
-        if (document.hidden && "Notification" in window && Notification.permission === "granted") {
-            new Notification("叫號提醒", { body: `${msg} 目前 ${current} 號`, icon: "/icons/icon-192.png" });
-        }
-    }
-
-    // 【功能 3：體驗升級】 到號特效與通知
-    if (diff === 0) {
-         if (document.hidden && "Notification" in window && Notification.permission === "granted") {
-            new Notification("到號通知", { body: `輪到您了！目前 ${current} 號`, icon: "/icons/icon-192.png" });
-        }
-        
-        // 觸發彩帶
-        triggerConfetti();
-        
-        // 額外語音
-        if(isSoundEnabled && !isLocallyMuted) {
-             speakText("恭喜！輪到您了，請前往櫃台", 1.0);
-        }
-        // 到號後清除目標與預估時間
-        myTargetNumber = null;
-        myNumInput.value = "";
-        updateWaitTimeUI();
-        notifyStatus.textContent = "🎉 已到號！";
-        notifyStatus.style.color = "#2563eb";
-    }
+    renderPassed(passedData[activeQueueId] || []);
 }
 
-// 【功能 3】 Confetti 特效函式
-function triggerConfetti() {
-    if (typeof confetti === 'undefined') return;
-    const duration = 3000;
-    const end = Date.now() + duration;
-
-    (function frame() {
-        confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0 } });
-        confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1 } });
-
-        if (Date.now() < end) {
-            requestAnimationFrame(frame);
-        }
-    })();
-}
-
-// 【功能 2】 更新等待時間 UI
-function updateWaitTimeUI() {
-    const currentNum = parseInt(numberEl.textContent) || 0;
-    const myNum = parseInt(myNumInput.value);
-
-    if (!myNum || myNum <= currentNum || avgServiceTime <= 0) {
-        waitTimeEl.style.display = "none";
-        return;
-    }
-
-    const diff = myNum - currentNum;
-    const estMin = Math.ceil(diff * avgServiceTime);
-    
-    waitMinutesEl.textContent = estMin;
-    waitTimeEl.style.display = "block";
-}
-
-// --- 7. UI 渲染 ---
 function renderPassed(numbers) {
     passedListEl.innerHTML = "";
-    const isEmpty = !numbers || numbers.length === 0;
-    passedContainerEl.classList.toggle("is-empty", isEmpty);
-    if (!isEmpty) {
-        const frag = document.createDocumentFragment();
-        numbers.forEach(n => {
-            const li = document.createElement("li"); li.textContent = n; frag.appendChild(li);
-        });
-        passedListEl.appendChild(frag);
-    }
-}
-
-function renderFeatured(contents) {
-    featuredContainerEl.innerHTML = "";
-    if (!contents || contents.length === 0) {
-        featuredContainerEl.innerHTML = '<p class="empty-state-message">暫無精選連結</p>';
-        featuredContainerEl.classList.add("is-empty");
-        return;
-    }
-    featuredContainerEl.classList.remove("is-empty");
-    const frag = document.createDocumentFragment();
-    contents.forEach(c => {
-        const a = document.createElement("a");
-        a.className = "featured-link";
-        a.href = c.linkUrl; a.target = "_blank"; a.textContent = c.linkText;
-        frag.appendChild(a);
-    });
-    featuredContainerEl.appendChild(frag);
-}
-
-function updateTimeText() {
-    if (!lastUpdateTime) return;
-    const diff = Math.floor((new Date() - lastUpdateTime) / 1000);
-    lastUpdatedEl.textContent = diff < 60 ? `剛剛更新` : `最後更新於 ${Math.floor(diff/60)} 分鐘前`;
-}
-setInterval(updateTimeText, 10000);
-
-// --- 8. 使用者互動綁定 ---
-
-function updateMuteUI(isMuted, needsPermission = false) {
-    isLocallyMuted = isMuted;
-    if (!soundPrompt) return;
-    
-    soundPrompt.style.display = 'block';
-    if (needsPermission || isMuted) {
-        soundPrompt.innerHTML = '<span class="emoji">🔇</span> 點此啟用音效';
-        soundPrompt.classList.remove("is-active");
+    if (!numbers || numbers.length === 0) {
+        document.getElementById("passed-empty-msg").style.display = "block";
     } else {
-        soundPrompt.innerHTML = '<span class="emoji">🔊</span> 音效已開啟';
-        soundPrompt.classList.add("is-active");
+        document.getElementById("passed-empty-msg").style.display = "none";
+        numbers.forEach(n => {
+            const li = document.createElement("li");
+            li.textContent = n;
+            passedListEl.appendChild(li);
+        });
+    }
+}
+
+function playSound(num) {
+    if ('speechSynthesis' in window) {
+        const u = new SpeechSynthesisUtterance(`${num}號，請到櫃台`);
+        u.lang = 'zh-TW';
+        window.speechSynthesis.speak(u);
     }
 }
 
-if (soundPrompt) {
-    soundPrompt.addEventListener("click", () => {
-        if (!audioPermissionGranted) {
-            playNotificationSound(); 
-        } else {
-            updateMuteUI(!isLocallyMuted);
-        }
-    });
-}
-
-if (notifyBtn) {
-    notifyBtn.addEventListener("click", () => {
-        if (!("Notification" in window)) return alert("此瀏覽器不支援通知");
-        Notification.requestPermission().then(p => {
-            if (p === "granted") {
-                const val = myNumInput.value;
-                if (val) {
-                    myTargetNumber = parseInt(val);
-                    notifyStatus.textContent = `✅ 將於接近 ${myTargetNumber} 號時通知`;
-                    notifyStatus.style.color = "#10b981";
-                    new Notification("通知已設定", { body: "當號碼接近時我們會通知您" });
-                    updateWaitTimeUI(); // 設定後立即計算一次
-                } else alert("請輸入號碼");
-            } else alert("請允許通知權限");
-        });
-    });
-}
-
-// 綁定輸入框變更事件，即時更新預估時間
-myNumInput.addEventListener("input", updateWaitTimeUI);
-
-if (copyLinkPrompt) {
-    copyLinkPrompt.addEventListener("click", () => {
-        if (!navigator.clipboard) return alert("無法複製 (需 HTTPS)");
-        navigator.clipboard.writeText(window.location.href).then(() => {
-            const original = copyLinkPrompt.innerHTML;
-            copyLinkPrompt.innerHTML = '✅ 已複製';
-            copyLinkPrompt.classList.add("is-copied");
-            setTimeout(() => {
-                copyLinkPrompt.innerHTML = original;
-                copyLinkPrompt.classList.remove("is-copied");
-            }, 2000);
-        });
-    });
-}
-
-try {
-    const qrEl = document.getElementById("qr-code-placeholder");
-    if (qrEl) {
-        new QRCode(qrEl, {
-            text: window.location.href, width: 120, height: 120
-        });
+// 啟用音效 (瀏覽器限制需互動)
+soundBtn.addEventListener("click", () => {
+    isSoundEnabled = !isSoundEnabled;
+    soundBtn.innerHTML = isSoundEnabled ? '<span class="emoji">🔊</span> 音效已開' : '<span class="emoji">🔇</span> 啟用音效';
+    if(isSoundEnabled) {
+        // 播放一個無聲片段解鎖 Audio Context
+        const u = new SpeechSynthesisUtterance("");
+        window.speechSynthesis.speak(u);
     }
-} catch (e) {}
+});
+
+// --- LIFF Init (若有設定) ---
+// 你需要在 index.js 的 settings 中回傳 LIFF ID，此處簡化處理
+// fetch('/api/init-data')... then liff.init(...)
