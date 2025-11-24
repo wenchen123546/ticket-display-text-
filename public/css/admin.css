@@ -8,9 +8,9 @@
     --bg-subtle: #f8fafc;
 
     /* 文字顏色 */
-    --text-main: #1e293b;     /* Slate-800 */
-    --text-sub: #64748b;      /* Slate-500 */
-    --text-light: #94a3b8;    /* Slate-400 */
+    --text-main: #1e293b;     
+    --text-sub: #64748b;      
+    --text-light: #94a3b8;    
 
     /* 品牌色與漸層 */
     --primary: #4f46e5;
@@ -192,9 +192,13 @@ button:disabled { opacity: 0.6; cursor: not-allowed; filter: grayscale(1); }
     border-radius: 20px; padding: 25px;
     box-shadow: var(--shadow-soft); border: 1px solid rgba(255,255,255,0.5);
     display: flex; flex-direction: column;
-    transition: transform 0.2s, box-shadow 0.2s;
+    transition: transform 0.2s, box-shadow 0.2s; position: relative; overflow: hidden;
 }
 .admin-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-hover); }
+
+/* --- 強調色條 (New Accent Cards) --- */
+.accent-blue { border-top: 6px solid #3b82f6; }
+.accent-green { border-top: 6px solid #10b981; }
 
 .admin-card h3 {
     margin: 0 0 25px 0; padding-bottom: 15px;
@@ -206,42 +210,13 @@ button:disabled { opacity: 0.6; cursor: not-allowed; filter: grayscale(1); }
 /* 特殊卡片佈局 (日誌卡片) */
 .flex-card { justify-content: space-between; }
 .card-bottom { border-top: 2px dashed #e2e8f0; margin-top: 20px; padding-top: 20px; }
+.control-divider { height: 1px; background: #f1f5f9; margin: 20px 0; }
 
 /* =========================================
-   5. 控制區塊 (Control Sections)
-   ========================================= */
-.control-section {
-    background: #f8fafc; border-radius: 16px;
-    padding: 20px; margin-bottom: 20px; position: relative;
-    border-left: 5px solid #cbd5e1; /* 預設邊條 */
-}
-.section-badge {
-    position: absolute; top: 15px; right: 15px;
-    font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
-    padding: 4px 8px; border-radius: 6px; letter-spacing: 0.5px;
-}
-
-/* 🔵 藍色區塊 */
-.section-blue { background: #eff6ff; border-left-color: #3b82f6; }
-.section-blue .section-badge { background: #dbeafe; color: #1e40af; }
-.section-blue .section-header .text { color: #1e40af; font-weight: 700; }
-/* 🟢 綠色區塊 */
-.section-green { background: #f0fdf4; border-left-color: #10b981; }
-.section-green .section-badge { background: #d1fae5; color: #065f46; }
-.section-green .section-header .text { color: #065f46; font-weight: 700; }
-/* ⚪ 灰色區塊 */
-.section-gray { background: #f8fafc; border-left-color: #94a3b8; }
-
-.section-header { margin-bottom: 15px; }
-.section-hint { font-size: 0.8rem; color: #64748b; margin-top: 8px; font-style: italic; }
-
-.control-section .control-group { margin-bottom: 0; }
-.control-section label { display: block; margin-bottom: 8px; font-weight: 600; font-size: 0.9rem; color: var(--text-main); }
-
-/* =========================================
-   6. 表單元件 (Forms)
+   5. 表單元件 (Forms)
    ========================================= */
 .control-group { margin-bottom: 20px; }
+.section-hint { font-size: 0.8rem; color: #64748b; margin-top: 8px; font-style: italic; }
 
 /* 帶框表單 */
 .form-group-boxed {
@@ -288,6 +263,13 @@ textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(99, 10
 
 /* Checkbox & Radio */
 .toggle-wrapper { display: flex; align-items: center; }
+.sound-toggle-group, .system-toggle-group {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 14px; border-radius: 12px; background: #f8fafc; border: 1px solid #e2e8f0;
+    margin-bottom: 15px; cursor: pointer;
+}
+.sound-toggle-group label, .system-toggle-group label { margin: 0; cursor: pointer; }
+
 input[type="checkbox"], input[type="radio"] {
     accent-color: var(--primary); width: 20px; height: 20px; cursor: pointer;
 }
@@ -295,7 +277,7 @@ input[type="checkbox"], input[type="radio"] {
 .radio-option { display: flex; align-items: center; gap: 8px; background: white; padding: 8px 12px; border-radius: 8px; border: 1px solid #e2e8f0; }
 
 /* =========================================
-   7. 列表與圖表 (Lists & Charts)
+   6. 列表與圖表 (Lists & Charts)
    ========================================= */
 ul { padding: 0; margin: 0; list-style: none; }
 
@@ -352,7 +334,7 @@ li > span, li > div { flex: 1; overflow: hidden; text-overflow: ellipsis; white-
 .sub-header { margin-top: 25px; display: block; font-weight: 700; color: var(--text-main); margin-bottom: 10px; }
 
 /* =========================================
-   8. 彈窗與浮動 (Modal & Toast)
+   7. 彈窗與浮動 (Modal & Toast)
    ========================================= */
 .modal-overlay {
     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -385,7 +367,7 @@ li > span, li > div { flex: 1; overflow: hidden; text-overflow: ellipsis; white-
 #toast-notification.error { background: var(--danger); }
 
 /* =========================================
-   9. RWD 手機版適配
+   8. RWD 手機版適配
    ========================================= */
 @media (max-width: 768px) {
     body { padding: 15px 10px; }
