@@ -1,6 +1,6 @@
 /*
  * ==========================================
- * 後台邏輯 (admin.js) - v18.15 Simplified Line Input
+ * 後台邏輯 (admin.js) - v18.15 Optimized
  * ==========================================
  */
 
@@ -59,7 +59,7 @@ const adminI18n = {
         "toast_featured_cleared": "✅ 精選連結已清空",
         "toast_all_reset": "💥 所有資料已重置",
         "toast_log_clearing": "🧼 正在清除日誌...",
-        "alert_positive_int": "請輸入正整數。",
+        "alert_positive_int": "請輸入有效的正整數。",
         "alert_link_required": "「連結文字」和「網址」必填。",
         "alert_url_invalid": "網址需以 http(s):// 開頭。",
         "alert_broadcast_empty": "請輸入廣播內容",
@@ -72,8 +72,8 @@ const adminI18n = {
         "toast_line_reset": "↺ 已恢復預設文案",
         "toast_pwd_saved": "✅ 解鎖密碼已設定",
         "alert_pwd_empty": "密碼不可為空",
-        "btn_confirm_clear": "⚠️ Confirm Clear",
-        "btn_confirm_reset": "⚠️ Confirm Reset",
+        "alert_account_required": "帳號和密碼必填。",
+        "alert_nick_required": "請輸入帳號與新暱稱",
         "list_loading": "載入中...",
         "list_no_data": "尚無數據",
         "list_load_fail": "載入失敗",
@@ -143,8 +143,8 @@ const adminI18n = {
         "toast_line_reset": "↺ Reset to default",
         "toast_pwd_saved": "✅ Password saved",
         "alert_pwd_empty": "Password empty",
-        "btn_confirm_clear": "⚠️ Confirm Clear",
-        "btn_confirm_reset": "⚠️ Confirm Reset",
+        "alert_account_required": "Username and password required.",
+        "alert_nick_required": "Enter username and new nickname",
         "list_loading": "Loading...",
         "list_no_data": "No Data",
         "list_load_fail": "Load Failed",
@@ -225,22 +225,18 @@ async function showPanel() {
     document.title = `後台管理 - ${username}`;
     if(sidebarUserInfo) sidebarUserInfo.textContent = `Hi, ${username}`;
 
-    if (userRole === 'super') {
-        const userManagementCard = document.getElementById("card-user-management");
-        if (userManagementCard) userManagementCard.style.display = "block";
-        const clearLogBtn = document.getElementById("clear-log-btn");
-        if (clearLogBtn) clearLogBtn.style.display = "block";
-        const btnExportCsv = document.getElementById("btn-export-csv");
-        if (btnExportCsv) btnExportCsv.style.display = "block";
-        const modeSwitcherGroup = document.getElementById("mode-switcher-group");
-        if (modeSwitcherGroup) modeSwitcherGroup.style.display = "block";
-        const unlockPwdGroup = document.getElementById("unlock-pwd-group");
-        if (unlockPwdGroup) unlockPwdGroup.style.display = "block";
-        await loadAdminUsers();
-    } else {
-        const unlockPwdGroup = document.getElementById("unlock-pwd-group");
-        if (unlockPwdGroup) unlockPwdGroup.style.display = "none";
-    }
+    // 權限檢查和 UI 顯示
+    const isSuper = userRole === 'super';
+    const elementsToToggle = [
+        "card-user-management", "clear-log-btn", "btn-export-csv", 
+        "mode-switcher-group", "unlock-pwd-group"
+    ];
+    elementsToToggle.forEach(id => {
+        const el = document.getElementById(id);
+        if(el) el.style.display = (isSuper || id === 'clear-log-btn') ? "block" : "none";
+    });
+
+    if (isSuper) await loadAdminUsers();
     
     initTabs();
     await loadStats();
@@ -293,7 +289,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
 loginButton.addEventListener("click", () => { attemptLogin(usernameInput.value, passwordInput.value); });
 
-// [修改] 登入輸入框應用防抖動，減少頻繁觸發
 usernameInput.addEventListener("keyup", debounce((event) => { 
     if (event.key === "Enter") { passwordInput.focus(); } 
 }, 300));
@@ -339,16 +334,13 @@ socket.on("updateSystemMode", (mode) => {
     for(let r of radios) { if(r.value === mode) r.checked = true; }
 });
 
-// [修改] renderLogs (XSS 防護 + 效能優化)
 function renderLogs(logs, isInit) {
     const ui = document.getElementById("admin-log-ui");
     
-    // 使用 replaceChildren 優化清空
     if(isInit) ui.replaceChildren();
 
     if(!logs || logs.length === 0) return;
     
-    // 檢查是否需要移除 "尚無數據" 提示
     if(ui.firstElementChild && ui.firstElementChild.textContent.includes("尚無")) {
         ui.replaceChildren();
     }
@@ -356,14 +348,13 @@ function renderLogs(logs, isInit) {
     const fragment = document.createDocumentFragment();
     logs.forEach(logMsg => {
         const li = document.createElement("li");
-        li.textContent = logMsg; // 安全賦值，自動轉義
+        li.textContent = logMsg; 
         fragment.appendChild(li);
     });
 
     if(isInit) {
         ui.appendChild(fragment);
     } else {
-        // 新日誌從上方插入或下方視需求，這裡維持原樣
         ui.appendChild(fragment); 
     }
     ui.scrollTop = ui.scrollHeight;
@@ -380,13 +371,22 @@ async function apiRequest(endpoint, body, a_returnResponse = false) {
         const responseData = await res.json();
         if (!res.ok) {
             if (res.status === 403) {
-                if(responseData.error === "權限不足") showToast(at["toast_permission_denied"], "error");
-                else { alert(at["toast_session_expired"]); showLogin(); }
-            } else { showToast(`❌ 錯誤: ${responseData.error}`, "error"); }
+                if(responseData.error === "權限不足" || responseData.error === "Permission Denied") { 
+                    showToast(at["toast_permission_denied"], "error"); 
+                } else { 
+                    showToast(at["toast_session_expired"], "error"); 
+                    showLogin(); 
+                }
+            } else { 
+                showToast(`❌ 錯誤: ${responseData.error || '未知錯誤'}`, "error"); 
+            }
             return false;
         }
         return a_returnResponse ? responseData : true;
-    } catch (err) { showToast(`❌ 連線失敗: ${err.message}`, "error"); return false; }
+    } catch (err) { 
+        showToast(`❌ 連線失敗: ${err.message}`, "error"); 
+        return false; 
+    }
 }
 
 // --- Render Functions ---
@@ -394,7 +394,10 @@ function setupConfirmationButton(buttonEl, originalTextKey, confirmTextKey, acti
     if (!buttonEl) return;
     let timer = null; let isConfirming = false; let countdown = 5;
     const getTxt = (key) => at[key] || key;
-    const showCountdown = confirmTextKey.includes("confirm"); 
+    // 使用硬編碼的確認文案
+    const confirmTxtBase = confirmTextKey === "btn_confirm_clear" ? (at["zh-TW"] ? "⚠️ 確認清除" : "⚠️ Confirm Clear") : 
+                           confirmTextKey === "btn_confirm_reset" ? (at["zh-TW"] ? "⚠️ 確認重置" : "⚠️ Confirm Reset") : 
+                           "⚠️";
 
     const resetBtn = () => {
         clearInterval(timer); isConfirming = false; countdown = 5;
@@ -404,33 +407,27 @@ function setupConfirmationButton(buttonEl, originalTextKey, confirmTextKey, acti
     buttonEl.addEventListener("click", () => {
         if (isConfirming) { actionCallback(); resetBtn(); } else {
             isConfirming = true; countdown = 5;
-            const confirmTxt = getTxt(confirmTextKey);
-            buttonEl.textContent = showCountdown ? `${confirmTxt} (${countdown}s)` : confirmTxt;
+            buttonEl.textContent = `${confirmTxtBase} (${countdown}s)`;
             buttonEl.classList.add("is-confirming");
-            if (showCountdown) {
-                timer = setInterval(() => {
-                    countdown--;
-                    if (countdown > 0) buttonEl.textContent = `${confirmTxt} (${countdown}s)`;
-                    else resetBtn();
-                }, 1000);
-            } else {
-                setTimeout(resetBtn, 5000);
-            }
+            
+            timer = setInterval(() => {
+                countdown--;
+                if (countdown > 0) buttonEl.textContent = `${confirmTxtBase} (${countdown}s)`;
+                else resetBtn();
+            }, 1000);
         }
     });
 }
 
-// [修改] renderPassedListUI (XSS 防護 + 效能優化)
 function renderPassedListUI(numbers) {
     const ui = document.getElementById("passed-list-ui");
-    ui.replaceChildren(); // 清空
+    ui.replaceChildren(); 
 
     if (!Array.isArray(numbers)) return;
     const fragment = document.createDocumentFragment();
     
     numbers.forEach((number) => {
         const li = document.createElement("li");
-        li.style.display = "flex"; li.style.justifyContent = "space-between"; li.style.alignItems = "center";
         
         const leftDiv = document.createElement("div"); 
         leftDiv.style.display = "flex"; leftDiv.style.gap = "10px"; leftDiv.style.alignItems = "center";
@@ -442,9 +439,9 @@ function renderPassedListUI(numbers) {
         const recallBtn = document.createElement("button");
         recallBtn.className = "btn-secondary"; 
         recallBtn.style.padding = "2px 8px"; recallBtn.style.fontSize = "0.8rem";
-        recallBtn.textContent = "↩️ 重呼";
+        recallBtn.textContent = at["zh-TW"] ? "↩️ 重呼" : "↩️ Recall";
         recallBtn.onclick = async () => { 
-            if(confirm(`確定要插隊重呼 ${number} 號嗎？`)) { 
+            if(confirm(`${at["zh-TW"] ? '確定要插隊重呼' : 'Confirm recall'} ${number} 號嗎？`)) { 
                 await apiRequest("/api/control/recall-passed", { number }); 
                 showToast(at["toast_recalled"], "success"); 
             } 
@@ -467,7 +464,6 @@ function renderPassedListUI(numbers) {
     ui.appendChild(fragment);
 }
 
-// [修改] renderFeaturedListUI (XSS 防護 + 效能優化)
 function renderFeaturedListUI(contents) {
     const ui = document.getElementById("featured-list-ui");
     ui.replaceChildren();
@@ -482,7 +478,6 @@ function renderFeaturedListUI(contents) {
         span.style.wordBreak = "break-all"; 
         span.style.whiteSpace = "normal";
         
-        // 安全構建 DOM，不使用 innerHTML
         const textNode = document.createTextNode(item.linkText);
         const br = document.createElement("br");
         const small = document.createElement("small");
@@ -510,7 +505,6 @@ function renderFeaturedListUI(contents) {
     ui.appendChild(fragment);
 }
 
-// [修改] renderOnlineAdmins (XSS 防護 + 效能優化)
 function renderOnlineAdmins(admins) {
     const ui = document.getElementById("online-users-list");
     if (!ui) return;
@@ -559,8 +553,8 @@ const btnMarkPassed = document.getElementById("btn-mark-passed");
 const btnIssuePrev = document.getElementById("btn-issue-prev");
 const btnIssueNext = document.getElementById("btn-issue-next");
 
-if(btnCallPrev) btnCallPrev.onclick = () => apiRequest("/change-number", { direction: "prev" });
-if(btnCallNext) btnCallNext.onclick = () => apiRequest("/change-number", { direction: "next" });
+if(btnCallPrev) btnCallPrev.onclick = () => apiRequest("/api/control/call", { direction: "prev" });
+if(btnCallNext) btnCallNext.onclick = () => apiRequest("/api/control/call", { direction: "next" });
 
 if(btnMarkPassed) btnMarkPassed.onclick = async () => {
     btnMarkPassed.disabled = true;
@@ -568,13 +562,14 @@ if(btnMarkPassed) btnMarkPassed.onclick = async () => {
     btnMarkPassed.disabled = false;
 };
 
-if(btnIssuePrev) btnIssuePrev.onclick = () => apiRequest("/change-issued-number", { direction: "prev" });
-if(btnIssueNext) btnIssueNext.onclick = () => apiRequest("/change-issued-number", { direction: "next" });
+if(btnIssuePrev) btnIssuePrev.onclick = () => apiRequest("/api/control/issue", { direction: "prev" });
+if(btnIssueNext) btnIssueNext.onclick = () => apiRequest("/api/control/issue", { direction: "next" });
 
 document.getElementById("setNumber").onclick = async () => {
     const num = document.getElementById("manualNumber").value;
-    if (num === "") return;
-    if (await apiRequest("/set-number", { number: num })) { 
+    const n = Number(num);
+    if (num === "" || n <= 0 || !Number.isInteger(n)) return showToast(at["alert_positive_int"], "error");
+    if (await apiRequest("/api/control/set-call", { number: num })) { 
         document.getElementById("manualNumber").value = ""; 
         showToast(at["toast_num_set"], "success"); 
     }
@@ -583,15 +578,16 @@ document.getElementById("setNumber").onclick = async () => {
 const setIssuedBtn = document.getElementById("setIssuedNumber");
 if(setIssuedBtn) setIssuedBtn.onclick = async () => {
     const num = document.getElementById("manualIssuedNumber").value;
-    if (num === "") return;
-    if (await apiRequest("/set-issued-number", { number: num })) {
+    const n = Number(num);
+    if (num === "" || n < 0 || !Number.isInteger(n)) return showToast(at["alert_positive_int"], "error");
+    if (await apiRequest("/api/control/set-issue", { number: num })) {
         document.getElementById("manualIssuedNumber").value = "";
         showToast(at["toast_issued_updated"], "success");
     }
 };
 
 setupConfirmationButton(document.getElementById("clear-log-btn"), "btn_clear_log", "btn_confirm_clear", async () => { showToast(at["toast_log_clearing"], "info"); await apiRequest("/api/logs/clear", {}); });
-setupConfirmationButton(document.getElementById("resetNumber"), "btn_reset_call", "btn_confirm_reset", async () => { if (await apiRequest("/set-number", { number: 0 })) { document.getElementById("manualNumber").value = ""; showToast(at["toast_reset_zero"], "success"); } });
+setupConfirmationButton(document.getElementById("resetNumber"), "btn_reset_call", "btn_confirm_reset", async () => { if (await apiRequest("/api/control/set-call", { number: 0 })) { document.getElementById("manualNumber").value = ""; showToast(at["toast_reset_zero"], "success"); } });
 setupConfirmationButton(document.getElementById("resetPassed"), "btn_reset_passed", "btn_confirm_reset", async () => { if (await apiRequest("/api/passed/clear", {})) showToast(at["toast_passed_cleared"], "success"); });
 setupConfirmationButton(document.getElementById("resetFeaturedContents"), "btn_reset_links", "btn_confirm_reset", async () => { if (await apiRequest("/api/featured/clear", {})) showToast(at["toast_featured_cleared"], "success"); });
 setupConfirmationButton(document.getElementById("resetAll"), "btn_reset_all", "btn_confirm_reset", async () => { if (await apiRequest("/reset", {})) { document.getElementById("manualNumber").value = ""; showToast(at["toast_all_reset"], "success"); await loadStats(); } });
@@ -600,7 +596,7 @@ const newPassedNumberInput = document.getElementById("new-passed-number");
 const addPassedBtn = document.getElementById("add-passed-btn");
 if(addPassedBtn) addPassedBtn.onclick = async () => {
     const num = Number(newPassedNumberInput.value);
-    if (num <= 0 || !Number.isInteger(num)) return alert(at["alert_positive_int"]);
+    if (num <= 0 || !Number.isInteger(num)) return showToast(at["alert_positive_int"], "error");
     addPassedBtn.disabled = true;
     if (await apiRequest("/api/passed/add", { number: num })) newPassedNumberInput.value = "";
     addPassedBtn.disabled = false;
@@ -613,8 +609,8 @@ const addFeaturedBtn = document.getElementById("add-featured-btn");
 if(addFeaturedBtn) addFeaturedBtn.onclick = async () => {
     const text = newLinkTextInput.value.trim();
     const url = newLinkUrlInput.value.trim();
-    if (!text || !url) return alert(at["alert_link_required"]);
-    if (!url.startsWith('http://') && !url.startsWith('https://')) return alert(at["alert_url_invalid"]);
+    if (!text || !url) return showToast(at["alert_link_required"], "error");
+    if (!url.startsWith('http://') && !url.startsWith('https://')) return showToast(at["alert_url_invalid"], "error");
     addFeaturedBtn.disabled = true;
     if (await apiRequest("/api/featured/add", { linkText: text, linkUrl: url })) { newLinkTextInput.value = ""; newLinkUrlInput.value = ""; }
     addFeaturedBtn.disabled = false;
@@ -627,7 +623,7 @@ const broadcastInput = document.getElementById("broadcast-msg");
 if (broadcastBtn) {
     broadcastBtn.onclick = async () => {
         const msg = broadcastInput.value.trim();
-        if (!msg) return alert(at["alert_broadcast_empty"]);
+        if (!msg) return showToast(at["alert_broadcast_empty"], "error");
         broadcastBtn.disabled = true;
         if (await apiRequest("/api/admin/broadcast", { message: msg })) { showToast(at["toast_broadcast_sent"], "success"); broadcastInput.value = ""; }
         broadcastBtn.disabled = false;
@@ -693,14 +689,13 @@ if (modeRadios) {
     });
 }
 
-// [修改] loadAdminUsers (XSS 防護 + 效能優化)
 async function loadAdminUsers() {
     const ui = document.getElementById("user-list-ui");
     if (!ui) return;
     
     const data = await apiRequest("/api/admin/users", {}, true);
     if (data && data.users) {
-        ui.replaceChildren(); // 清空
+        ui.replaceChildren(); 
 
         data.users.sort((a, b) => { if (a.role === 'super' && b.role !== 'super') return -1; if (a.role !== 'super' && b.role === 'super') return 1; return a.username.localeCompare(b.username); });
         
@@ -740,10 +735,14 @@ const newUserUsernameInput = document.getElementById("new-user-username");
 const newUserPasswordInput = document.getElementById("new-user-password");
 const newUserNicknameInput = document.getElementById("new-user-nickname");
 if (addUserBtn) addUserBtn.onclick = async () => {
-    const newUsername = newUserUsernameInput.value; const newPassword = newUserPasswordInput.value; const newNickname = newUserNicknameInput.value.trim();
-    if (!newUsername || !newPassword) return alert("帳號和密碼必填。");
+    const newUsername = newUserUsernameInput.value.trim(); const newPassword = newUserPasswordInput.value.trim(); const newNickname = newUserNicknameInput.value.trim();
+    if (!newUsername || !newPassword) return showToast(at["alert_account_required"], "error");
     addUserBtn.disabled = true;
-    if (await apiRequest("/api/admin/add-user", { newUsername, newPassword, newNickname })) { showToast(`✅ 已新增: ${newUsername}`, "success"); newUserUsernameInput.value = ""; newUserPasswordInput.value = ""; newUserNicknameInput.value = ""; await loadAdminUsers(); }
+    if (await apiRequest("/api/admin/add-user", { newUsername, newPassword, newNickname })) { 
+        showToast(`✅ 已新增: ${newUsername}`, "success"); 
+        newUserUsernameInput.value = ""; newUserPasswordInput.value = ""; newUserNicknameInput.value = ""; 
+        await loadAdminUsers(); 
+    }
     addUserBtn.disabled = false;
 };
 
@@ -751,12 +750,10 @@ const statsListUI = document.getElementById("stats-list-ui");
 const hourlyChartEl = document.getElementById("hourly-chart");
 const statsTodayCount = document.getElementById("stats-today-count");
 
-// [修改] loadStats (效能優化 + XSS 防護)
 async function loadStats() {
     if (!statsListUI) return;
     
-    // 檢查是否有子元素，若無則顯示 loading
-    if (statsListUI.children.length === 0) {
+    if (statsListUI.children.length === 0 || statsListUI.children[0].textContent.includes(at["list_no_data"]) || statsListUI.children[0].textContent.includes(at["list_load_fail"])) {
         const li = document.createElement("li");
         li.textContent = at["list_loading"];
         statsListUI.replaceChildren(li);
@@ -767,7 +764,7 @@ async function loadStats() {
         statsTodayCount.textContent = data.todayCount;
         renderHourlyChart(data.hourlyCounts, data.serverHour);
         
-        statsListUI.replaceChildren(); // 清空
+        statsListUI.replaceChildren(); 
 
         if (!data.history || data.history.length === 0) { 
             const li = document.createElement("li");
@@ -800,7 +797,6 @@ async function loadStats() {
     }
 }
 
-// [修改] renderHourlyChart (DOM 優化)
 function renderHourlyChart(counts, serverHour) {
     if (!hourlyChartEl || !Array.isArray(counts)) return;
     hourlyChartEl.replaceChildren();
@@ -843,110 +839,85 @@ const modalCurrentCount = document.getElementById("modal-current-count");
 const btnStatsMinus = document.getElementById("btn-stats-minus");
 const btnStatsPlus = document.getElementById("btn-stats-plus");
 const btnModalClose = document.getElementById("btn-modal-close");
-function openEditModal(hour, count) { editingHour = hour; modalTitle.textContent = `編輯 ${hour}:00 - ${hour}:59 數據`; modalCurrentCount.textContent = count; modalOverlay.style.display = "flex"; }
+function openEditModal(hour, count) { modalTitle.textContent = `${at["zh-TW"] ? '編輯' : 'Edit'} ${hour}:00 - ${hour}:59 ${at["zh-TW"] ? '數據' : 'Stats'}`; editingHour = hour; modalCurrentCount.textContent = count; modalOverlay.style.display = "flex"; }
 function closeEditModal() { modalOverlay.style.display = "none"; editingHour = null; }
-async function adjustStat(delta) { if (editingHour === null) return; let current = parseInt(modalCurrentCount.textContent); let next = current + delta; if (next < 0) next = 0; modalCurrentCount.textContent = next; await apiRequest("/api/admin/stats/adjust", { hour: editingHour, delta: delta }); await loadStats(); }
-if(btnModalClose) btnModalClose.onclick = closeEditModal; if(btnStatsMinus) btnStatsMinus.onclick = () => adjustStat(-1); if(btnStatsPlus) btnStatsPlus.onclick = () => adjustStat(1);
+async function adjustStat(delta) { 
+    if (editingHour === null) return; 
+    let current = parseInt(modalCurrentCount.textContent); 
+    let next = current + delta; 
+    if (next < 0) next = 0; 
+    modalCurrentCount.textContent = next; 
+    await apiRequest("/api/admin/stats/adjust", { hour: editingHour, delta: delta }); 
+    await loadStats(); 
+}
+if(btnModalClose) btnModalClose.onclick = closeEditModal; 
+if(btnStatsMinus) btnStatsMinus.onclick = () => adjustStat(-1); 
+if(btnStatsPlus) btnStatsPlus.onclick = () => adjustStat(1);
 if(modalOverlay) modalOverlay.onclick = (e) => { if (e.target === modalOverlay) closeEditModal(); }
 
 // --- LINE 設定邏輯 ---
-const domIds = {
-    approach:  "line-msg-approach",
-    arrival:   "line-msg-arrival",
-    status:    "line-msg-status",
-    personal:  "line-msg-personal",
-    passed:    "line-msg-passed",
-    setOk:     "line-msg-set-ok",
-    cancel:    "line-msg-cancel",
-    loginHint: "line-msg-login-hint", 
-    unlock:    "line-unlock-pwd",
-    // [修改] 移除 errFormat
-    errPassed: "line-msg-err-passed",
-    errNoSub:  "line-msg-err-no-sub"
-};
+const domKeys = [
+    "approach", "arrival", "status", "personal", "passed", 
+    "set_ok", "cancel", "login_hint", "err_passed", "err_no_sub"
+];
+
+async function loadLineSettings() {
+    if (!document.getElementById(`line-msg-${domKeys[0]}`)) return;
+    
+    const data = await apiRequest("/api/admin/line-settings/get", {}, true);
+    if (data && data.success) {
+        domKeys.forEach(key => {
+            const el = document.getElementById(`line-msg-${key}`);
+            if (el && data[key]) el.value = data[key];
+        });
+    }
+    
+    if (userRole === 'super') {
+        const pwdData = await apiRequest("/api/admin/line-settings/get-unlock-pass", {}, true);
+        if(pwdData && pwdData.success && document.getElementById("line-unlock-pwd")) {
+            document.getElementById("line-unlock-pwd").value = pwdData.password;
+        }
+    }
+}
 
 const btnSaveLineMsg = document.getElementById("btn-save-line-msg");
 const btnResetLineMsg = document.getElementById("btn-reset-line-msg");
 const btnSaveUnlockPwd = document.getElementById("btn-save-unlock-pwd");
 
-async function loadLineSettings() {
-    if (!document.getElementById(domIds.approach)) return;
-    
-    const data = await apiRequest("/api/admin/line-settings/get", {}, true);
-    if (data && data.success) {
-        document.getElementById(domIds.approach).value  = data.approach;
-        document.getElementById(domIds.arrival).value   = data.arrival;
-        document.getElementById(domIds.status).value    = data.status;
-        document.getElementById(domIds.personal).value  = data.personal;
-        document.getElementById(domIds.passed).value    = data.passed;
-        document.getElementById(domIds.setOk).value     = data.set_ok;
-        document.getElementById(domIds.cancel).value    = data.cancel;
-        document.getElementById(domIds.loginHint).value = data.login_hint;
-        
-        // [修改] 載入錯誤訊息設定 (排除 err_format)
-        if(document.getElementById(domIds.errPassed)) document.getElementById(domIds.errPassed).value = data.err_passed;
-        if(document.getElementById(domIds.errNoSub))  document.getElementById(domIds.errNoSub).value  = data.err_no_sub;
-    }
-    
-    if (userRole === 'super') {
-        const pwdData = await apiRequest("/api/admin/line-settings/get-unlock-pass", {}, true);
-        if(pwdData && pwdData.success && document.getElementById(domIds.unlock)) {
-            document.getElementById(domIds.unlock).value = pwdData.password;
-        }
-    }
-}
-
 if (btnSaveLineMsg) btnSaveLineMsg.onclick = async () => { 
-    const payload = {
-        approach:   document.getElementById(domIds.approach).value.trim(),
-        arrival:    document.getElementById(domIds.arrival).value.trim(),
-        status:     document.getElementById(domIds.status).value.trim(),
-        personal:   document.getElementById(domIds.personal).value.trim(),
-        passed:     document.getElementById(domIds.passed).value.trim(),
-        set_ok:     document.getElementById(domIds.setOk).value.trim(),
-        cancel:     document.getElementById(domIds.cancel).value.trim(),
-        login_hint: document.getElementById(domIds.loginHint).value.trim(),
-        
-        // [修改] 儲存 payload (排除 err_format)
-        err_passed: document.getElementById(domIds.errPassed).value.trim(),
-        err_no_sub: document.getElementById(domIds.errNoSub).value.trim()
-    };
+    const payload = {};
+    domKeys.forEach(key => {
+        const el = document.getElementById(`line-msg-${key}`);
+        if (el) payload[key] = el.value.trim();
+    });
 
-    if(!payload.approach || !payload.status) return alert("主要文案不可為空"); 
+    if(!payload.approach || !payload.status) return showToast("主要文案不可為空", "error"); 
     
     btnSaveLineMsg.disabled = true; 
     if (await apiRequest("/api/admin/line-settings/save", payload)) { 
-        showToast("✅ LINE 文案已全數更新", "success"); 
+        showToast(at["toast_line_updated"], "success"); 
     } 
     btnSaveLineMsg.disabled = false; 
 };
 
-if (btnResetLineMsg) setupConfirmationButton(btnResetLineMsg, "恢復預設值", "btn_confirm_reset", async () => { 
+if (btnResetLineMsg) setupConfirmationButton(btnResetLineMsg, at["zh-TW"] ? "重置為預設值" : "Reset to default", "btn_confirm_reset", async () => { 
     const data = await apiRequest("/api/admin/line-settings/reset", {}, true); 
     if (data && data.success) { 
-        document.getElementById(domIds.approach).value  = data.approach;
-        document.getElementById(domIds.arrival).value   = data.arrival;
-        document.getElementById(domIds.status).value    = data.status;
-        document.getElementById(domIds.personal).value  = data.personal;
-        document.getElementById(domIds.passed).value    = data.passed;
-        document.getElementById(domIds.setOk).value     = data.set_ok;
-        document.getElementById(domIds.cancel).value    = data.cancel;
-        document.getElementById(domIds.loginHint).value = data.login_hint; 
-        
-        // [修改] 重置後更新 UI (排除 err_format)
-        document.getElementById(domIds.errPassed).value = data.err_passed;
-        document.getElementById(domIds.errNoSub).value  = data.err_no_sub;
+        domKeys.forEach(key => {
+            const el = document.getElementById(`line-msg-${key}`);
+            if (el && data[key]) el.value = data[key];
+        });
 
-        showToast("↺ 已恢復預設文案", "success"); 
+        showToast(at["toast_line_reset"], "success"); 
     } 
 });
 
 if (btnSaveUnlockPwd) btnSaveUnlockPwd.onclick = async () => {
-    const pwd = document.getElementById(domIds.unlock).value.trim();
-    if(!pwd) return alert("密碼不可為空");
+    const pwd = document.getElementById("line-unlock-pwd").value.trim();
+    if(!pwd) return showToast(at["alert_pwd_empty"], "error");
     btnSaveUnlockPwd.disabled = true;
     if (await apiRequest("/api/admin/line-settings/set-unlock-pass", { password: pwd })) { 
-        showToast("✅ 解鎖密碼已設定", "success"); 
+        showToast(at["toast_pwd_saved"], "success"); 
     }
     btnSaveUnlockPwd.disabled = false;
 };
@@ -956,7 +927,7 @@ if (btnSetNickname) {
     btnSetNickname.onclick = async () => {
         const targetUsername = document.getElementById("set-nick-username").value.trim();
         const nickname = document.getElementById("set-nick-nickname").value.trim();
-        if (!targetUsername || !nickname) return alert("請輸入帳號與新暱稱");
+        if (!targetUsername || !nickname) return showToast(at["alert_nick_required"], "error");
         btnSetNickname.disabled = true;
         if (await apiRequest("/api/admin/set-nickname", { targetUsername, nickname })) {
             showToast(`✅ 暱稱已更新`, "success");
@@ -993,7 +964,7 @@ if (btnExportCsv) {
             document.body.removeChild(link);
             showToast(at["toast_report_downloaded"], "success");
         } else {
-            showToast(at["toast_download_fail"], "error");
+            showToast(at["toast_download_fail"] + (data ? data.error : 'Network Error'), "error");
         }
         btnExportCsv.disabled = false;
     };
