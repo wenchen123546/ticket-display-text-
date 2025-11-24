@@ -1,10 +1,9 @@
 /*
  * ==========================================
- * 後台邏輯 (admin.js) - v18.7 Fixed Listeners & Logic
+ * 後台邏輯 (admin.js) - v18.8 Fix Featured & Mobile Overflow
  * ==========================================
  */
 
-// --- 0. i18n 翻譯設定 ---
 const adminI18n = {
     "zh-TW": {
         "status_disconnected": "連線中斷，正在嘗試重新連線...",
@@ -64,8 +63,8 @@ const adminI18n = {
         "toast_line_reset": "↺ 已恢復預設文案",
         "toast_pwd_saved": "✅ 解鎖密碼已設定",
         "alert_pwd_empty": "密碼不可為空",
-        "btn_confirm_clear": "⚠️ 點此確認清除",
-        "btn_confirm_reset": "⚠️ 點此確認重置",
+        "btn_confirm_clear": "⚠️ Confirm Clear",
+        "btn_confirm_reset": "⚠️ Confirm Reset",
         "list_loading": "載入中...",
         "list_no_data": "尚無數據",
         "list_load_fail": "載入失敗",
@@ -183,7 +182,6 @@ let editingHour = null;
 // --- Socket ---
 const socket = io({ autoConnect: false, auth: { token: "" } });
 
-// --- 分頁切換邏輯 (Init) ---
 function initTabs() {
     const navBtns = document.querySelectorAll('.nav-btn');
     const sections = document.querySelectorAll('.section-group');
@@ -191,16 +189,11 @@ function initTabs() {
     navBtns.forEach(btn => {
         btn.addEventListener('click', () => {
             const targetId = btn.getAttribute('data-target');
-            
-            // 更新按鈕狀態
             navBtns.forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
-
-            // 切換分頁
             sections.forEach(sec => {
                 if(sec.id === targetId) {
                     sec.classList.add('active');
-                    // 如果切換到數據頁，重新整理數據
                     if(targetId === 'section-stats') loadStats();
                 } else {
                     sec.classList.remove('active');
@@ -219,36 +212,28 @@ function showLogin() {
 
 async function showPanel() {
     loginContainer.style.display = "none";
-    adminPanel.style.display = "flex"; // 使用 flex 佈局 (配合 sidebar)
+    adminPanel.style.display = "flex"; 
     document.title = `後台管理 - ${username}`;
-    
-    // 更新側邊欄用戶名
     if(sidebarUserInfo) sidebarUserInfo.textContent = `Hi, ${username}`;
 
-    // 處理 Super Admin 專屬功能區塊的顯示
     if (userRole === 'super') {
         const userManagementCard = document.getElementById("card-user-management");
         if (userManagementCard) userManagementCard.style.display = "block";
-        
         const clearLogBtn = document.getElementById("clear-log-btn");
         if (clearLogBtn) clearLogBtn.style.display = "block";
-        
         const btnExportCsv = document.getElementById("btn-export-csv");
         if (btnExportCsv) btnExportCsv.style.display = "block";
-        
         const modeSwitcherGroup = document.getElementById("mode-switcher-group");
         if (modeSwitcherGroup) modeSwitcherGroup.style.display = "block";
-        
         const unlockPwdGroup = document.getElementById("unlock-pwd-group");
         if (unlockPwdGroup) unlockPwdGroup.style.display = "block";
-
         await loadAdminUsers();
     } else {
         const unlockPwdGroup = document.getElementById("unlock-pwd-group");
         if (unlockPwdGroup) unlockPwdGroup.style.display = "none";
     }
     
-    initTabs(); // 初始化分頁功能
+    initTabs();
     await loadStats();
     await loadLineSettings();
     socket.connect();
@@ -263,7 +248,6 @@ async function attemptLogin(loginName, loginPass) {
             body: JSON.stringify({ username: loginName, password: loginPass }),
         });
         const data = await res.json();
-
         if (!res.ok) {
             loginError.textContent = data.error || at["login_fail"];
             showLogin();
@@ -329,6 +313,9 @@ socket.on("updateQueue", (data) => {
 });
 socket.on("update", (num) => { document.getElementById("number").textContent = num; loadStats(); });
 socket.on("updatePassed", (numbers) => renderPassedListUI(numbers));
+// [Fix] 恢復精選連結的更新監聽
+socket.on("updateFeaturedContents", (contents) => renderFeaturedListUI(contents));
+
 socket.on("initAdminLogs", (logs) => renderLogs(logs, true));
 socket.on("newAdminLog", (log) => renderLogs([log], false));
 socket.on("updateOnlineAdmins", (admins) => renderOnlineAdmins(admins));
@@ -344,12 +331,10 @@ function renderLogs(logs, isInit) {
     if(isInit) ui.innerHTML = "";
     if(!logs || logs.length === 0) return;
     if(ui.querySelector("li")?.textContent.includes("尚無")) ui.innerHTML = "";
-    
     const fragment = document.createDocumentFragment();
     logs.forEach(log => {
         const li = document.createElement("li");
         li.textContent = log;
-        // 反轉順序插入: 最新在下
         isInit ? fragment.appendChild(li) : ui.appendChild(li); 
     });
     if(isInit) ui.appendChild(fragment);
@@ -407,7 +392,6 @@ function setupConfirmationButton(buttonEl, originalTextKey, confirmTextKey, acti
     });
 }
 
-// [修改] 過號列表渲染 - 包含重呼按鈕
 function renderPassedListUI(numbers) {
     const ui = document.getElementById("passed-list-ui");
     ui.innerHTML = "";
@@ -416,14 +400,10 @@ function renderPassedListUI(numbers) {
     numbers.forEach((number) => {
         const li = document.createElement("li");
         li.style.display = "flex"; li.style.justifyContent = "space-between"; li.style.alignItems = "center";
-        
-        // 左側：號碼 + 重呼按鈕
         const leftDiv = document.createElement("div"); 
         leftDiv.style.display = "flex"; leftDiv.style.gap = "10px"; leftDiv.style.alignItems = "center";
-        
         const numSpan = document.createElement("span"); 
         numSpan.textContent = number; numSpan.style.fontWeight = "bold";
-        
         const recallBtn = document.createElement("button");
         recallBtn.className = "btn-secondary"; 
         recallBtn.style.padding = "2px 8px"; recallBtn.style.fontSize = "0.8rem";
@@ -434,10 +414,7 @@ function renderPassedListUI(numbers) {
                 showToast(at["toast_recalled"], "success"); 
             } 
         };
-        
         leftDiv.appendChild(numSpan); leftDiv.appendChild(recallBtn); li.appendChild(leftDiv);
-
-        // 右側：刪除
         const deleteBtn = document.createElement("button");
         deleteBtn.className = "delete-item-btn"; deleteBtn.innerHTML = "✕";
         setupConfirmationButton(deleteBtn, "✕", "⚠️", async () => { 
@@ -458,6 +435,9 @@ function renderFeaturedListUI(contents) {
     contents.forEach((item) => {
         const li = document.createElement("li");
         const span = document.createElement("span");
+        // [Fix] 強制換行，防止連結太長撐開
+        span.style.wordBreak = "break-all"; 
+        span.style.whiteSpace = "normal";
         span.innerHTML = `${item.linkText}<br><small style="color:#666">${item.linkUrl}</small>`;
         li.appendChild(span);
         const deleteBtn = document.createElement("button");
@@ -495,17 +475,15 @@ function renderOnlineAdmins(admins) {
     ui.appendChild(fragment);
 }
 
-// --- Event Bindings ---
 const btnCallPrev = document.getElementById("btn-call-prev");
 const btnCallNext = document.getElementById("btn-call-next");
-const btnMarkPassed = document.getElementById("btn-mark-passed"); // 過號按鈕
+const btnMarkPassed = document.getElementById("btn-mark-passed"); 
 const btnIssuePrev = document.getElementById("btn-issue-prev");
 const btnIssueNext = document.getElementById("btn-issue-next");
 
 if(btnCallPrev) btnCallPrev.onclick = () => apiRequest("/change-number", { direction: "prev" });
 if(btnCallNext) btnCallNext.onclick = () => apiRequest("/change-number", { direction: "next" });
 
-// [新增] 過號按鈕綁定
 if(btnMarkPassed) btnMarkPassed.onclick = async () => {
     btnMarkPassed.disabled = true;
     if(await apiRequest("/api/control/pass-current", {})) showToast(at["toast_passed_marked"], "warning");
@@ -534,14 +512,12 @@ if(setIssuedBtn) setIssuedBtn.onclick = async () => {
     }
 };
 
-// 重置與清除按鈕
 setupConfirmationButton(document.getElementById("clear-log-btn"), "btn_clear_log", "btn_confirm_clear", async () => { showToast(at["toast_log_clearing"], "info"); await apiRequest("/api/logs/clear", {}); });
 setupConfirmationButton(document.getElementById("resetNumber"), "btn_reset_call", "btn_confirm_reset", async () => { if (await apiRequest("/set-number", { number: 0 })) { document.getElementById("manualNumber").value = ""; showToast(at["toast_reset_zero"], "success"); } });
 setupConfirmationButton(document.getElementById("resetPassed"), "btn_reset_passed", "btn_confirm_reset", async () => { if (await apiRequest("/api/passed/clear", {})) showToast(at["toast_passed_cleared"], "success"); });
 setupConfirmationButton(document.getElementById("resetFeaturedContents"), "btn_reset_links", "btn_confirm_reset", async () => { if (await apiRequest("/api/featured/clear", {})) showToast(at["toast_featured_cleared"], "success"); });
 setupConfirmationButton(document.getElementById("resetAll"), "btn_reset_all", "btn_confirm_reset", async () => { if (await apiRequest("/reset", {})) { document.getElementById("manualNumber").value = ""; showToast(at["toast_all_reset"], "success"); await loadStats(); } });
 
-// 列表輸入事件
 const newPassedNumberInput = document.getElementById("new-passed-number");
 const addPassedBtn = document.getElementById("add-passed-btn");
 if(addPassedBtn) addPassedBtn.onclick = async () => {
@@ -568,7 +544,6 @@ if(addFeaturedBtn) addFeaturedBtn.onclick = async () => {
 if(newLinkTextInput) newLinkTextInput.addEventListener("keyup", (event) => { if (event.key === "Enter") newLinkUrlInput.focus(); });
 if(newLinkUrlInput) newLinkUrlInput.addEventListener("keyup", (event) => { if (event.key === "Enter") addFeaturedBtn.click(); });
 
-// 廣播按鈕
 const broadcastBtn = document.getElementById("btn-broadcast");
 const broadcastInput = document.getElementById("broadcast-msg");
 if (broadcastBtn) {
@@ -582,7 +557,6 @@ if (broadcastBtn) {
     broadcastInput.addEventListener("keyup", (e) => { if (e.key === "Enter") broadcastBtn.click(); });
 }
 
-// 系統設定開關
 const soundToggle = document.getElementById("sound-toggle");
 const publicToggle = document.getElementById("public-toggle");
 const publicToggleLabel = document.getElementById("public-toggle-label");
@@ -623,7 +597,6 @@ if(publicToggle) publicToggle.addEventListener("change", () => {
     }
 });
 
-// 模式切換
 const modeRadios = document.getElementsByName("systemMode");
 if (modeRadios) {
     modeRadios.forEach(radio => {
@@ -668,7 +641,7 @@ async function loadAdminUsers() {
         });
     }
 }
-// 新增使用者按鈕事件
+
 const addUserBtn = document.getElementById("add-user-btn");
 const newUserUsernameInput = document.getElementById("new-user-username");
 const newUserPasswordInput = document.getElementById("new-user-password");
@@ -698,7 +671,8 @@ async function loadStats() {
         data.history.forEach(item => {
             const li = document.createElement("li");
             const time = new Date(item.time).toLocaleTimeString('zh-TW', { hour12: false });
-            li.textContent = `${time} - 號碼 ${item.num} (${item.operator})`;
+            // [Fix] 長文字可能會破版，已在 CSS 設定 word-break
+            li.innerHTML = `<span>${time} - 號碼 ${item.num} <small style="color:#666">(${item.operator})</small></span>`;
             fragment.appendChild(li);
         });
         statsListUI.appendChild(fragment);
@@ -722,7 +696,7 @@ function renderHourlyChart(counts, serverHour) {
     }
     hourlyChartEl.appendChild(fragment);
 }
-// Modal logic
+
 const modalOverlay = document.getElementById("edit-stats-overlay");
 const modalTitle = document.getElementById("modal-title");
 const modalCurrentCount = document.getElementById("modal-current-count");
@@ -735,7 +709,6 @@ async function adjustStat(delta) { if (editingHour === null) return; let current
 if(btnModalClose) btnModalClose.onclick = closeEditModal; if(btnStatsMinus) btnStatsMinus.onclick = () => adjustStat(-1); if(btnStatsPlus) btnStatsPlus.onclick = () => adjustStat(1);
 if(modalOverlay) modalOverlay.onclick = (e) => { if (e.target === modalOverlay) closeEditModal(); }
 
-// LINE 設定
 const lineMsgApproachInput = document.getElementById("line-msg-approach");
 const lineMsgArrivalInput = document.getElementById("line-msg-arrival");
 const btnSaveLineMsg = document.getElementById("btn-save-line-msg");
@@ -773,17 +746,12 @@ if (btnSaveUnlockPwd) btnSaveUnlockPwd.onclick = async () => {
     btnSaveUnlockPwd.disabled = false;
 };
 
-// [修復] 補上遺漏的按鈕監聽 (Fix Missing Listeners)
-
-// 1. 修改暱稱按鈕邏輯
 const btnSetNickname = document.getElementById("set-nickname-btn");
 if (btnSetNickname) {
     btnSetNickname.onclick = async () => {
         const targetUsername = document.getElementById("set-nick-username").value.trim();
         const nickname = document.getElementById("set-nick-nickname").value.trim();
-        
         if (!targetUsername || !nickname) return alert("請輸入帳號與新暱稱");
-        
         btnSetNickname.disabled = true;
         if (await apiRequest("/api/admin/set-nickname", { targetUsername, nickname })) {
             showToast(`✅ 暱稱已更新`, "success");
@@ -795,7 +763,6 @@ if (btnSetNickname) {
     };
 }
 
-// 2. 數據報表：重整按鈕
 const btnRefreshStats = document.getElementById("btn-refresh-stats");
 if (btnRefreshStats) {
     btnRefreshStats.onclick = async () => {
@@ -805,14 +772,12 @@ if (btnRefreshStats) {
     };
 }
 
-// 3. 數據報表：清空統計按鈕 (CSV 下載按鈕已在 loadAdminUsers 區塊判斷權限，但按鈕邏輯需綁定)
 const btnExportCsv = document.getElementById("btn-export-csv");
 if (btnExportCsv) {
     btnExportCsv.onclick = async () => {
         btnExportCsv.disabled = true;
         const data = await apiRequest("/api/admin/export-csv", {}, true);
         if (data && data.success) {
-            // 觸發下載
             const blob = new Blob(["\uFEFF" + data.csvData], { type: 'text/csv;charset=utf-8;' });
             const link = document.createElement("a");
             link.href = URL.createObjectURL(blob);
@@ -829,7 +794,6 @@ if (btnExportCsv) {
     };
 }
 
-// 4. 數據報表：清空按鈕邏輯
 const btnClearStats = document.getElementById("btn-clear-stats");
 if (btnClearStats) {
     setupConfirmationButton(btnClearStats, "btn_clear_log", "btn_confirm_clear", async () => {
