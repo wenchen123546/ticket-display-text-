@@ -1,6 +1,6 @@
 /*
  * ==========================================
- * 伺服器 (index.js) - v18.15 Optimized
+ * 伺服器 (index.js) - v18.15 Optimized + LINE Set Hint
  * ==========================================
  */
 
@@ -111,6 +111,7 @@ const KEY_LINE_MSG_CANCEL     = 'callsys:line:msg:cancel';
 const KEY_LINE_MSG_LOGIN_HINT = 'callsys:line:msg:login_hint';
 const KEY_LINE_MSG_ERR_PASSED = 'callsys:line:msg:err_passed'; 
 const KEY_LINE_MSG_ERR_NO_SUB = 'callsys:line:msg:err_no_sub'; 
+const KEY_LINE_MSG_SET_HINT   = 'callsys:line:msg:set_hint'; // [新增] 設定提醒關鍵字回覆
 
 // --- 預設文案 (Defaults) ---
 const DEFAULT_MSG_APPROACH   = "🔔 叫號提醒！\n\n目前已叫號至 {current} 號。\n您的 {target} 號即將輪到 (剩 {diff} 組)，請準備前往現場！";
@@ -123,6 +124,7 @@ const DEFAULT_MSG_CANCEL     = "🗑️ 已取消對 {target} 號的提醒通知
 const DEFAULT_MSG_LOGIN_HINT = "🔒 請輸入「解鎖密碼」以驗證身份。";
 const DEFAULT_MSG_ERR_PASSED = "⚠️ 設定失敗\n{target} 號已經過號或正在叫號 (目前 {current} 號)。";
 const DEFAULT_MSG_ERR_NO_SUB = "ℹ️ 您目前沒有設定任何叫號提醒。";
+const DEFAULT_MSG_SET_HINT   = "您好，如需設定叫號提醒，請直接輸入您手上的號碼牌號碼 (例如：105)。"; // [新增] 預設設定提示
 
 const onlineAdmins = new Map();
 
@@ -371,7 +373,8 @@ async function handleLineEvent(event) {
         KEY_LINE_MSG_STATUS, KEY_LINE_MSG_PERSONAL, 
         KEY_LINE_MSG_PASSED, KEY_LINE_MSG_SET_OK, KEY_LINE_MSG_CANCEL,
         KEY_LINE_MSG_LOGIN_HINT,
-        KEY_LINE_MSG_ERR_PASSED, KEY_LINE_MSG_ERR_NO_SUB
+        KEY_LINE_MSG_ERR_PASSED, KEY_LINE_MSG_ERR_NO_SUB,
+        KEY_LINE_MSG_SET_HINT // [新增]
     ];
     const results = await redis.mget(keys);
     
@@ -384,6 +387,7 @@ async function handleLineEvent(event) {
     
     const MSG_ERR_PASSED = results[6] || DEFAULT_MSG_ERR_PASSED;
     const MSG_ERR_NO_SUB = results[7] || DEFAULT_MSG_ERR_NO_SUB;
+    const MSG_SET_HINT   = results[8] || DEFAULT_MSG_SET_HINT; // [新增]
 
     // 2. 後台解鎖功能
     if (text === '後台登入') {
@@ -446,7 +450,12 @@ async function handleLineEvent(event) {
         return lineClient.replyMessage(replyToken, { type: "text", text: finalMsg });
     }
 
-    // 5. 設定提醒：直接判斷輸入是否為「純數字」
+    // [新增 5. 設定提醒關鍵字]
+    if (['設定提醒', '設定', 'set'].includes(text)) {
+        return lineClient.replyMessage(replyToken, { type: "text", text: MSG_SET_HINT });
+    }
+
+    // 6. 設定提醒：直接判斷輸入是否為「純數字」
     if (/^\d+$/.test(text)) {
         const targetNum = parseInt(text);
 
@@ -482,7 +491,7 @@ async function handleLineEvent(event) {
         return lineClient.replyMessage(replyToken, { type: "text", text: finalMsg });
     }
 
-    // 6. 取消提醒
+    // 7. 取消提醒
     if (['取消提醒', '取消', 'cancel'].includes(text)) {
         const trackingNum = await redis.get(`${KEY_LINE_USER_STATUS}${userId}`);
         if (!trackingNum) {
@@ -658,7 +667,8 @@ app.post("/api/admin/line-settings/get", async (req, res) => {
             KEY_LINE_MSG_STATUS, KEY_LINE_MSG_PERSONAL, 
             KEY_LINE_MSG_PASSED, KEY_LINE_MSG_SET_OK, KEY_LINE_MSG_CANCEL,
             KEY_LINE_MSG_LOGIN_HINT,
-            KEY_LINE_MSG_ERR_PASSED, KEY_LINE_MSG_ERR_NO_SUB
+            KEY_LINE_MSG_ERR_PASSED, KEY_LINE_MSG_ERR_NO_SUB,
+            KEY_LINE_MSG_SET_HINT // [新增]
         ];
         const results = await redis.mget(keys);
         res.json({ 
@@ -672,7 +682,8 @@ app.post("/api/admin/line-settings/get", async (req, res) => {
             cancel:     results[6] || DEFAULT_MSG_CANCEL,
             login_hint: results[7] || DEFAULT_MSG_LOGIN_HINT,
             err_passed: results[8] || DEFAULT_MSG_ERR_PASSED,
-            err_no_sub: results[9] || DEFAULT_MSG_ERR_NO_SUB
+            err_no_sub: results[9] || DEFAULT_MSG_ERR_NO_SUB,
+            set_hint:   results[10] || DEFAULT_MSG_SET_HINT // [新增]
         });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -681,7 +692,7 @@ app.post("/api/admin/line-settings/save", async (req, res) => {
     try {
         const { 
             approach, arrival, status, personal, passed, set_ok, cancel, login_hint,
-            err_passed, err_no_sub 
+            err_passed, err_no_sub, set_hint // [新增]
         } = req.body;
         
         if (!approach || !arrival || !status) return res.status(400).json({ error: "主要文案不可為空" });
@@ -698,6 +709,7 @@ app.post("/api/admin/line-settings/save", async (req, res) => {
         
         pipeline.set(KEY_LINE_MSG_ERR_PASSED, sanitize(err_passed));
         pipeline.set(KEY_LINE_MSG_ERR_NO_SUB, sanitize(err_no_sub));
+        pipeline.set(KEY_LINE_MSG_SET_HINT, sanitize(set_hint)); // [新增]
         
         await pipeline.exec();
         addAdminLog(req.user.nickname, "📝 更新了 LINE 自動回覆文案");
@@ -712,7 +724,8 @@ app.post("/api/admin/line-settings/reset", async (req, res) => {
             KEY_LINE_MSG_STATUS, KEY_LINE_MSG_PERSONAL, 
             KEY_LINE_MSG_PASSED, KEY_LINE_MSG_SET_OK, KEY_LINE_MSG_CANCEL,
             KEY_LINE_MSG_LOGIN_HINT,
-            KEY_LINE_MSG_ERR_PASSED, KEY_LINE_MSG_ERR_NO_SUB
+            KEY_LINE_MSG_ERR_PASSED, KEY_LINE_MSG_ERR_NO_SUB,
+            KEY_LINE_MSG_SET_HINT // [新增]
         ];
         await redis.del(keys);
         addAdminLog(req.user.nickname, "↺ 重置了 LINE 自動回覆文案");
@@ -727,7 +740,8 @@ app.post("/api/admin/line-settings/reset", async (req, res) => {
             cancel:     DEFAULT_MSG_CANCEL,
             login_hint: DEFAULT_MSG_LOGIN_HINT,
             err_passed: DEFAULT_MSG_ERR_PASSED,
-            err_no_sub: DEFAULT_MSG_ERR_NO_SUB
+            err_no_sub: DEFAULT_MSG_ERR_NO_SUB,
+            set_hint:   DEFAULT_MSG_SET_HINT // [新增]
         });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
