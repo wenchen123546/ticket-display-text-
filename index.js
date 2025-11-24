@@ -1,6 +1,6 @@
 /*
  * ==========================================
- * 伺服器 (index.js) - v18.12 Admin Login Hint Customization
+ * 伺服器 (index.js) - v18.13 Optimized (Lua/Pipeline/Fixes)
  * ==========================================
  */
 
@@ -60,6 +60,21 @@ const redis = new Redis(REDIS_URL, {
     retryStrategy: (times) => Math.min(times * 50, 2000)
 });
 
+// [新增] 定義 Lua Script 以解決競態條件 (Race Condition)
+// 邏輯：只有當 current < issued 時才執行 INCR，否則回傳 -1
+redis.defineCommand("safeNextNumber", {
+    numberOfKeys: 2,
+    lua: `
+        local current = tonumber(redis.call("GET", KEYS[1])) or 0
+        local issued = tonumber(redis.call("GET", KEYS[2])) or 0
+        if current < issued then
+            return redis.call("INCR", KEYS[1])
+        else
+            return -1
+        end
+    `
+});
+
 // --- Redis Keys ---
 const KEY_CURRENT_NUMBER = 'callsys:number';
 const KEY_LAST_ISSUED = 'callsys:issued'; 
@@ -88,7 +103,7 @@ const KEY_LINE_MSG_PERSONAL   = 'callsys:line:msg:personal';   // 查詢進度(�
 const KEY_LINE_MSG_PASSED     = 'callsys:line:msg:passed';     // 過號名單
 const KEY_LINE_MSG_SET_OK     = 'callsys:line:msg:set_ok';     // 設定提醒成功
 const KEY_LINE_MSG_CANCEL     = 'callsys:line:msg:cancel';     // 取消提醒
-const KEY_LINE_MSG_LOGIN_HINT = 'callsys:line:msg:login_hint'; // [新增] 登入提示
+const KEY_LINE_MSG_LOGIN_HINT = 'callsys:line:msg:login_hint'; // 登入提示
 
 // --- 預設文案 (Defaults) ---
 const DEFAULT_MSG_APPROACH   = "🔔 叫號提醒！\n\n目前已叫號至 {current} 號。\n您的 {target} 號即將輪到 (剩 {diff} 組)，請準備前往現場！";
@@ -298,31 +313,50 @@ function broadcastOnlineAdmins() {
     io.to("admin").emit("updateOnlineAdmins", Array.from(onlineAdmins.values()));
 }
 
+// [修改] 使用 Pipeline 優化 LINE 通知查詢
 async function checkAndNotifyLineUsers(currentNum) {
     if (!lineClient) return;
     try {
         currentNum = parseInt(currentNum);
-        let [tplApproach, tplArrival] = await redis.mget(KEY_LINE_MSG_APPROACH, KEY_LINE_MSG_ARRIVAL);
-        if (!tplApproach) tplApproach = DEFAULT_MSG_APPROACH;
-        if (!tplArrival) tplArrival = DEFAULT_MSG_ARRIVAL;
-
-        const notifyTarget = currentNum + REMIND_BUFFER; 
-        const subKey = `${KEY_LINE_SUB_PREFIX}${notifyTarget}`;
-        const subscribers = await redis.smembers(subKey);
+        const notifyTarget = currentNum + REMIND_BUFFER;
         
-        if (subscribers.length > 0) {
-            const msgText = tplApproach.replace(/{current}/g, currentNum).replace(/{target}/g, notifyTarget).replace(/{diff}/g, REMIND_BUFFER);
-            await lineClient.multicast(subscribers, [{ type: 'text', text: msgText }]);
+        // [優化] 使用 Pipeline 一次取回所有需要的資料，減少 RTT
+        const pipeline = redis.pipeline();
+        pipeline.get(KEY_LINE_MSG_APPROACH);
+        pipeline.get(KEY_LINE_MSG_ARRIVAL);
+        pipeline.smembers(`${KEY_LINE_SUB_PREFIX}${notifyTarget}`); // 快到了訂閱者
+        pipeline.smembers(`${KEY_LINE_SUB_PREFIX}${currentNum}`);   // 到號了訂閱者
+        
+        const results = await pipeline.exec(); 
+        // results 格式: [[err, val], [err, val], ...]
+        
+        let tplApproach = results[0][1] || DEFAULT_MSG_APPROACH;
+        let tplArrival  = results[1][1] || DEFAULT_MSG_ARRIVAL;
+        const approachSubs = results[2][1] || [];
+        const exactSubs    = results[3][1] || [];
+
+        // 發送 "快到了" 通知
+        if (approachSubs.length > 0) {
+            const msgText = tplApproach
+                .replace(/{current}/g, currentNum)
+                .replace(/{target}/g, notifyTarget)
+                .replace(/{diff}/g, REMIND_BUFFER);
+            await lineClient.multicast(approachSubs, [{ type: 'text', text: msgText }]);
         }
 
-        const exactKey = `${KEY_LINE_SUB_PREFIX}${currentNum}`;
-        const exactSubscribers = await redis.smembers(exactKey);
-        if (exactSubscribers.length > 0) {
-            const msgText = tplArrival.replace(/{current}/g, currentNum).replace(/{target}/g, currentNum).replace(/{diff}/g, 0);
-            await lineClient.multicast(exactSubscribers, [{ type: 'text', text: msgText }]);
-            const pipeline = redis.multi();
-            exactSubscribers.forEach(uid => pipeline.del(`${KEY_LINE_USER_STATUS}${uid}`));
-            pipeline.del(exactKey); await pipeline.exec();
+        // 發送 "到號了" 通知
+        if (exactSubs.length > 0) {
+            const msgText = tplArrival
+                .replace(/{current}/g, currentNum)
+                .replace(/{target}/g, currentNum)
+                .replace(/{diff}/g, 0);
+            await lineClient.multicast(exactSubs, [{ type: 'text', text: msgText }]);
+            
+            // 清理 Redis 資料
+            const cleanPipe = redis.multi();
+            exactSubs.forEach(uid => cleanPipe.del(`${KEY_LINE_USER_STATUS}${uid}`));
+            cleanPipe.del(`${KEY_LINE_SUB_PREFIX}${currentNum}`);
+            await cleanPipe.exec();
         }
     } catch (e) { console.error("Line Notify Error:", e); }
 }
@@ -586,9 +620,9 @@ app.post("/api/admin/line-settings/get-unlock-pass", superAdminAuthMiddleware, a
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// [修改] CSV 匯出部分 (檔名優化)
 app.post("/api/admin/export-csv", superAdminAuthMiddleware, async (req, res) => {
     try {
-        const { dateStr } = getTaiwanDateInfo();
         const historyRaw = await redis.lrange(KEY_HISTORY_STATS, 0, -1);
         const history = historyRaw.map(JSON.parse);
         let csvContent = "\uFEFF時間,號碼,操作員,服務耗時(秒),備註\n";
@@ -605,7 +639,16 @@ app.post("/api/admin/export-csv", superAdminAuthMiddleware, async (req, res) => 
             } else { duration = "首筆"; }
             csvContent += `${time},${item.num},${item.operator},${duration},${note}\n`;
         }
-        res.json({ success: true, csvData: csvContent, fileName: `stats_${dateStr}.csv` });
+
+        // 產生更精確的時間戳記：YYYY-MM-DD_HHmm
+        const now = new Date();
+        const timestamp = now.toLocaleString('zh-TW', { 
+            timeZone: 'Asia/Taipei', 
+            year: 'numeric', month: '2-digit', day: '2-digit', 
+            hour: '2-digit', minute: '2-digit', hour12: false 
+        }).replace(/\//g, '-').replace(/:/g, '').replace(' ', '_');
+
+        res.json({ success: true, csvData: csvContent, fileName: `stats_${timestamp}.csv` });
         addAdminLog(req.user.nickname, "📥 下載了 CSV 報表");
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -636,19 +679,30 @@ app.post("/set-system-mode", superAdminAuthMiddleware, async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// [修改] /change-number 路由 (Lua Script 應用)
 app.post("/change-number", async (req, res) => {
     try {
         const { direction } = req.body;
         let num;
         if (direction === "next") {
-            num = await redis.incr(KEY_CURRENT_NUMBER);
+            // [優化] 使用 Lua Script 原子操作，防止多人同時按下一號時跳號
+            const result = await redis.safeNextNumber(KEY_CURRENT_NUMBER, KEY_LAST_ISSUED);
+            
+            if (result === -1) {
+                return res.status(400).json({ error: "目前已無等待人數，無法跳號" });
+            }
+            num = result;
+            
             await logHistory(num, req.user.nickname, 1);
             addAdminLog(req.user.nickname, `號碼增加為 ${num}`);
         } else if (direction === "prev") {
+            // prev 操作競態風險較低，維持原樣
             num = await redis.decrIfPositive(KEY_CURRENT_NUMBER);
             await logHistory(num, req.user.nickname, 0); 
             addAdminLog(req.user.nickname, `號碼回退為 ${num}`);
-        } else { num = await redis.get(KEY_CURRENT_NUMBER) || 0; }
+        } else { 
+            num = parseInt(await redis.get(KEY_CURRENT_NUMBER)) || 0; 
+        }
         
         checkAndNotifyLineUsers(num);
         io.emit("updateWaitTime", await calculateSmartWaitTime());
@@ -962,5 +1016,5 @@ process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
 
 server.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Server v18.12 (Admin Login Hint Customization) ready on port ${PORT}`);
+    console.log(`🚀 Server v18.13 (Lua/Pipeline/Fixes) ready on port ${PORT}`);
 });
