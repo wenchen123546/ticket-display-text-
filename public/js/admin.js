@@ -1,6 +1,6 @@
 /*
  * ==========================================
- * 後台邏輯 (admin.js) - v18.15 Optimized
+ * 後台邏輯 (admin.js) - v18.15 Optimized + LINE Set Hint
  * ==========================================
  */
 
@@ -233,6 +233,7 @@ async function showPanel() {
     ];
     elementsToToggle.forEach(id => {
         const el = document.getElementById(id);
+        // 清除日誌按鈕 (clear-log-btn) 對所有登入者顯示
         if(el) el.style.display = (isSuper || id === 'clear-log-btn') ? "block" : "none";
     });
 
@@ -553,6 +554,7 @@ const btnMarkPassed = document.getElementById("btn-mark-passed");
 const btnIssuePrev = document.getElementById("btn-issue-prev");
 const btnIssueNext = document.getElementById("btn-issue-next");
 
+// 號碼控制 API 更新
 if(btnCallPrev) btnCallPrev.onclick = () => apiRequest("/api/control/call", { direction: "prev" });
 if(btnCallNext) btnCallNext.onclick = () => apiRequest("/api/control/call", { direction: "next" });
 
@@ -858,7 +860,8 @@ if(modalOverlay) modalOverlay.onclick = (e) => { if (e.target === modalOverlay) 
 // --- LINE 設定邏輯 ---
 const domKeys = [
     "approach", "arrival", "status", "personal", "passed", 
-    "set_ok", "cancel", "login_hint", "err_passed", "err_no_sub"
+    "set_ok", "cancel", "login_hint", "err_passed", "err_no_sub",
+    "set_hint" // [新增]
 ];
 
 async function loadLineSettings() {
