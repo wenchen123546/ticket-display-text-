@@ -1,7 +1,7 @@
 // --- 1. 元素節點 (DOM) ---
 const loginContainer = document.getElementById("login-container");
 const adminPanel = document.getElementById("admin-panel");
-const usernameInput = document.getElementById("username-input"); 
+const usernameInput = document.getElementById("username-input");
 const passwordInput = document.getElementById("password-input");
 const loginButton = document.getElementById("login-button");
 const loginError = document.getElementById("login-error");
@@ -21,20 +21,21 @@ const newLinkTextInput = document.getElementById("new-link-text");
 const newLinkUrlInput = document.getElementById("new-link-url");
 const addFeaturedBtn = document.getElementById("add-featured-btn");
 const soundToggle = document.getElementById("sound-toggle");
-const publicToggle = document.getElementById("public-toggle"); 
+const publicToggle = document.getElementById("public-toggle");
 const adminLogUI = document.getElementById("admin-log-ui");
 const clearLogBtn = document.getElementById("clear-log-btn");
 const resetAllBtn = document.getElementById("resetAll");
-const onlineUsersList = document.getElementById("online-users-list"); 
+const onlineUsersList = document.getElementById("online-users-list");
 
-// 【新】手動設定已發號碼 DOM
+// 手動設定已發號碼 DOM
 const manualIssuedInput = document.getElementById("manualIssuedNumber");
 const setIssuedBtn = document.getElementById("setIssuedNumber");
 
+// 用戶管理 DOM
 const userListUI = document.getElementById("user-list-ui");
 const newUserUsernameInput = document.getElementById("new-user-username");
 const newUserPasswordInput = document.getElementById("new-user-password");
-const newUserNicknameInput = document.getElementById("new-user-nickname"); 
+const newUserNicknameInput = document.getElementById("new-user-nickname");
 const addUserBtn = document.getElementById("add-user-btn");
 const setNickUsernameInput = document.getElementById("set-nick-username");
 const setNickNicknameInput = document.getElementById("set-nick-nickname");
@@ -47,7 +48,7 @@ const modeRadios = document.getElementsByName("systemMode");
 const statsTodayCount = document.getElementById("stats-today-count");
 const statsListUI = document.getElementById("stats-list-ui");
 const btnRefreshStats = document.getElementById("btn-refresh-stats");
-const btnClearStats = document.getElementById("btn-clear-stats"); 
+const btnClearStats = document.getElementById("btn-clear-stats");
 const btnExportCsv = document.getElementById("btn-export-csv");
 const hourlyChartEl = document.getElementById("hourly-chart");
 const broadcastInput = document.getElementById("broadcast-msg");
@@ -67,17 +68,22 @@ const lineMsgArrivalInput = document.getElementById("line-msg-arrival");
 const btnSaveLineMsg = document.getElementById("btn-save-line-msg");
 const btnResetLineMsg = document.getElementById("btn-reset-line-msg");
 
+// 【關鍵】LINE 解鎖密碼 DOM (確保這裡正確選取)
+const unlockPwdGroup = document.getElementById("unlock-pwd-group");
+const lineUnlockPwdInput = document.getElementById("line-unlock-pwd");
+const btnSaveUnlockPwd = document.getElementById("btn-save-unlock-pwd");
+
 // --- 2. 全域變數 ---
-let token = ""; 
-let userRole = "normal"; 
-let username = ""; 
-let uniqueUsername = ""; 
-let toastTimer = null; 
-let publicToggleConfirmTimer = null; 
+let token = "";
+let userRole = "normal";
+let username = "";
+let uniqueUsername = "";
+let toastTimer = null;
+let publicToggleConfirmTimer = null;
 let editingHour = null;
 
 // --- 3. Socket.io ---
-const socket = io({ 
+const socket = io({
     autoConnect: false,
     auth: { token: "" }
 });
@@ -91,33 +97,43 @@ function showLogin() {
 }
 
 async function showPanel() {
+    // 隱藏登入頁，顯示主面板
+    loginContainer.style.display = "none";
+    adminPanel.style.display = "block";
+    document.title = `後台管理 - ${username}`;
+
+    // 針對超級管理員的顯示邏輯
     if (userRole === 'super') {
         const userManagementCard = document.getElementById("card-user-management");
         if (userManagementCard) userManagementCard.style.display = "block";
-        const clearLogBtnEl = document.getElementById("clear-log-btn");
-        if (clearLogBtnEl) clearLogBtnEl.style.display = "block";
-        if(btnExportCsv) btnExportCsv.style.display = "block";
         
-        if(modeSwitcherGroup) modeSwitcherGroup.style.display = "block";
-        await loadAdminUsers(); 
-    }
+        if (clearLogBtn) clearLogBtn.style.display = "block";
+        if (btnExportCsv) btnExportCsv.style.display = "block";
+        if (modeSwitcherGroup) modeSwitcherGroup.style.display = "block";
+        
+        // 【關鍵修復】強制顯示 LINE 解鎖密碼區塊
+        if (unlockPwdGroup) {
+            unlockPwdGroup.style.display = "block";
+        }
 
-    loginContainer.style.display = "none";
-    adminPanel.style.display = "block";
-    document.title = `後台管理 - ${username}`; 
+        await loadAdminUsers();
+    } else {
+        // 一般管理員隱藏敏感區塊
+        if (unlockPwdGroup) unlockPwdGroup.style.display = "none";
+    }
     
-    await loadStats(); 
-    await loadLineSettings(); 
+    await loadStats();
+    await loadLineSettings();
     socket.connect();
 }
 
 async function attemptLogin(loginName, loginPass) {
     loginError.textContent = "驗證中...";
     try {
-        const res = await fetch("/login", { 
+        const res = await fetch("/login", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ username: loginName, password: loginPass }), 
+            body: JSON.stringify({ username: loginName, password: loginPass }),
         });
         const data = await res.json();
 
@@ -125,11 +141,11 @@ async function attemptLogin(loginName, loginPass) {
             loginError.textContent = data.error || "登入失敗";
             showLogin();
         } else {
-            token = data.token;       
-            userRole = data.role;     
-            username = data.nickname; 
-            uniqueUsername = data.username; 
-            socket.auth.token = token; 
+            token = data.token;
+            userRole = data.role;
+            username = data.nickname;
+            uniqueUsername = data.username;
+            socket.auth.token = token;
             await showPanel();
         }
     } catch (err) {
@@ -141,12 +157,12 @@ async function attemptLogin(loginName, loginPass) {
 
 document.addEventListener("DOMContentLoaded", () => { showLogin(); });
 
-loginButton.addEventListener("click", () => { 
-    attemptLogin(usernameInput.value, passwordInput.value); 
+loginButton.addEventListener("click", () => {
+    attemptLogin(usernameInput.value, passwordInput.value);
 });
 usernameInput.addEventListener("keyup", (event) => { if (event.key === "Enter") { passwordInput.focus(); } });
-passwordInput.addEventListener("keyup", (event) => { 
-    if (event.key === "Enter") { attemptLogin(usernameInput.value, passwordInput.value); } 
+passwordInput.addEventListener("keyup", (event) => {
+    if (event.key === "Enter") { attemptLogin(usernameInput.value, passwordInput.value); }
 });
 
 // --- 5. Toast 通知函式 ---
@@ -154,7 +170,7 @@ function showToast(message, type = 'info') {
     const toast = document.getElementById("toast-notification");
     if (!toast) return;
     toast.textContent = message;
-    toast.className = type; 
+    toast.className = type;
     toast.classList.add("show");
     if (toastTimer) clearTimeout(toastTimer);
     toastTimer = setTimeout(() => { toast.classList.remove("show"); }, 3000);
@@ -164,13 +180,13 @@ function showToast(message, type = 'info') {
 socket.on("connect", () => {
     console.log("Socket.io 已連接");
     statusBar.classList.remove("visible");
-    showToast(`✅ 已連線 (${username})`, "success"); 
+    showToast(`✅ 已連線 (${username})`, "success");
 });
 socket.on("disconnect", () => {
     console.warn("Socket.io 已斷線");
     statusBar.classList.add("visible");
     showToast("❌ 已從伺服器斷線", "error");
-    renderOnlineAdmins([]); 
+    renderOnlineAdmins([]);
 });
 socket.on("connect_error", (err) => {
     if (err.message === "Authentication failed" || err.message === "驗證失敗或 Session 已過期") {
@@ -189,18 +205,18 @@ socket.on("initAdminLogs", (logs) => {
     logs.reverse().forEach(logMsg => {
         const li = document.createElement("li");
         li.textContent = logMsg;
-        fragment.appendChild(li); 
+        fragment.appendChild(li);
     });
-    adminLogUI.appendChild(fragment); 
-    adminLogUI.scrollTop = adminLogUI.scrollHeight; 
+    adminLogUI.appendChild(fragment);
+    adminLogUI.scrollTop = adminLogUI.scrollHeight;
 });
 socket.on("newAdminLog", (logMessage) => {
     const firstLi = adminLogUI.querySelector("li");
     if (firstLi && firstLi.textContent.includes("[目前尚無日誌]")) adminLogUI.innerHTML = "";
     const li = document.createElement("li");
     li.textContent = logMessage;
-    adminLogUI.appendChild(li); 
-    adminLogUI.scrollTop = adminLogUI.scrollHeight; 
+    adminLogUI.appendChild(li);
+    adminLogUI.scrollTop = adminLogUI.scrollHeight;
 });
 socket.on("updateOnlineAdmins", (admins) => renderOnlineAdmins(admins));
 
@@ -210,7 +226,7 @@ socket.on("updateQueue", (data) => {
     if(numberEl) numberEl.textContent = current;
     if(issuedNumberEl) issuedNumberEl.textContent = issued;
     if(waitingCountEl) waitingCountEl.textContent = Math.max(0, issued - current);
-    loadStats(); 
+    loadStats();
 });
 socket.on("update", (num) => { if(numberEl) numberEl.textContent = num; loadStats(); });
 
@@ -233,11 +249,15 @@ async function apiRequest(endpoint, body, a_returnResponse = false) {
         const res = await fetch(endpoint, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ ...body, token }), 
+            body: JSON.stringify({ ...body, token }),
         });
-        const responseData = await res.json(); 
+        const responseData = await res.json();
         if (!res.ok) {
             if (res.status === 403) {
+                if(responseData.error === "權限不足") {
+                    showToast("❌ 權限不足", "error");
+                    return false;
+                }
                 alert("Session 已過期，請重新登入。");
                 showLogin();
             } else {
@@ -245,7 +265,7 @@ async function apiRequest(endpoint, body, a_returnResponse = false) {
             }
             return false;
         }
-        return a_returnResponse ? responseData : true; 
+        return a_returnResponse ? responseData : true;
     } catch (err) {
         showToast(`❌ 連線失敗: ${err.message}`, "error");
         return false;
@@ -301,16 +321,16 @@ if (modeRadios) {
 
 // --- 9. 渲染 ---
 function renderPassedListUI(numbers) {
-    passedListUI.innerHTML = ""; 
+    passedListUI.innerHTML = "";
     if (!Array.isArray(numbers)) return;
     const fragment = document.createDocumentFragment();
     numbers.forEach((number) => {
         const li = document.createElement("li");
         li.innerHTML = `<span>${number}</span>`;
         const deleteBtn = document.createElement("button");
-        deleteBtn.type = "button"; deleteBtn.className = "delete-item-btn"; deleteBtn.textContent = "×";
+        deleteBtn.type = "button"; deleteBtn.className = "delete-item-btn"; deleteBtn.innerHTML = "✕"; // 使用 HTML entity 更好看
         const actionCallback = async () => { deleteBtn.disabled = true; await apiRequest("/api/passed/remove", { number: number }); };
-        setupConfirmationButton(deleteBtn, "×", "⚠️", actionCallback);
+        setupConfirmationButton(deleteBtn, "✕", "⚠️", actionCallback);
         li.appendChild(deleteBtn);
         fragment.appendChild(li);
     });
@@ -327,9 +347,9 @@ function renderFeaturedListUI(contents) {
         span.innerHTML = `${item.linkText}<br><small style="color:#666">${item.linkUrl}</small>`;
         li.appendChild(span);
         const deleteBtn = document.createElement("button");
-        deleteBtn.type = "button"; deleteBtn.className = "delete-item-btn"; deleteBtn.textContent = "×";
+        deleteBtn.type = "button"; deleteBtn.className = "delete-item-btn"; deleteBtn.innerHTML = "✕";
         const actionCallback = async () => { deleteBtn.disabled = true; await apiRequest("/api/featured/remove", { linkText: item.linkText, linkUrl: item.linkUrl }); };
-        setupConfirmationButton(deleteBtn, "×", "⚠️", actionCallback);
+        setupConfirmationButton(deleteBtn, "✕", "⚠️", actionCallback);
         li.appendChild(deleteBtn);
         fragment.appendChild(li);
     });
@@ -345,7 +365,7 @@ function renderOnlineAdmins(admins) {
         if (b.username === uniqueUsername) return 1;
         if (a.role === 'super' && b.role !== 'super') return -1;
         if (a.role !== 'super' && b.role === 'super') return 1;
-        return a.nickname.localeCompare(b.nickname); 
+        return a.nickname.localeCompare(b.nickname);
     });
     const fragment = document.createDocumentFragment();
     admins.forEach(admin => {
@@ -367,7 +387,6 @@ async function changeNumber(direction) { await apiRequest("/change-number", { di
 async function setNumber() { const num = document.getElementById("manualNumber").value; if (num === "") return; if (await apiRequest("/set-number", { number: num })) { document.getElementById("manualNumber").value = ""; showToast("✅ 號碼已設定", "success"); } }
 const actionClearAdminLog = async () => { showToast("🧼 正在清除日誌...", "info"); await apiRequest("/api/logs/clear", {}); }
 
-// 【新】手動設定已發號碼函式
 async function setIssuedNumber() {
     const num = manualIssuedInput.value;
     if (num === "") return;
@@ -446,7 +465,7 @@ publicToggle.addEventListener("change", () => {
 // --- 超級管理員功能 ---
 async function loadAdminUsers() {
     if (userRole !== 'super' || !userListUI) return;
-    const data = await apiRequest("/api/admin/users", {}, true); 
+    const data = await apiRequest("/api/admin/users", {}, true);
     if (data && data.users) {
         userListUI.innerHTML = "";
         data.users.sort((a, b) => { if (a.role === 'super' && b.role !== 'super') return -1; if (a.role !== 'super' && b.role === 'super') return 1; return a.username.localeCompare(b.username); });
@@ -456,9 +475,9 @@ async function loadAdminUsers() {
             li.innerHTML = `<span>${icon} <strong>${user.nickname}</strong> (${user.username})</span>`;
             if (user.role !== 'super') {
                 const deleteBtn = document.createElement("button");
-                deleteBtn.type = "button"; deleteBtn.className = "delete-item-btn"; deleteBtn.textContent = "×";
+                deleteBtn.type = "button"; deleteBtn.className = "delete-item-btn"; deleteBtn.innerHTML = "✕";
                 const actionCallback = async () => { deleteBtn.disabled = true; if (await apiRequest("/api/admin/del-user", { delUsername: user.username })) { showToast(`✅ 已刪除: ${user.username}`, "success"); await loadAdminUsers(); } else { deleteBtn.disabled = false; } };
-                setupConfirmationButton(deleteBtn, "×", "⚠️", actionCallback);
+                setupConfirmationButton(deleteBtn, "✕", "⚠️", actionCallback);
                 li.appendChild(deleteBtn);
             }
             userListUI.appendChild(li);
@@ -467,7 +486,7 @@ async function loadAdminUsers() {
 }
 if (addUserBtn) {
     addUserBtn.onclick = async () => {
-        const newUsername = newUserUsernameInput.value; const newPassword = newUserPasswordInput.value; const newNickname = newUserNicknameInput.value.trim(); 
+        const newUsername = newUserUsernameInput.value; const newPassword = newUserPasswordInput.value; const newNickname = newUserNicknameInput.value.trim();
         if (!newUsername || !newPassword) return alert("帳號和密碼必填。");
         addUserBtn.disabled = true;
         if (await apiRequest("/api/admin/add-user", { newUsername, newPassword, newNickname })) { showToast(`✅ 已新增: ${newUsername}`, "success"); newUserUsernameInput.value = ""; newUserPasswordInput.value = ""; newUserNicknameInput.value = ""; await loadAdminUsers(); }
@@ -499,7 +518,6 @@ async function loadStats() {
             const li = document.createElement("li");
             const time = new Date(item.time).toLocaleTimeString('zh-TW', { hour12: false });
             li.textContent = `${time} - 號碼 ${item.num} (${item.operator})`;
-            li.style.borderBottom = "1px solid #ccc"; li.style.padding = "4px 0";
             fragment.appendChild(li);
         });
         statsListUI.appendChild(fragment);
@@ -517,7 +535,7 @@ function renderHourlyChart(counts, serverHour) {
         if (i === currentHour) col.classList.add("current");
         col.onclick = () => openEditModal(i, val);
         const valDiv = document.createElement("div"); valDiv.className = "chart-val"; valDiv.textContent = val > 0 ? val : "";
-        const barDiv = document.createElement("div"); barDiv.className = "chart-bar"; barDiv.style.height = `${Math.max(percent, 2)}%`; if (val === 0) barDiv.style.backgroundColor = "#e5e7eb"; 
+        const barDiv = document.createElement("div"); barDiv.className = "chart-bar"; barDiv.style.height = `${Math.max(percent, 2)}%`; if (val === 0) barDiv.style.backgroundColor = "#e5e7eb";
         const labelDiv = document.createElement("div"); labelDiv.className = "chart-label"; labelDiv.textContent = i.toString().padStart(2, '0');
         col.appendChild(valDiv); col.appendChild(barDiv); col.appendChild(labelDiv); fragment.appendChild(col);
     }
@@ -536,6 +554,36 @@ if (btnClearStats) { setupConfirmationButton(btnClearStats, "清空紀錄", "⚠
 if (btnExportCsv) { btnExportCsv.onclick = downloadCSV; }
 
 // LINE 訊息設定
-async function loadLineSettings() { if (!lineMsgApproachInput) return; const data = await apiRequest("/api/admin/line-settings/get", {}, true); if (data && data.success) { lineMsgApproachInput.value = data.approach; lineMsgArrivalInput.value = data.arrival; } }
+async function loadLineSettings() {
+    if (!lineMsgApproachInput) return;
+    
+    // 載入基本文案
+    const data = await apiRequest("/api/admin/line-settings/get", {}, true);
+    if (data && data.success) {
+        lineMsgApproachInput.value = data.approach;
+        lineMsgArrivalInput.value = data.arrival;
+    }
+
+    // 若是 Super Admin，載入解鎖密碼
+    if (userRole === 'super') {
+        const pwdData = await apiRequest("/api/admin/line-settings/get-unlock-pass", {}, true);
+        if(pwdData && pwdData.success && lineUnlockPwdInput) {
+            lineUnlockPwdInput.value = pwdData.password;
+        }
+    }
+}
 if (btnSaveLineMsg) { btnSaveLineMsg.onclick = async () => { const approach = lineMsgApproachInput.value.trim(); const arrival = lineMsgArrivalInput.value.trim(); if(!approach || !arrival) return alert("內容不可為空"); btnSaveLineMsg.disabled = true; if (await apiRequest("/api/admin/line-settings/save", { approach, arrival })) { showToast("✅ LINE 文案已更新", "success"); } btnSaveLineMsg.disabled = false; }; }
 if (btnResetLineMsg) { setupConfirmationButton(btnResetLineMsg, "恢復預設值", "⚠️ 確認恢復", async () => { const data = await apiRequest("/api/admin/line-settings/reset", {}, true); if (data && data.success) { lineMsgApproachInput.value = data.approach; lineMsgArrivalInput.value = data.arrival; showToast("↺ 已恢復預設文案", "success"); } }); }
+
+// 【新】設定解鎖密碼
+if (btnSaveUnlockPwd) {
+    btnSaveUnlockPwd.onclick = async () => {
+        const pwd = lineUnlockPwdInput.value.trim();
+        if(!pwd) return alert("密碼不可為空");
+        btnSaveUnlockPwd.disabled = true;
+        if (await apiRequest("/api/admin/line-settings/set-unlock-pass", { password: pwd })) {
+            showToast("✅ 解鎖密碼已設定", "success");
+        }
+        btnSaveUnlockPwd.disabled = false;
+    }
+}
