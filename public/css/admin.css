@@ -2,17 +2,14 @@
    1. 核心設計系統 (Design Tokens)
    ========================================= */
 :root {
-    /* 背景與表面 */
     --bg-body: #f1f5f9;       
     --bg-surface: #ffffff;    
     --bg-subtle: #f8fafc;
 
-    /* 文字顏色 */
     --text-main: #1e293b;     
     --text-sub: #64748b;      
     --text-light: #94a3b8;    
 
-    /* 品牌色與漸層 */
     --primary: #4f46e5;
     --primary-gradient: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
     --primary-glow: rgba(79, 70, 229, 0.4);
@@ -23,44 +20,43 @@
     --danger: #ef4444;
     --danger-gradient: linear-gradient(135deg, #f87171 0%, #dc2626 100%);
     
-    /* 色彩計畫：過號專用色 (黃/橘) */
     --warning: #f59e0b;
     --warning-hover: #d97706;
 
-    /* 數值 */
     --radius-lg: 16px;
     --radius-md: 10px;
     --shadow-soft: 0 4px 20px -2px rgba(0,0,0,0.05);
     --shadow-hover: 0 10px 25px -5px rgba(0,0,0,0.1);
     
-    /* 側邊欄寬度 */
     --sidebar-width: 240px;
 }
 
 * { box-sizing: border-box; outline: none; -webkit-tap-highlight-color: transparent; }
 
+/* 修正：Body 邊距歸零 */
 body {
     font-family: "Inter", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
     background-color: var(--bg-body);
     color: var(--text-main);
     margin: 0; padding: 0;
-    min-height: 100vh;
-    overflow-x: hidden;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden; /* 防止最外層出現捲軸 */
 }
 
-/* 輔助類別 */
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; }
 
 /* =========================================
-   2. 側邊欄佈局 (Sidebar Layout)
+   2. 側邊欄佈局 (Sidebar Layout) - 修正
    ========================================= */
 #admin-panel {
-    width: 100%; height: 100vh;
+    width: 100%; height: 100%;
     display: flex; flex-direction: column;
 }
 
 .admin-layout {
     display: flex; width: 100%; height: 100%;
+    overflow: hidden;
 }
 
 /* 左側導覽 */
@@ -106,24 +102,29 @@ body {
 .sidebar-footer { padding: 20px; border-top: 1px solid #f1f5f9; }
 .lang-select { width: 100%; padding: 8px; border-radius: 8px; border: 1px solid #e2e8f0; background: white; cursor: pointer; }
 
-/* 右側主內容 */
+/* 右側主內容 - 修正高度與滾動 */
 .content-area {
     margin-left: var(--sidebar-width);
     flex: 1;
     padding: 30px;
     height: 100vh;
-    overflow-y: auto;
+    overflow-y: auto; /* 內容過長才滾動 */
+    position: relative;
 }
 
-/* 分區顯示控制 */
+/* 分區顯示控制 - 加入 !important 確保覆蓋 */
 .section-group {
-    display: none; animation: fadeIn 0.3s ease;
+    display: none !important; 
+    animation: fadeIn 0.3s ease;
 }
-.section-group.active { display: block; }
+.section-group.active { 
+    display: block !important; 
+}
+
 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
 /* =========================================
-   3. 全域元件與按鈕 (Global Components)
+   3. 元件與按鈕
    ========================================= */
 #status-bar {
     position: fixed; top: 0; left: 0; width: 100%;
@@ -134,7 +135,6 @@ body {
 }
 #status-bar.visible { transform: translateY(0); }
 
-/* --- 按鈕系統 --- */
 button {
     font-family: inherit; border: none; cursor: pointer;
     display: inline-flex; align-items: center; justify-content: center;
@@ -144,15 +144,12 @@ button {
 button:active { transform: scale(0.96); }
 button:disabled { opacity: 0.6; cursor: not-allowed; filter: grayscale(1); }
 
-/* 色彩計畫 */
 .btn-primary { background: var(--primary-gradient); color: white; border-radius: 50px; box-shadow: 0 4px 10px var(--primary-glow); }
 .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 15px var(--primary-glow); }
 
-/* 警告色/過號色 */
 .btn-warn { background: var(--warning); color: white; border-radius: var(--radius-md); }
 .btn-warn:hover { background: var(--warning-hover); transform: translateY(-2px); }
 
-/* 玻璃/次要按鈕 */
 .btn-glass { background: white; border: 1px solid #e2e8f0; color: var(--text-sub); border-radius: 50px; }
 .btn-glass:hover { border-color: #cbd5e1; color: var(--text-main); background: #f8fafc; }
 
@@ -175,7 +172,6 @@ button:disabled { opacity: 0.6; cursor: not-allowed; filter: grayscale(1); }
 }
 .btn-danger-outline:hover { background: #ef4444; color: white; }
 
-/* 叫號大按鈕 (Big Action Row) */
 .big-action-row { display: flex; gap: 12px; margin-bottom: 25px; }
 .btn-big {
     flex: 1; padding: 25px 15px;
@@ -184,11 +180,10 @@ button:disabled { opacity: 0.6; cursor: not-allowed; filter: grayscale(1); }
     height: auto; transition: all 0.2s;
 }
 .btn-big .icon { font-size: 1.6rem; margin: 0; }
-/* 下一號特別大 */
 #btn-call-next { flex: 1.2; font-size: 1.2rem; }
 
 /* =========================================
-   4. 登入卡片 (Login)
+   4. 登入卡片
    ========================================= */
 #login-container {
     position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
@@ -211,7 +206,7 @@ button:disabled { opacity: 0.6; cursor: not-allowed; filter: grayscale(1); }
 #login-error { color: var(--danger); margin-top: 20px; font-size: 0.9rem; }
 
 /* =========================================
-   5. 儀表板與卡片 (Dashboard & Cards)
+   5. 儀表板與卡片
    ========================================= */
 .dashboard-header {
     background: var(--bg-surface);
@@ -227,12 +222,10 @@ button:disabled { opacity: 0.6; cursor: not-allowed; filter: grayscale(1); }
 .dashboard-item { text-align: center; flex: 1; min-width: 140px; }
 .dashboard-item .label { display: block; font-size: 0.75rem; color: var(--text-light); letter-spacing: 1.5px; font-weight: 700; margin-bottom: 5px; }
 .dashboard-item .value { display: block; line-height: 1; font-weight: 800; margin-bottom: 5px; }
-
 .big-number { font-size: 3.5rem; color: #1e293b; letter-spacing: -2px; }
 .sub-number { font-size: 2rem; color: #475569; letter-spacing: -1px; }
 .dashboard-divider { width: 1px; height: 50px; background: #e2e8f0; }
 
-/* Grid 佈局 */
 .card-container {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -249,7 +242,6 @@ button:disabled { opacity: 0.6; cursor: not-allowed; filter: grayscale(1); }
 }
 .accent-blue { border-top: 6px solid #3b82f6; }
 .accent-green { border-top: 6px solid #10b981; }
-
 .admin-card h3 {
     margin: 0 0 25px 0; padding-bottom: 15px;
     font-size: 1.1rem; color: var(--text-main); font-weight: 700;
@@ -259,7 +251,7 @@ button:disabled { opacity: 0.6; cursor: not-allowed; filter: grayscale(1); }
 .control-divider { height: 1px; background: #f1f5f9; margin: 20px 0; }
 
 /* =========================================
-   6. 表單元件 (Forms)
+   6. 表單與輸入
    ========================================= */
 .control-group { margin-bottom: 20px; }
 .section-hint { font-size: 0.8rem; color: #64748b; margin-top: 8px; font-style: italic; }
@@ -293,7 +285,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary); widt
 .radio-option { display: flex; align-items: center; gap: 8px; background: white; padding: 8px 12px; border-radius: 8px; border: 1px solid #e2e8f0; }
 
 /* =========================================
-   7. 列表與圖表 (Lists & Charts)
+   7. 列表與圖表
    ========================================= */
 ul { padding: 0; margin: 0; list-style: none; }
 .list-editor ul, .admin-log-container ul, #stats-list-ui, .online-users-ui {
@@ -326,7 +318,7 @@ li:last-child { border-bottom: none; }
 .sub-header { margin-top: 25px; display: block; font-weight: 700; color: var(--text-main); margin-bottom: 10px; }
 
 /* =========================================
-   8. 彈窗與浮動 (Modal & Toast)
+   8. 彈窗與 Toast
    ========================================= */
 .modal-overlay {
     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -380,7 +372,8 @@ li:last-child { border-bottom: none; }
     /* 內容區 */
     .content-area {
         margin-left: 0; margin-bottom: 70px; /* 避開底部導覽 */
-        padding: 15px; height: auto; overflow: visible;
+        padding: 15px; height: calc(100vh - 70px);
+        overflow-y: auto;
     }
 
     /* 卡片調整 */
