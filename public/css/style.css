@@ -44,7 +44,12 @@ body {
 /* --- 2. 內容排版 & 卡片結構 --- */
 
 .top-header { width: 100%; margin-bottom: 10px; }
-h1 { font-size: var(--font-h1); color: var(--color-danger); margin: 0; }
+h1 { 
+    font-size: var(--font-h1); 
+    color: var(--color-danger); 
+    margin: 0; 
+    user-select: none; /* [優化] 禁止選取標題文字 */
+}
 #last-updated { font-size: 1rem; color: var(--color-text-light); margin: 5px 0 0 0; }
 
 .content-wrapper {
