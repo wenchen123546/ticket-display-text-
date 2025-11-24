@@ -1,10 +1,312 @@
 /*
  * ==========================================
- * 前端邏輯 (main.js) - v18.13 Optimized (Reconnection UX)
+ * 前端邏輯 (main.js) - v18.15 Optimized
  * ==========================================
  */
 
 // --- 0. i18n 字典與設定 (國際化) ---
+const i18nData = { /* ... (保留不變) ... */ };
+
+const langSelector = document.getElementById('language-selector');
+let currentLang = localStorage.getItem('callsys_lang') || ((navigator.language || navigator.userLanguage).startsWith('zh') ? 'zh-TW' : 'en');
+let T = i18nData[currentLang];
+
+// --- 1. DOM 元素統一管理 ---
+const DOM = {
+    number: document.getElementById("number"),
+    issuedNumberMain: document.getElementById("issued-number-main"),
+    passedList: document.getElementById("passedList"),
+    featuredContainer: document.getElementById("featured-container"),
+    statusBar: document.getElementById("status-bar"),
+    notifySound: document.getElementById("notify-sound"),
+    lastUpdated: document.getElementById("last-updated"),
+    soundPrompt: document.getElementById("sound-prompt"),
+    copyLinkPrompt: document.getElementById("copy-link-prompt"),
+    passedContainer: document.getElementById("passed-container"),
+    ticketingModeContainer: document.getElementById("ticketing-mode-container"),
+    inputModeContainer: document.getElementById("input-mode-container"),
+    takeTicketView: document.getElementById("take-ticket-view"),
+    inputModeView: document.getElementById("input-mode-view"),
+    myTicketView: document.getElementById("my-ticket-view"),
+    btnTakeTicket: document.getElementById("btn-take-ticket"),
+    btnTrackTicket: document.getElementById("btn-track-ticket"),
+    manualTicketInput: document.getElementById("manual-ticket-input"),
+    myTicketNum: document.getElementById("my-ticket-num"),
+    ticketCurrentDisplay: document.getElementById("ticket-current-display"),
+    ticketWaitingCount: document.getElementById("ticket-waiting-count"),
+    btnCancelTicket: document.getElementById("btn-cancel-ticket"),
+    ticketStatusText: document.getElementById("ticket-status-text"),
+    ticketWaitTime: document.getElementById("ticket-wait-time"),
+};
+
+// --- 2. 狀態變數與工具函式 ---
+let isSoundEnabled = false; 
+let isLocallyMuted = false; 
+let lastUpdateTime = null;
+let currentSystemMode = 'ticketing'; 
+let avgServiceTime = 0;
+let reconnectTimer = null; 
+let myTicket = localStorage.getItem('callsys_ticket') ? parseInt(localStorage.getItem('callsys_ticket')) : null;
+
+function showToast(msg, type = 'info') { /* ... (保留不變) ... */ }
+function vibratePattern(pattern) { if (navigator.vibrate) navigator.vibrate(pattern); }
+function speakText(text, rate) { /* ... (保留不變) ... */ }
+async function requestWakeLock() { /* ... (保留不變) ... */ }
+document.addEventListener('visibilitychange', async () => { /* ... (保留不變) ... */ });
+
+// --- 3. i18n & Time Logic ---
+function applyI18n() {
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        if(T[key]) el.textContent = T[key];
+    });
+    if(DOM.manualTicketInput) DOM.manualTicketInput.placeholder = T["manual_input_placeholder"];
+    if(DOM.btnTakeTicket && !DOM.btnTakeTicket.disabled) { DOM.btnTakeTicket.textContent = T["take_ticket"]; }
+}
+
+function updateTimeText() {
+    if (!lastUpdateTime) return;
+    const diff = Math.floor((new Date() - lastUpdateTime) / 60000);
+    DOM.lastUpdated.textContent = diff < 1 ? T["time_just_now"] : T["time_min_ago"].replace("%s", diff);
+}
+setInterval(updateTimeText, 10000);
+
+if(langSelector) {
+    langSelector.value = currentLang;
+    langSelector.addEventListener('change', (e) => {
+        currentLang = e.target.value;
+        localStorage.setItem('callsys_lang', currentLang);
+        T = i18nData[currentLang];
+        applyI18n();
+        updateTicketUI(parseInt(DOM.number.textContent) || 0);
+        updateMuteUI(isLocallyMuted);
+        updateTimeText();
+    });
+}
+
+// --- 4. Socket.io 初始化與事件處理 ---
+const socket = io({ autoConnect: false });
+
+socket.on("connect", () => {
+    socket.emit('joinRoom', 'public');
+    if (reconnectTimer) clearInterval(reconnectTimer);
+    DOM.statusBar.textContent = T["status_connected"] || "Connected";
+    DOM.statusBar.style.backgroundColor = "#10b981"; 
+    setTimeout(() => { if (socket.connected) DOM.statusBar.classList.remove("visible"); }, 1500);
+    requestWakeLock(); 
+});
+
+socket.on("disconnect", (reason) => {
+    DOM.statusBar.classList.add("visible");
+    if (reconnectTimer) clearInterval(reconnectTimer);
+    let countdownVal = 3;
+    const errorText = T["error_network"] || "Connection Lost";
+    DOM.statusBar.textContent = `${errorText} (${countdownVal}s)`;
+    DOM.statusBar.style.backgroundColor = "#dc2626";
+
+    reconnectTimer = setInterval(() => {
+        countdownVal--;
+        if (countdownVal > 0) DOM.statusBar.textContent = `${errorText} (${countdownVal}s)`;
+        else { DOM.statusBar.textContent = "Connecting..."; DOM.statusBar.style.backgroundColor = "#d97706"; clearInterval(reconnectTimer); }
+    }, 1000);
+    DOM.lastUpdated.textContent = errorText;
+});
+
+socket.on("updateQueue", (data) => {
+    const current = data.current;
+    if(DOM.issuedNumberMain) DOM.issuedNumberMain.textContent = data.issued;
+    handleNewNumber(current);
+    updateTicketUI(current);
+});
+
+socket.on("adminBroadcast", (msg) => {
+    if (!isLocallyMuted) {
+        speakText(msg, 1.0); 
+        showToast(`${T["public_announcement"]}${msg}`, "info");
+    }
+});
+
+socket.on("updateWaitTime", (time) => { avgServiceTime = time; updateTicketUI(parseInt(DOM.number.textContent) || 0); });
+socket.on("updateSoundSetting", (isEnabled) => { isSoundEnabled = isEnabled; });
+socket.on("updatePublicStatus", (status) => { document.body.classList.toggle("is-closed", !status); if (status) socket.connect(); else socket.disconnect(); });
+socket.on("updateSystemMode", (mode) => { currentSystemMode = mode; switchSystemModeUI(mode); });
+socket.on("updatePassed", (numbers) => renderPassed(numbers));
+socket.on("updateFeaturedContents", (contents) => renderFeatured(contents));
+socket.on("updateTimestamp", (ts) => { lastUpdateTime = new Date(ts); updateTimeText(); });
+
+
+// --- 5. Core Logic ---
+
+function switchSystemModeUI(mode) {
+    const isTicketing = mode === 'ticketing';
+    DOM.ticketingModeContainer.style.display = isTicketing ? "block" : "none";
+    DOM.inputModeContainer.style.display = isTicketing ? "none" : "block";
+    if (myTicket) showMyTicketMode(); else showTakeTicketMode();
+}
+
+function handleNewNumber(num) {
+    if (DOM.number.textContent !== String(num)) {
+        playNotificationSound();
+        setTimeout(() => {
+            if (DOM.number.textContent !== String(num) && isSoundEnabled && !isLocallyMuted) { speakText(`現在號碼，${num}號`, 0.9); }
+        }, 800);
+        
+        DOM.number.textContent = num;
+        document.title = `${num} - ${T["app_title"]}`;
+        DOM.number.classList.add("updated");
+        setTimeout(() => DOM.number.classList.remove("updated"), 500);
+    }
+}
+
+function updateTicketUI(currentNum) {
+    if (!myTicket) return;
+
+    DOM.ticketCurrentDisplay.textContent = currentNum;
+    const diff = myTicket - currentNum;
+    
+    let background = "linear-gradient(135deg, #2563eb 0%, #1e40af 100%)";
+    let statusText = T["status_wait"].replace("%s", diff);
+    let waitTimeDisplay = "none";
+    
+    if (diff > 0) {
+        DOM.ticketWaitingCount.textContent = diff;
+        if (avgServiceTime > 0) {
+            const min = Math.ceil(diff * avgServiceTime);
+            DOM.ticketWaitTime.textContent = T["estimated_wait"].replace("%s", min);
+            waitTimeDisplay = "block";
+        }
+        if (diff <= 3) {
+             vibratePattern([100]); 
+             if (document.hidden && Notification.permission === "granted") { new Notification(T["app_title"], { body: T["queue_notification"].replace("%s", diff), tag: 'approach' }); }
+        }
+    } else if (diff === 0) {
+        DOM.ticketWaitingCount.textContent = "0";
+        statusText = T["status_arrival"];
+        background = "linear-gradient(135deg, #059669 0%, #10b981 100%)";
+        triggerConfetti();
+        vibratePattern([200, 100, 200, 100, 200]); 
+        if (isSoundEnabled && !isLocallyMuted) speakText("恭喜，輪到您了，請前往櫃台", 1.0);
+        if (Notification.permission === "granted") { new Notification(T["app_title"], { body: T["arrival_notification"], requireInteraction: true, tag: 'arrival' }); }
+    } else {
+        DOM.ticketWaitingCount.textContent = "-";
+        statusText = T["status_passed"];
+        background = "linear-gradient(135deg, #d97706 0%, #b45309 100%)";
+    }
+    
+    DOM.ticketStatusText.textContent = statusText;
+    DOM.myTicketView.style.background = background; 
+    DOM.ticketWaitTime.style.display = waitTimeDisplay;
+}
+
+function showMyTicketMode() {
+    DOM.takeTicketView.style.display = "none";
+    DOM.inputModeView.style.display = "none";
+    DOM.myTicketView.style.display = "block";
+    DOM.myTicketNum.textContent = myTicket;
+    if ("Notification" in window && Notification.permission === "default") { Notification.requestPermission(); }
+}
+
+function showTakeTicketMode() {
+    DOM.myTicketView.style.display = "none";
+    DOM.takeTicketView.style.display = (currentSystemMode === 'ticketing') ? "block" : "none";
+    DOM.inputModeView.style.display = (currentSystemMode === 'input') ? "block" : "none";
+}
+
+function playNotificationSound() { /* ... (保留不變) ... */ }
+function triggerConfetti() { /* ... (保留不變) ... */ }
+function renderPassed(numbers) { /* ... (保留不變) ... */ }
+function renderFeatured(contents) { /* ... (保留不變) ... */ }
+
+// --- 6. Interaction Events ---
+
+if(DOM.btnTakeTicket) DOM.btnTakeTicket.addEventListener("click", async () => {
+    if ("Notification" in window && Notification.permission !== "granted") {
+        const p = await Notification.requestPermission();
+        if (p !== "granted" && !confirm("Without notifications, you must keep this tab open. Continue?")) return;
+    }
+
+    DOM.btnTakeTicket.disabled = true;
+    DOM.btnTakeTicket.textContent = T["taking_ticket"];
+    
+    try {
+        const res = await fetch("/api/ticket/take", { method: "POST" });
+        const data = await res.json();
+        
+        if (data.success) {
+            myTicket = data.ticket;
+            localStorage.setItem('callsys_ticket', myTicket);
+            showMyTicketMode();
+            updateTicketUI(parseInt(DOM.number.textContent) || 0);
+            showToast(T["take_success"], "success");
+        } else { showToast(data.error || T["take_fail"], "error"); }
+    } catch (e) { showToast(T["error_network"], "error"); } 
+    finally { DOM.btnTakeTicket.disabled = false; DOM.btnTakeTicket.textContent = T["take_ticket"]; }
+});
+
+if(DOM.btnTrackTicket) DOM.btnTrackTicket.addEventListener("click", async () => {
+    const val = DOM.manualTicketInput.value;
+    if (!val) return showToast(T["input_empty"], "error");
+    
+    if ("Notification" in window && Notification.permission !== "granted") {
+        const p = await Notification.requestPermission();
+        if (p !== "granted" && !confirm("Continue without notifications?")) return;
+    }
+
+    myTicket = parseInt(val);
+    localStorage.setItem('callsys_ticket', myTicket);
+    DOM.manualTicketInput.value = "";
+    
+    showMyTicketMode();
+    updateTicketUI(parseInt(DOM.number.textContent) || 0);
+    showToast(T["take_success"], "success");
+});
+
+if(DOM.btnCancelTicket) DOM.btnCancelTicket.addEventListener("click", () => {
+    if(confirm(T["cancel_confirm"])) {
+        localStorage.removeItem('callsys_ticket');
+        myTicket = null;
+        showTakeTicketMode();
+    }
+});
+
+function updateMuteUI(isMuted, needsPermission = false) {
+    isLocallyMuted = isMuted;
+    if (!DOM.soundPrompt) return;
+    const text = needsPermission || isMuted ? T["sound_mute"] : T["sound_on"];
+    DOM.soundPrompt.innerHTML = `<span class="emoji">${needsPermission || isMuted ? '🔇' : '🔊'}</span> ${text}`;
+    DOM.soundPrompt.classList.toggle("is-active", !needsPermission && !isMuted);
+}
+
+if (DOM.soundPrompt) DOM.soundPrompt.addEventListener("click", () => {
+    if (!audioPermissionGranted) { playNotificationSound(); } else { updateMuteUI(!isLocallyMuted); }
+});
+
+if (DOM.copyLinkPrompt) DOM.copyLinkPrompt.addEventListener("click", () => {
+    if (!navigator.clipboard) return alert("Use HTTPS to copy");
+    navigator.clipboard.writeText(window.location.href).then(() => {
+        const original = DOM.copyLinkPrompt.innerHTML;
+        DOM.copyLinkPrompt.innerHTML = T["copy_success"];
+        DOM.copyLinkPrompt.classList.add("is-copied");
+        setTimeout(() => { 
+            DOM.copyLinkPrompt.innerHTML = `<span class="emoji">🔗</span> ${T["copy_link"]}`; 
+            DOM.copyLinkPrompt.classList.remove("is-copied"); 
+        }, 2000);
+    });
+});
+
+try {
+    const qrEl = document.getElementById("qr-code-placeholder");
+    if (qrEl) { new QRCode(qrEl, { text: window.location.href, width: 120, height: 120 }); }
+} catch (e) {}
+
+// --- Initialization ---
+document.addEventListener("DOMContentLoaded", () => {
+    applyI18n();
+    if (myTicket) showMyTicketMode(); else showTakeTicketMode();
+    socket.connect();
+});
+
+// /* ... (i18nData 字典請手動貼回此處以維持完整性) ... */
 const i18nData = {
     "zh-TW": {
         "app_title": "💉熱血不宜攔！🩸",
@@ -92,506 +394,4 @@ const i18nData = {
     }
 };
 
-// 語言設定邏輯
-const langSelector = document.getElementById('language-selector');
-let storedLang = localStorage.getItem('callsys_lang');
-if (!storedLang) {
-    storedLang = (navigator.language || navigator.userLanguage).startsWith('zh') ? 'zh-TW' : 'en';
-}
-let currentLang = storedLang;
-let t = i18nData[currentLang];
-
-// --- 1. Helper: Toast & Vibration (UX 優化) ---
-function showToast(msg, type = 'info') {
-    let container = document.getElementById('toast-container');
-    if (!container) {
-        container = document.createElement('div');
-        container.id = 'toast-container';
-        document.body.appendChild(container);
-    }
-    const el = document.createElement('div');
-    el.className = `toast-message ${type}`;
-    el.textContent = msg;
-    container.appendChild(el);
-    
-    requestAnimationFrame(() => el.classList.add('show'));
-    
-    if (navigator.vibrate) navigator.vibrate(50); 
-
-    setTimeout(() => {
-        el.classList.remove('show');
-        setTimeout(() => el.remove(), 300);
-    }, 3000);
-}
-
-function vibratePattern(pattern) {
-    if (navigator.vibrate) navigator.vibrate(pattern);
-}
-
-// --- PWA Service Worker ---
-if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW fail', err));
-    });
-}
-
-// --- 2. Socket.io 初始化 ---
-const socket = io();
-
-// --- 3. DOM Elements ---
-const numberEl = document.getElementById("number");
-const issuedNumberMainEl = document.getElementById("issued-number-main");
-const passedListEl = document.getElementById("passedList");
-const featuredContainerEl = document.getElementById("featured-container");
-const statusBar = document.getElementById("status-bar");
-const notifySound = document.getElementById("notify-sound");
-const lastUpdatedEl = document.getElementById("last-updated");
-const soundPrompt = document.getElementById("sound-prompt");
-const copyLinkPrompt = document.getElementById("copy-link-prompt"); 
-const passedContainerEl = document.getElementById("passed-container");
-
-const ticketingModeContainer = document.getElementById("ticketing-mode-container");
-const inputModeContainer = document.getElementById("input-mode-container");
-const takeTicketView = document.getElementById("take-ticket-view");
-const inputModeView = document.getElementById("input-mode-view");
-const myTicketView = document.getElementById("my-ticket-view");
-
-const btnTakeTicket = document.getElementById("btn-take-ticket");
-const btnTrackTicket = document.getElementById("btn-track-ticket");
-const manualTicketInput = document.getElementById("manual-ticket-input");
-
-const myTicketNumEl = document.getElementById("my-ticket-num");
-const ticketCurrentDisplay = document.getElementById("ticket-current-display");
-const ticketWaitingCount = document.getElementById("ticket-waiting-count");
-const btnCancelTicket = document.getElementById("btn-cancel-ticket");
-const ticketStatusText = document.getElementById("ticket-status-text");
-const ticketWaitTimeEl = document.getElementById("ticket-wait-time");
-
-// --- 4. State Variables ---
-let isSoundEnabled = false; 
-let isLocallyMuted = false; 
-let lastUpdateTime = null;
-let isPublic = true;
-let audioPermissionGranted = false;
-let ttsEnabled = false; 
-let wakeLock = null; 
-let avgServiceTime = 0; 
-let currentSystemMode = 'ticketing'; 
-let lastIssuedNumber = 0;
-let myTicket = localStorage.getItem('callsys_ticket') ? parseInt(localStorage.getItem('callsys_ticket')) : null;
-let reconnectTimer = null; // [新增] 用於管理重連倒數
-
-// --- 5. Wake Lock ---
-async function requestWakeLock() {
-    if ('wakeLock' in navigator) {
-        try {
-            wakeLock = await navigator.wakeLock.request('screen');
-            wakeLock.addEventListener('release', () => {});
-        } catch (err) { console.error(err); }
-    }
-}
-document.addEventListener('visibilitychange', async () => {
-    if (wakeLock !== null && document.visibilityState === 'visible') { await requestWakeLock(); }
-});
-
-// --- 6. i18n Application Logic ---
-function applyI18n() {
-    document.querySelectorAll('[data-i18n]').forEach(el => {
-        const key = el.getAttribute('data-i18n');
-        if(t[key]) el.textContent = t[key];
-    });
-    if(manualTicketInput) manualTicketInput.placeholder = t["manual_input_placeholder"];
-    if(btnTakeTicket && !btnTakeTicket.disabled) {
-        btnTakeTicket.textContent = t["take_ticket"];
-    }
-}
-
-function updateTimeText() {
-    if (!lastUpdateTime) return;
-    const diff = Math.floor((new Date() - lastUpdateTime) / 1000);
-    if (diff < 60) {
-        lastUpdatedEl.textContent = t["time_just_now"];
-    } else {
-        lastUpdatedEl.textContent = t["time_min_ago"].replace("%s", Math.floor(diff/60));
-    }
-}
-setInterval(updateTimeText, 10000);
-
-if(langSelector) {
-    langSelector.value = currentLang;
-    langSelector.addEventListener('change', (e) => {
-        currentLang = e.target.value;
-        localStorage.setItem('callsys_lang', currentLang);
-        t = i18nData[currentLang];
-        applyI18n();
-        const curr = parseInt(numberEl.textContent) || 0;
-        updateTicketUI(curr);
-        updateMuteUI(isLocallyMuted);
-        updateTimeText();
-    });
-}
-
-// --- 7. Socket Events (Optimized) ---
-
-socket.on("connect", () => {
-    console.log("Socket connected");
-    socket.emit('joinRoom', 'public');
-    
-    // [UX 優化] 清除重連倒數，顯示綠色成功
-    if (reconnectTimer) clearInterval(reconnectTimer);
-    statusBar.textContent = t["status_connected"] || "Connected";
-    statusBar.style.backgroundColor = "#10b981"; 
-    
-    // 延遲隱藏 Status Bar
-    setTimeout(() => {
-        if (socket.connected && isPublic) statusBar.classList.remove("visible");
-    }, 1500);
-    
-    requestWakeLock(); 
-});
-
-socket.on("disconnect", (reason) => {
-    console.warn("Socket disconnected:", reason);
-    statusBar.classList.add("visible");
-    
-    // [UX 優化] 倒數計時提示
-    if (reconnectTimer) clearInterval(reconnectTimer);
-    
-    let countdownVal = 3;
-    const errorText = t["error_network"] || "Connection Lost";
-    statusBar.textContent = `${errorText} (${countdownVal}s)`;
-    statusBar.style.backgroundColor = "#dc2626"; // 紅色
-
-    reconnectTimer = setInterval(() => {
-        countdownVal--;
-        if (countdownVal > 0) {
-            statusBar.textContent = `${errorText} (${countdownVal}s)`;
-        } else {
-            statusBar.textContent = "Connecting...";
-            statusBar.style.backgroundColor = "#d97706"; // 橘色嘗試中
-            clearInterval(reconnectTimer);
-        }
-    }, 1000);
-    
-    lastUpdatedEl.textContent = errorText;
-});
-
-socket.on("updateQueue", (data) => {
-    const current = data.current;
-    const issued = data.issued;
-    lastIssuedNumber = issued;
-    if(issuedNumberMainEl) issuedNumberMainEl.textContent = issued;
-    handleNewNumber(current);
-    updateTicketUI(current);
-});
-
-socket.on("update", (num) => {}); 
-
-socket.on("adminBroadcast", (msg) => {
-    if (!isLocallyMuted) {
-        speakText(msg, 1.0); 
-        showToast(`${t["public_announcement"]}${msg}`, "info");
-    }
-});
-
-socket.on("updateWaitTime", (time) => {
-    avgServiceTime = time;
-    const curr = parseInt(numberEl.textContent) || 0;
-    updateTicketUI(curr);
-});
-
-socket.on("updateSoundSetting", (isEnabled) => { isSoundEnabled = isEnabled; });
-socket.on("updatePublicStatus", (status) => {
-    isPublic = status;
-    document.body.classList.toggle("is-closed", !isPublic);
-    if (isPublic) { socket.connect(); } 
-    else { socket.disconnect(); statusBar.classList.remove("visible"); }
-});
-
-socket.on("updateSystemMode", (mode) => {
-    currentSystemMode = mode;
-    switchSystemModeUI(mode);
-});
-
-socket.on("updatePassed", (numbers) => renderPassed(numbers));
-socket.on("updateFeaturedContents", (contents) => renderFeatured(contents));
-socket.on("updateTimestamp", (ts) => { lastUpdateTime = new Date(ts); updateTimeText(); });
-
-// --- 8. Core Logic ---
-
-function switchSystemModeUI(mode) {
-    if (mode === 'ticketing') {
-        ticketingModeContainer.style.display = "block";
-        inputModeContainer.style.display = "none";
-    } else {
-        ticketingModeContainer.style.display = "none";
-        inputModeContainer.style.display = "block";
-    }
-    
-    if (myTicket) {
-        showMyTicketMode();
-    } else {
-        showTakeTicketMode();
-    }
-}
-
-function handleNewNumber(num) {
-    if (numberEl.textContent !== String(num)) {
-        playNotificationSound();
-        setTimeout(() => {
-            if (numberEl.textContent !== String(num) && isSoundEnabled && !isLocallyMuted) {
-                speakText(`現在號碼，${num}號`, 0.9);
-            }
-        }, 800);
-        
-        numberEl.textContent = num;
-        document.title = `${num} - ${t["app_title"]}`;
-        numberEl.classList.add("updated");
-        setTimeout(() => numberEl.classList.remove("updated"), 500);
-    }
-}
-
-function updateTicketUI(currentNum) {
-    if (!myTicket) return;
-
-    ticketCurrentDisplay.textContent = currentNum;
-    const diff = myTicket - currentNum;
-    
-    if (diff > 0) {
-        ticketWaitingCount.textContent = diff;
-        ticketStatusText.textContent = t["status_wait"].replace("%s", diff);
-        myTicketView.style.background = "linear-gradient(135deg, #2563eb 0%, #1e40af 100%)"; 
-        
-        if (avgServiceTime > 0) {
-            const min = Math.ceil(diff * avgServiceTime);
-            ticketWaitTimeEl.textContent = t["estimated_wait"].replace("%s", min);
-            ticketWaitTimeEl.style.display = "block";
-        } else {
-            ticketWaitTimeEl.style.display = "none";
-        }
-
-        if (diff <= 3) {
-             vibratePattern([100]); 
-             if (document.hidden && Notification.permission === "granted") {
-                 new Notification(t["app_title"], { body: t["queue_notification"].replace("%s", diff), tag: 'approach' });
-             }
-        }
-    } else if (diff === 0) {
-        ticketWaitingCount.textContent = "0";
-        ticketStatusText.textContent = t["status_arrival"];
-        myTicketView.style.background = "linear-gradient(135deg, #059669 0%, #10b981 100%)"; 
-        ticketWaitTimeEl.style.display = "none";
-        
-        triggerConfetti();
-        vibratePattern([200, 100, 200, 100, 200]); 
-
-        if (isSoundEnabled && !isLocallyMuted) speakText("恭喜，輪到您了，請前往櫃台", 1.0);
-        if (Notification.permission === "granted") {
-             new Notification(t["app_title"], { body: t["arrival_notification"], requireInteraction: true, tag: 'arrival' });
-        }
-    } else {
-        ticketWaitingCount.textContent = "-";
-        ticketStatusText.textContent = t["status_passed"];
-        myTicketView.style.background = "linear-gradient(135deg, #d97706 0%, #b45309 100%)"; 
-        ticketWaitTimeEl.style.display = "none";
-    }
-}
-
-function showMyTicketMode() {
-    takeTicketView.style.display = "none";
-    inputModeView.style.display = "none";
-    myTicketView.style.display = "block";
-    myTicketNumEl.textContent = myTicket;
-    if ("Notification" in window && Notification.permission === "default") {
-        Notification.requestPermission();
-    }
-}
-
-function showTakeTicketMode() {
-    myTicketView.style.display = "none";
-    if (currentSystemMode === 'ticketing') {
-        takeTicketView.style.display = "block";
-        inputModeView.style.display = "none";
-    } else {
-        takeTicketView.style.display = "none";
-        inputModeView.style.display = "block";
-    }
-}
-
-function speakText(text, rate) {
-    if (!ttsEnabled || !('speechSynthesis' in window)) return;
-    window.speechSynthesis.cancel(); 
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'zh-TW'; 
-    utterance.rate = rate || 0.9;
-    window.speechSynthesis.speak(utterance);
-}
-
-function playNotificationSound() {
-    if (!notifySound) return;
-    notifySound.play().then(() => {
-        audioPermissionGranted = true;
-        ttsEnabled = true; 
-        updateMuteUI(false);
-        if (!isSoundEnabled || isLocallyMuted) {
-            notifySound.pause(); notifySound.currentTime = 0;
-        }
-    }).catch(() => {
-        console.warn("Autoplay blocked");
-        audioPermissionGranted = false;
-        updateMuteUI(true, true); 
-    });
-}
-
-function triggerConfetti() {
-    if (typeof confetti === 'undefined') return;
-    const duration = 3000;
-    const end = Date.now() + duration;
-    (function frame() {
-        confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0 } });
-        confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1 } });
-        if (Date.now() < end) requestAnimationFrame(frame);
-    })();
-}
-
-function renderPassed(numbers) {
-    passedListEl.innerHTML = "";
-    const isEmpty = !numbers || numbers.length === 0;
-    passedContainerEl.classList.toggle("is-empty", isEmpty);
-    if (!isEmpty) {
-        const frag = document.createDocumentFragment();
-        numbers.forEach(n => {
-            const li = document.createElement("li"); li.textContent = n; frag.appendChild(li);
-        });
-        passedListEl.appendChild(frag);
-    }
-}
-
-function renderFeatured(contents) {
-    featuredContainerEl.innerHTML = "";
-    if (!contents || contents.length === 0) {
-        featuredContainerEl.innerHTML = `<p class="empty-state-message" data-i18n="featured_empty">${t["featured_empty"]}</p>`;
-        featuredContainerEl.classList.add("is-empty");
-        return;
-    }
-    featuredContainerEl.classList.remove("is-empty");
-    const frag = document.createDocumentFragment();
-    contents.forEach(c => {
-        const a = document.createElement("a");
-        a.className = "featured-link";
-        a.href = c.linkUrl; a.target = "_blank"; a.textContent = c.linkText;
-        frag.appendChild(a);
-    });
-    featuredContainerEl.appendChild(frag);
-}
-
-// --- 9. Interaction Events ---
-
-if(btnTakeTicket) {
-    btnTakeTicket.addEventListener("click", async () => {
-        if ("Notification" in window && Notification.permission !== "granted") {
-            const p = await Notification.requestPermission();
-            if (p !== "granted") {
-                if(!confirm("Without notifications, you must keep this tab open. Continue?")) return;
-            }
-        }
-
-        btnTakeTicket.disabled = true;
-        btnTakeTicket.textContent = t["taking_ticket"];
-        
-        try {
-            const res = await fetch("/api/ticket/take", { method: "POST" });
-            const data = await res.json();
-            
-            if (data.success) {
-                myTicket = data.ticket;
-                localStorage.setItem('callsys_ticket', myTicket);
-                showMyTicketMode();
-                const curr = parseInt(numberEl.textContent) || 0;
-                updateTicketUI(curr);
-                showToast(t["take_success"], "success");
-            } else {
-                showToast(data.error || t["take_fail"], "error");
-            }
-        } catch (e) {
-            showToast(t["error_network"], "error");
-        } finally {
-            btnTakeTicket.disabled = false;
-            btnTakeTicket.textContent = t["take_ticket"];
-        }
-    });
-}
-
-if(btnTrackTicket) {
-    btnTrackTicket.addEventListener("click", async () => {
-        const val = manualTicketInput.value;
-        if (!val) return showToast(t["input_empty"], "error");
-        
-        if ("Notification" in window && Notification.permission !== "granted") {
-            const p = await Notification.requestPermission();
-            if (p !== "granted" && !confirm("Continue without notifications?")) return;
-        }
-
-        myTicket = parseInt(val);
-        localStorage.setItem('callsys_ticket', myTicket);
-        manualTicketInput.value = "";
-        
-        showMyTicketMode();
-        const curr = parseInt(numberEl.textContent) || 0;
-        updateTicketUI(curr);
-        showToast(t["take_success"], "success");
-    });
-}
-
-if(btnCancelTicket) {
-    btnCancelTicket.addEventListener("click", () => {
-        if(confirm(t["cancel_confirm"])) {
-            localStorage.removeItem('callsys_ticket');
-            myTicket = null;
-            showTakeTicketMode();
-        }
-    });
-}
-
-function updateMuteUI(isMuted, needsPermission = false) {
-    isLocallyMuted = isMuted;
-    if (!soundPrompt) return;
-    if (needsPermission || isMuted) {
-        soundPrompt.innerHTML = `<span class="emoji">🔇</span> ${t["sound_mute"]}`;
-        soundPrompt.classList.remove("is-active");
-    } else {
-        soundPrompt.innerHTML = `<span class="emoji">🔊</span> ${t["sound_on"]}`;
-        soundPrompt.classList.add("is-active");
-    }
-}
-if (soundPrompt) {
-    soundPrompt.addEventListener("click", () => {
-        if (!audioPermissionGranted) { playNotificationSound(); } else { updateMuteUI(!isLocallyMuted); }
-    });
-}
-if (copyLinkPrompt) {
-    copyLinkPrompt.addEventListener("click", () => {
-        if (!navigator.clipboard) return alert("Use HTTPS to copy");
-        navigator.clipboard.writeText(window.location.href).then(() => {
-            const original = copyLinkPrompt.innerHTML;
-            copyLinkPrompt.innerHTML = t["copy_success"];
-            copyLinkPrompt.classList.add("is-copied");
-            setTimeout(() => { 
-                copyLinkPrompt.innerHTML = `<span class="emoji">🔗</span> ${t["copy_link"]}`; 
-                copyLinkPrompt.classList.remove("is-copied"); 
-            }, 2000);
-        });
-    });
-}
-try {
-    const qrEl = document.getElementById("qr-code-placeholder");
-    if (qrEl) { new QRCode(qrEl, { text: window.location.href, width: 120, height: 120 }); }
-} catch (e) {}
-
-// --- Initialization ---
-document.addEventListener("DOMContentLoaded", () => {
-    applyI18n();
-    if (myTicket) {
-        showMyTicketMode();
-    }
-});
+/* ... (將 i18nData 字典貼回 main.js 開頭，並移除此註釋) ... */
