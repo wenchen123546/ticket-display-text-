@@ -1,6 +1,6 @@
 /*
  * ==========================================
- * 後台邏輯 (admin.js) - v18.13 Optimized
+ * 後台邏輯 (admin.js) - v18.14 Optimized (Configurable LINE Msgs)
  * ==========================================
  */
 
@@ -859,7 +859,11 @@ const domIds = {
     setOk:     "line-msg-set-ok",
     cancel:    "line-msg-cancel",
     loginHint: "line-msg-login-hint", 
-    unlock:    "line-unlock-pwd"
+    unlock:    "line-unlock-pwd",
+    // [新增] DOM ID 對應
+    errFormat: "line-msg-err-format",
+    errPassed: "line-msg-err-passed",
+    errNoSub:  "line-msg-err-no-sub"
 };
 
 const btnSaveLineMsg = document.getElementById("btn-save-line-msg");
@@ -878,7 +882,12 @@ async function loadLineSettings() {
         document.getElementById(domIds.passed).value    = data.passed;
         document.getElementById(domIds.setOk).value     = data.set_ok;
         document.getElementById(domIds.cancel).value    = data.cancel;
-        document.getElementById(domIds.loginHint).value = data.login_hint; 
+        document.getElementById(domIds.loginHint).value = data.login_hint;
+        
+        // [新增] 載入錯誤訊息設定
+        if(document.getElementById(domIds.errFormat)) document.getElementById(domIds.errFormat).value = data.err_format;
+        if(document.getElementById(domIds.errPassed)) document.getElementById(domIds.errPassed).value = data.err_passed;
+        if(document.getElementById(domIds.errNoSub))  document.getElementById(domIds.errNoSub).value  = data.err_no_sub;
     }
     
     if (userRole === 'super') {
@@ -898,7 +907,12 @@ if (btnSaveLineMsg) btnSaveLineMsg.onclick = async () => {
         passed:     document.getElementById(domIds.passed).value.trim(),
         set_ok:     document.getElementById(domIds.setOk).value.trim(),
         cancel:     document.getElementById(domIds.cancel).value.trim(),
-        login_hint: document.getElementById(domIds.loginHint).value.trim() 
+        login_hint: document.getElementById(domIds.loginHint).value.trim(),
+        
+        // [新增] 儲存 payload
+        err_format: document.getElementById(domIds.errFormat).value.trim(),
+        err_passed: document.getElementById(domIds.errPassed).value.trim(),
+        err_no_sub: document.getElementById(domIds.errNoSub).value.trim()
     };
 
     if(!payload.approach || !payload.status) return alert("主要文案不可為空"); 
@@ -921,6 +935,12 @@ if (btnResetLineMsg) setupConfirmationButton(btnResetLineMsg, "恢復預設值",
         document.getElementById(domIds.setOk).value     = data.set_ok;
         document.getElementById(domIds.cancel).value    = data.cancel;
         document.getElementById(domIds.loginHint).value = data.login_hint; 
+        
+        // [新增] 重置後更新 UI
+        document.getElementById(domIds.errFormat).value = data.err_format;
+        document.getElementById(domIds.errPassed).value = data.err_passed;
+        document.getElementById(domIds.errNoSub).value  = data.err_no_sub;
+
         showToast("↺ 已恢復預設文案", "success"); 
     } 
 });
