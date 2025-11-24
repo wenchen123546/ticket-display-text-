@@ -333,11 +333,16 @@
                                     <textarea id="line-msg-personal" style="height:60px;" placeholder="附加在查詢結果後方的文字"></textarea>
                                 </div>
                             </div>
-
+                            
                             <div class="control-group form-group-boxed">
-                                <label>關鍵字：「設定提醒」或「直接輸入號碼」</label>
+                                <label>關鍵字：「設定提醒」、「設定」、「set」</label>
+                                <p class="var-hint">當使用者輸入「設定提醒」關鍵字時的回覆文字</p>
+                                <textarea id="line-msg-set_hint" style="height:60px;"></textarea>
+                            </div>
+                            <div class="control-group form-group-boxed">
+                                <label>關鍵字：「設定提醒」或「直接輸入號碼」 (成功時)</label>
                                 <p class="var-hint">使用者直接輸入數字（如 "100"）即可設定。變數: {target} {current} {diff}</p>
-                                <textarea id="line-msg-set-ok" style="height:80px;"></textarea>
+                                <textarea id="line-msg-set_ok" style="height:80px;"></textarea>
                             </div>
 
                             <details open>
