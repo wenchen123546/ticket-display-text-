@@ -2,97 +2,115 @@
    1. 核心設計系統 (Design Tokens)
    ========================================= */
 :root {
-    /* 色票系統 */
-    --bg-body: #f8fafc;       /* 背景色：極淺灰藍 */
-    --bg-surface: #ffffff;    /* 卡片色：純白 */
-    --bg-input: #f1f5f9;      /* 輸入框背景 */
+    /* 背景與表面 */
+    --bg-body: #f1f5f9;       
+    --bg-surface: #ffffff;    
+    --bg-subtle: #f8fafc;
 
-    --text-main: #1e293b;     /* 主要文字 */
-    --text-sub: #64748b;      /* 次要文字 */
-    --text-placeholder: #94a3b8;
+    /* 文字顏色 */
+    --text-main: #1e293b;     /* Slate-800 */
+    --text-sub: #64748b;      /* Slate-500 */
+    --text-light: #94a3b8;    /* Slate-400 */
 
-    /* 功能色 (漸層與純色) */
+    /* 品牌色與漸層 */
     --primary: #4f46e5;
-    --primary-hover: #4338ca;
     --primary-gradient: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
-    
+    --primary-glow: rgba(79, 70, 229, 0.4);
+
     --success: #10b981;
     --success-gradient: linear-gradient(135deg, #34d399 0%, #059669 100%);
-    
+
     --danger: #ef4444;
     --danger-gradient: linear-gradient(135deg, #f87171 0%, #dc2626 100%);
     
-    --warning: #f59e0b;       /* 警告色保持高對比，不使用漸層 */
+    --warning: #f59e0b;
+    --glass-border: rgba(255, 255, 255, 0.6);
 
-    /* 介面數值 */
-    --radius-lg: 16px;        /* 卡片圓角 */
-    --radius-md: 8px;         /* 按鈕/輸入框圓角 */
-    --shadow-sm: 0 1px 3px rgba(0,0,0,0.1);
-    --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
-    --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05);
+    /* 數值 */
+    --radius-lg: 16px;
+    --radius-md: 10px;
+    --shadow-soft: 0 4px 20px -2px rgba(0,0,0,0.05);
+    --shadow-hover: 0 10px 25px -5px rgba(0,0,0,0.1);
 }
 
-/* 基礎重置 */
 * { box-sizing: border-box; outline: none; -webkit-tap-highlight-color: transparent; }
 
 body {
-    font-family: "Inter", "Microsoft JhengHei", system-ui, sans-serif;
+    font-family: "Inter", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
     background-color: var(--bg-body);
     color: var(--text-main);
     margin: 0;
-    padding: 20px;
+    padding: 30px 20px;
     min-height: 100vh;
     display: flex;
     flex-direction: column;
     align-items: center;
-    line-height: 1.5;
+    line-height: 1.6;
 }
 
-/* 輔助類別：隱藏螢幕閱讀器標籤 */
-.sr-only {
-    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
-    overflow: hidden; clip: rect(0,0,0,0); border: 0;
-}
+/* 輔助類別 */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; }
 
 /* =========================================
    2. 全域元件 (Global Components)
    ========================================= */
-
-/* 頂部狀態列 */
 #status-bar {
     position: fixed; top: 0; left: 0; width: 100%;
-    background: var(--danger); color: white;
-    padding: 10px; text-align: center; font-weight: 700;
-    transform: translateY(-100%); transition: transform 0.3s ease;
-    z-index: 9999; box-shadow: var(--shadow-md);
+    background: var(--danger-gradient); color: white;
+    padding: 12px; text-align: center; font-weight: 700;
+    transform: translateY(-100%); transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    z-index: 9999; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
 }
 #status-bar.visible { transform: translateY(0); }
 
-/* 按鈕基礎 */
+/* --- 按鈕系統 --- */
 button {
     font-family: inherit; border: none; cursor: pointer;
     display: inline-flex; align-items: center; justify-content: center;
-    transition: all 0.2s ease; font-weight: 600;
+    transition: all 0.2s ease; font-weight: 600; position: relative;
+    overflow: hidden;
 }
-button:active { transform: scale(0.97); }
+button:active { transform: scale(0.96); }
 button:disabled { opacity: 0.6; cursor: not-allowed; filter: grayscale(1); }
 
-/* 色彩按鈕變體 */
-.btn-primary { background: var(--primary-gradient); color: white; box-shadow: 0 4px 6px rgba(79, 70, 229, 0.2); }
-.btn-success { background: var(--success-gradient); color: white; box-shadow: 0 4px 6px rgba(16, 185, 129, 0.2); }
-.btn-warn { background: var(--warning); color: white; }
-.btn-danger { background: var(--danger-gradient); color: white; }
-.btn-secondary { background: #e2e8f0; color: var(--text-main); }
+/* 1. 主按鈕 (漸層+陰影) */
+.btn-primary { 
+    background: var(--primary-gradient); color: white; 
+    border-radius: 50px;
+    box-shadow: 0 4px 10px var(--primary-glow);
+}
+.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 15px var(--primary-glow); }
+
+/* 2. 玻璃/次要按鈕 */
+.btn-glass {
+    background: white; border: 1px solid #e2e8f0; color: var(--text-sub);
+    border-radius: 50px;
+}
+.btn-glass:hover { border-color: #cbd5e1; color: var(--text-main); background: #f8fafc; }
+
+/* 3. 功能色按鈕 */
+.btn-success { background: var(--success-gradient); color: white; border-radius: var(--radius-md); }
+.btn-warn { background: var(--warning); color: white; border-radius: var(--radius-md); }
+.btn-secondary { background: #e2e8f0; color: var(--text-main); border-radius: var(--radius-md); }
 .btn-secondary:hover { background: #cbd5e1; }
 
-/* 虛線框重置按鈕 (單獨存在時) */
-.btn-reset-single {
+/* 4. 幽靈按鈕 (重置類) */
+.btn-reset-single, .btn-ghost {
     background: transparent; border: 1px dashed #fca5a5;
     color: #ef4444; width: 100%; padding: 10px;
     border-radius: var(--radius-md); margin-top: 15px;
-    font-size: 0.9rem;
+    font-size: 0.9rem; transition: 0.2s;
 }
-.btn-reset-single:hover { background: #fef2f2; border-color: #ef4444; }
+.btn-reset-single:hover, .btn-ghost:hover { background: #fef2f2; border-color: #ef4444; border-style: solid; }
+.btn-danger-ghost { background: transparent; color: #ef4444; } 
+.btn-danger-ghost:hover { background: #fef2f2; }
+
+/* 5. 危險外框按鈕 */
+.btn-danger-outline {
+    background: white; border: 2px solid #ef4444; color: #ef4444;
+    width: 100%; padding: 12px; border-radius: var(--radius-md);
+}
+.btn-danger-outline:hover { background: #ef4444; color: white; }
 
 /* =========================================
    3. 登入卡片 (Login)
@@ -100,221 +118,181 @@ button:disabled { opacity: 0.6; cursor: not-allowed; filter: grayscale(1); }
 #login-container {
     background: var(--bg-surface);
     width: 100%; max-width: 400px;
-    margin-top: 10vh; padding: 40px;
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-lg);
+    margin-top: 8vh; padding: 40px;
+    border-radius: 24px;
+    box-shadow: var(--shadow-hover);
     text-align: center;
-    display: none; /* JS控制 */
-    animation: fadeUp 0.5s ease-out;
+    display: none; 
+    animation: fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1);
 }
-@keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes fadeUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
 
-#login-container h1 {
-    color: var(--primary); margin: 0 0 30px 0; font-weight: 800;
+.login-header h1 {
+    font-size: 1.8rem; font-weight: 800; margin: 0 0 10px 0;
     background: var(--primary-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent;
 }
+.login-header p { color: var(--text-sub); margin-bottom: 30px; font-size: 0.95rem; }
+
 #login-container input {
-    width: 100%; padding: 14px; margin-bottom: 20px;
-    background: var(--bg-input); border: 1px solid transparent;
-    border-radius: var(--radius-md); font-size: 1rem; transition: 0.2s;
+    width: 100%; padding: 14px 18px; margin-bottom: 15px;
+    background: var(--bg-subtle); border: 2px solid transparent;
+    border-radius: 12px; font-size: 1rem; transition: 0.2s; text-align: center;
 }
-#login-container input:focus {
-    background: white; border-color: var(--primary);
-    box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.1);
-}
-#login-button {
-    width: 100%; padding: 14px; border-radius: var(--radius-md);
-    font-size: 1.1rem;
-}
-#login-error { color: var(--danger); margin-top: 15px; font-size: 0.9rem; }
+#login-container input:focus { background: white; border-color: var(--primary); }
+#login-button { width: 100%; padding: 16px; font-size: 1.1rem; border-radius: 12px; margin-top: 10px; }
+#login-error { color: var(--danger); margin-top: 20px; font-size: 0.9rem; }
 
 /* =========================================
-   4. 後台主面板 (Main Layout)
+   4. 後台佈局 (Layout)
    ========================================= */
 #admin-panel {
-    width: 100%; max-width: 1200px;
-    display: none; padding-bottom: 60px;
+    width: 100%; max-width: 1100px;
+    display: none; padding-bottom: 80px;
 }
 
-/* --- 儀表板頭部 (Stats Header) --- */
+/* --- 1. 儀表板頭部 (Dashboard) --- */
 .dashboard-header {
     background: var(--bg-surface);
-    border-radius: var(--radius-lg);
-    padding: 30px; margin-bottom: 40px;
+    border-radius: 24px; padding: 30px; margin-bottom: 30px;
     display: flex; justify-content: space-around; align-items: center;
-    box-shadow: var(--shadow-md); border: 1px solid rgba(255,255,255,0.8);
-    flex-wrap: wrap; gap: 20px;
+    box-shadow: var(--shadow-soft); border: 1px solid white;
+    position: relative; overflow: hidden;
 }
-.dashboard-item { text-align: center; flex: 1; min-width: 150px; position: relative; }
-.dashboard-item .label {
-    display: block; font-size: 0.85rem; color: var(--text-sub);
-    text-transform: uppercase; letter-spacing: 1px; font-weight: 700; margin-bottom: 8px;
+.dashboard-header::before {
+    content:''; position: absolute; top: 0; left: 0; width: 100%; height: 6px;
+    background: linear-gradient(90deg, #6366f1, #10b981);
 }
-.dashboard-item .value { font-weight: 800; line-height: 1; display: block; }
 
-.big-number { font-size: 4rem; color: var(--primary); text-shadow: 0 2px 10px rgba(79,70,229,0.15); }
-.sub-number { font-size: 2.2rem; color: var(--text-main); }
+.dashboard-item { text-align: center; flex: 1; min-width: 140px; }
+.dashboard-item .label { display: block; font-size: 0.75rem; color: var(--text-light); letter-spacing: 1.5px; font-weight: 700; margin-bottom: 5px; }
+.dashboard-item .sub-label { font-size: 0.9rem; color: var(--text-sub); font-weight: 500; }
+.dashboard-item .value { display: block; line-height: 1; font-weight: 800; margin-bottom: 5px; }
+
+.big-number { font-size: 4.5rem; color: #1e293b; letter-spacing: -2px; }
+.sub-number { font-size: 2.5rem; color: #475569; letter-spacing: -1px; }
 .dashboard-divider { width: 1px; height: 60px; background: #e2e8f0; }
 
-/* --- 叫號大按鈕 --- */
-.control-group.button-row { display: flex; justify-content: center; gap: 20px; margin-bottom: 40px; }
-#prev, #next {
-    padding: 16px 40px; border-radius: 100px;
-    font-size: 1.4rem; letter-spacing: 1px;
+/* --- 2. 快速動作條 (Quick Actions) --- */
+.quick-actions-bar {
+    display: flex; justify-content: center; gap: 20px; margin-bottom: 40px;
 }
-#prev { background: white; border: 1px solid #e2e8f0; color: var(--text-sub); box-shadow: var(--shadow-sm); }
-#prev:hover { border-color: #cbd5e1; color: var(--text-main); }
-#next { box-shadow: 0 10px 20px -5px rgba(79, 70, 229, 0.4); }
+.quick-actions-bar button { padding: 18px 40px; font-size: 1.2rem; }
+.quick-actions-bar .icon { margin: 0 8px; font-size: 0.9em; }
+.btn-large-shadow { box-shadow: 0 10px 30px -5px var(--primary-glow); }
 
-/* --- 卡片 Grid 排版 --- */
+/* --- 卡片網格 (Grid) --- */
 .card-container {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-    gap: 30px; align-items: start;
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    gap: 25px; align-items: start;
 }
-/* 讓內部卡片撐滿高度 */
 .card-wrapper { height: 100%; }
 
 .admin-card {
-    background: var(--bg-surface);
-    height: 100%;
-    border-radius: var(--radius-lg);
-    padding: 24px;
-    box-shadow: var(--shadow-sm);
-    border: 1px solid #f1f5f9;
+    background: var(--bg-surface); height: 100%;
+    border-radius: 20px; padding: 25px;
+    box-shadow: var(--shadow-soft); border: 1px solid rgba(255,255,255,0.5);
     display: flex; flex-direction: column;
+    transition: transform 0.2s, box-shadow 0.2s;
 }
-.admin-card:hover { box-shadow: var(--shadow-md); transition: box-shadow 0.3s; }
+.admin-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-hover); }
 
 .admin-card h3 {
-    margin: 0 0 20px 0; padding-bottom: 15px;
-    font-size: 1.15rem; color: var(--text-main);
-    border-bottom: 1px solid #f1f5f9;
-    display: flex; align-items: center;
+    margin: 0 0 25px 0; padding-bottom: 15px;
+    font-size: 1.1rem; color: var(--text-main); font-weight: 700;
+    border-bottom: 1px solid #f1f5f9; display: flex; align-items: center;
 }
-.card-icon { margin-right: 12px; font-size: 1.3rem; filter: grayscale(0.2); }
+.card-icon { margin-right: 12px; font-size: 1.4rem; background: #f1f5f9; width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; }
+
+/* 特殊卡片佈局 (日誌卡片) */
+.flex-card { justify-content: space-between; }
+.card-bottom { border-top: 2px dashed #e2e8f0; margin-top: 20px; padding-top: 20px; }
 
 /* =========================================
-   5. [重要] 控制區塊樣式 (Control Sections)
+   5. 控制區塊 (Control Sections)
    ========================================= */
 .control-section {
-    border: 1px solid #e2e8f0;
-    border-radius: var(--radius-md);
-    padding: 15px; margin-bottom: 20px;
-    position: relative;
+    background: #f8fafc; border-radius: 16px;
+    padding: 20px; margin-bottom: 20px; position: relative;
+    border-left: 5px solid #cbd5e1; /* 預設邊條 */
+}
+.section-badge {
+    position: absolute; top: 15px; right: 15px;
+    font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+    padding: 4px 8px; border-radius: 6px; letter-spacing: 0.5px;
 }
 
-/* 區塊標題 */
-.section-header {
-    display: flex; align-items: center;
-    margin-bottom: 12px; padding-bottom: 8px;
-    border-bottom: 1px dashed rgba(0,0,0,0.1);
-}
-.section-header .icon { font-size: 1.2rem; margin-right: 8px; }
-.section-header .text { font-weight: 800; font-size: 0.95rem; }
+/* 🔵 藍色區塊 */
+.section-blue { background: #eff6ff; border-left-color: #3b82f6; }
+.section-blue .section-badge { background: #dbeafe; color: #1e40af; }
+.section-blue .section-header .text { color: #1e40af; font-weight: 700; }
+/* 🟢 綠色區塊 */
+.section-green { background: #f0fdf4; border-left-color: #10b981; }
+.section-green .section-badge { background: #d1fae5; color: #065f46; }
+.section-green .section-header .text { color: #065f46; font-weight: 700; }
+/* ⚪ 灰色區塊 */
+.section-gray { background: #f8fafc; border-left-color: #94a3b8; }
 
-/* 🔵 藍色區塊 (目前叫號) */
-.section-blue { background-color: #eff6ff; border-color: #bfdbfe; }
-.section-blue .section-header .text { color: #1e40af; }
-.section-blue input { border-color: #93c5fd; }
-.section-blue input:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
-
-/* 🟢 綠色區塊 (已發號碼) */
-.section-green { background-color: #f0fdf4; border-color: #bbf7d0; }
-.section-green .section-header .text { color: #166534; }
-.section-green input { border-color: #86efac; }
-.section-green input:focus { border-color: #16a34a; box-shadow: 0 0 0 3px rgba(22,163,74,0.1); }
-
-/* ⚪ 灰色區塊 (其他設定) */
-.section-gray { background-color: #f8fafc; border-color: #e2e8f0; }
+.section-header { margin-bottom: 15px; }
+.section-hint { font-size: 0.8rem; color: #64748b; margin-top: 8px; font-style: italic; }
 
 .control-section .control-group { margin-bottom: 0; }
-.control-section label {
-    display: block; margin-bottom: 6px; font-weight: 600; font-size: 0.9rem; color: #475569;
-}
+.control-section label { display: block; margin-bottom: 8px; font-weight: 600; font-size: 0.9rem; color: var(--text-main); }
 
 /* =========================================
-   6. 表單元件與輸入框 (Forms)
+   6. 表單元件 (Forms)
    ========================================= */
 .control-group { margin-bottom: 20px; }
 
-/* 帶背景框的區塊 (Boxed Group) */
+/* 帶框表單 */
 .form-group-boxed {
     background: #f8fafc; border: 1px solid #e2e8f0;
-    padding: 16px; border-radius: var(--radius-md);
-    margin-bottom: 16px;
+    padding: 20px; border-radius: 16px; margin-bottom: 20px;
 }
-.form-group-boxed label {
-    display: block; font-weight: 700; font-size: 0.95rem;
-    color: var(--text-main); margin-bottom: 10px;
-}
-.form-group-boxed p {
-    font-size: 0.85rem; color: var(--text-sub);
-    background: rgba(255,255,255,0.8);
-    padding: 6px 10px; border-radius: 6px;
-    margin: 0 0 12px 0; border: 1px dashed #cbd5e1;
-}
+.highlight-orange { background: #fff7ed; border-color: #ffedd5; }
+.form-group-boxed label { display: block; font-weight: 700; font-size: 0.95rem; margin-bottom: 10px; }
+.var-hint { font-size: 0.8rem; color: var(--text-sub); background: rgba(255,255,255,0.6); padding: 5px 10px; border-radius: 6px; display: inline-block; margin-bottom: 10px; }
 
-/* --- [統一寬度] 輸入框與按鈕組 --- */
+/* 輸入框與按鈕組 */
 .input-group { display: flex; gap: 10px; width: 100%; }
+.input-group.vertical { flex-direction: column; }
+.input-row { display: flex; gap: 10px; }
+
 .input-group input {
-    flex: 1; padding: 10px 14px;
-    background: white; border: 1px solid #cbd5e1;
+    flex: 1; padding: 12px 16px;
+    background: white; border: 1px solid #e2e8f0;
     border-radius: var(--radius-md); font-size: 0.95rem;
     transition: all 0.2s; min-width: 0;
 }
-.input-group input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1); }
+.input-group input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1); }
 
-/* [修改] 統一輸入區右側按鈕的最小寬度 */
+/* 統一按鈕寬度 */
 .input-group button {
-    padding: 0 12px;
-    border-radius: var(--radius-md);
-    white-space: nowrap; font-weight: 600;
-    min-width: 70px; /* 強制統一寬度 */
-    justify-content: center;
+    padding: 0 16px; border-radius: var(--radius-md);
+    white-space: nowrap; font-weight: 600; min-width: 70px;
 }
-.btn-add { font-size: 1.2rem; }
+.btn-add { font-size: 1.4rem; padding-bottom: 4px; line-height: 1; }
 
-/* Textarea 優化 */
+/* Textarea */
 textarea {
-    width: 100%; padding: 12px;
-    background: white; border: 1px solid #cbd5e1;
+    width: 100%; padding: 15px;
+    background: white; border: 1px solid #e2e8f0;
     border-radius: var(--radius-md); font-family: inherit;
-    font-size: 0.95rem; line-height: 1.5; resize: vertical;
+    font-size: 0.95rem; line-height: 1.6; resize: vertical;
     min-height: 120px; transition: all 0.2s;
 }
-textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1); }
+textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1); }
 
-/* [修改] 卡片底部按鈕列排版 */
-.admin-card .control-group.button-row {
-    display: flex; gap: 12px; margin-top: 20px; margin-bottom: 0;
-}
-.admin-card .control-group.button-row button {
-    flex: 1; width: auto; margin: 0; height: 44px;
-}
-/* 卡片內的重置按鈕樣式 */
-.admin-card .control-group.button-row .btn-reset-single {
-    border: 1px solid #e2e8f0; background: white; color: var(--text-sub);
-    border-radius: var(--radius-md); border-style: solid;
-}
-.admin-card .control-group.button-row .btn-reset-single:hover {
-    background: #fee2e2; color: #ef4444; border-color: #ef4444;
-}
+/* 卡片底部按鈕列 */
+.admin-card .button-row { display: flex; gap: 12px; margin-top: 20px; }
+.admin-card .button-row button { flex: 1; height: 48px; margin: 0; }
 
-/* Toggle 開關美化 */
-.sound-toggle-group, .system-toggle-group {
-    display: flex; justify-content: space-between; align-items: center;
-    padding: 14px; border-radius: var(--radius-md);
-    margin-bottom: 15px; cursor: pointer; font-weight: 600;
-    transition: transform 0.1s;
-}
-.sound-toggle-group { background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; }
-.system-toggle-group { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; }
-.sound-toggle-group:active, .system-toggle-group:active { transform: scale(0.98); }
-
+/* Checkbox & Radio */
+.toggle-wrapper { display: flex; align-items: center; }
 input[type="checkbox"], input[type="radio"] {
-    accent-color: var(--primary); width: 18px; height: 18px; cursor: pointer;
+    accent-color: var(--primary); width: 20px; height: 20px; cursor: pointer;
 }
+.radio-group { display: flex; gap: 15px; }
+.radio-option { display: flex; align-items: center; gap: 8px; background: white; padding: 8px 12px; border-radius: 8px; border: 1px solid #e2e8f0; }
 
 /* =========================================
    7. 列表與圖表 (Lists & Charts)
@@ -323,110 +301,106 @@ ul { padding: 0; margin: 0; list-style: none; }
 
 .list-editor ul, .admin-log-container ul, #stats-list-ui, .online-users-ui {
     background: #f8fafc;
-    border: 1px solid #e2e8f0; border-radius: var(--radius-md);
-    max-height: 200px; overflow-y: auto;
-    margin-bottom: 12px;
+    border: 1px solid #e2e8f0; border-radius: 12px;
+    max-height: 220px; overflow-y: auto; margin-bottom: 12px;
 }
-.admin-log-container ul { font-family: monospace; font-size: 0.85rem; background: #1e293b; color: #e2e8f0; border: none; }
+/* 日誌專用 */
+.admin-log-container ul { font-family: "Noto Sans Mono", monospace; font-size: 0.85rem; background: #1e293b; color: #e2e8f0; border: none; }
+.admin-log-container li { border-bottom: 1px solid #334155; }
 
 li {
-    padding: 10px 14px; border-bottom: 1px solid #e2e8f0;
+    padding: 12px 16px; border-bottom: 1px solid #e2e8f0;
     display: flex; justify-content: space-between; align-items: center;
     font-size: 0.9rem; gap: 10px;
 }
 li:last-child { border-bottom: none; }
-.admin-log-container li { border-bottom: 1px solid #334155; }
+li > span, li > div { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* 強制文字佔滿，讓刪除鈕靠右 */
-li > span, li > div { flex: 1; overflow: hidden; text-overflow: ellipsis; }
-
-/* 刪除小按鈕 */
 .delete-item-btn {
-    width: 28px; height: 28px; border-radius: 6px;
+    width: 32px; height: 32px; border-radius: 8px;
     background: #fee2e2; color: #ef4444;
     display: flex; align-items: center; justify-content: center;
-    flex-shrink: 0; margin-left: auto;
+    flex-shrink: 0; margin-left: auto; transition: 0.2s;
 }
-.delete-item-btn:hover { background: #ef4444; color: white; }
+.delete-item-btn:hover { background: #ef4444; color: white; transform: rotate(90deg); }
 
 /* 圖表 */
+.stats-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 15px; }
+.stats-header p { margin: 0; font-weight: 600; color: var(--text-sub); }
+
 .chart-container {
-    height: 150px; background: white;
-    border: 1px solid #e2e8f0; border-radius: var(--radius-md);
+    height: 160px; background: white;
+    border: 1px solid #e2e8f0; border-radius: 12px;
     display: flex; align-items: flex-end;
-    padding: 15px 5px 0; gap: 4px; overflow-x: auto;
-    margin: 15px 0;
+    padding: 20px 10px 0; gap: 6px; overflow-x: auto;
+    margin-bottom: 20px;
 }
 .chart-col {
-    flex: 1; min-width: 18px; display: flex;
+    flex: 1; min-width: 24px; display: flex;
     flex-direction: column; align-items: center;
     cursor: pointer; position: relative;
 }
 .chart-bar {
-    width: 80%; background: var(--primary);
-    border-radius: 4px 4px 0 0; min-height: 4px;
-    opacity: 0.6; transition: height 0.4s ease, opacity 0.2s;
+    width: 100%; background: #cbd5e1; border-radius: 4px 4px 0 0; 
+    min-height: 4px; opacity: 1; transition: height 0.5s cubic-bezier(0.16, 1, 0.3, 1);
 }
-.chart-col:hover .chart-bar { opacity: 1; }
-.chart-col.current .chart-bar { background: var(--warning); opacity: 1; }
-.chart-val { font-size: 0.7rem; color: var(--text-sub); margin-bottom: 4px; height: 14px; }
+.chart-col:hover .chart-bar { background: var(--primary); }
+.chart-col.current .chart-bar { background: var(--warning); box-shadow: 0 0 10px rgba(245, 158, 11, 0.4); }
 
-/* 統計按鈕 */
-.stats-actions-row { display: flex; gap: 8px; margin-top: 15px; }
-.stats-actions-row button { flex: 1; padding: 8px; border-radius: 6px; font-size: 0.9rem; }
+.stats-actions-row { display: flex; gap: 10px; }
+.stats-actions-row button { flex: 1; height: 40px; border-radius: 8px; font-size: 0.9rem; }
+.sub-header { margin-top: 25px; display: block; font-weight: 700; color: var(--text-main); margin-bottom: 10px; }
 
 /* =========================================
-   8. 彈窗與雜項
+   8. 彈窗與浮動 (Modal & Toast)
    ========================================= */
-#edit-stats-overlay {
+.modal-overlay {
     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(15, 23, 42, 0.6); z-index: 5000;
-    display: none; justify-content: center; align-items: center;
-    backdrop-filter: blur(4px);
+    background: rgba(15, 23, 42, 0.4); z-index: 5000;
+    display: flex; justify-content: center; align-items: center;
+    backdrop-filter: blur(8px);
 }
 .modal-content {
-    background: white; padding: 30px;
-    border-radius: var(--radius-lg);
-    width: 90%; max-width: 360px; text-align: center;
-    box-shadow: var(--shadow-lg);
+    background: white; padding: 40px;
+    border-radius: 24px; width: 90%; max-width: 400px; text-align: center;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.2);
     animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
-@keyframes popIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes popIn { from { transform: scale(0.9) translateY(20px); opacity: 0; } to { transform: scale(1) translateY(0); opacity: 1; } }
+
+.modal-actions { display: flex; gap: 20px; justify-content: center; margin: 30px 0; align-items: center; }
+.btn-circle { width: 60px; height: 60px; border-radius: 50%; font-size: 1.5rem; }
+#modal-current-count { font-size: 3rem; font-weight: 800; color: var(--text-main); width: 80px; }
+.full-width { width: 100%; padding: 12px; }
 
 #toast-notification {
-    position: fixed; bottom: 30px; left: 50%; transform: translate(-50%, 50px);
-    background: #334155; color: white; padding: 12px 24px;
+    position: fixed; bottom: 40px; left: 50%; transform: translate(-50%, 40px);
+    background: #1e293b; color: white; padding: 14px 28px;
     border-radius: 50px; font-weight: 600;
-    opacity: 0; transition: all 0.3s; z-index: 9999;
-    box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
+    opacity: 0; transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    z-index: 9999; box-shadow: 0 10px 20px rgba(0,0,0,0.15);
 }
 #toast-notification.show { transform: translate(-50%, 0); opacity: 1; }
 #toast-notification.success { background: var(--success); }
 #toast-notification.error { background: var(--danger); }
 
-.reset-zone {
-    margin-top: 40px; padding-top: 30px;
-    border-top: 2px dashed #cbd5e1;
-}
-.reset-zone button { width: 100%; padding: 14px; font-size: 1rem; border-radius: var(--radius-md); }
-
 /* =========================================
    9. RWD 手機版適配
    ========================================= */
 @media (max-width: 768px) {
-    body { padding: 15px; }
+    body { padding: 15px 10px; }
     
-    .dashboard-header { flex-direction: column; gap: 20px; align-items: stretch; padding: 20px; }
+    .dashboard-header { flex-direction: column; gap: 25px; padding: 25px; }
     .dashboard-divider { display: none; }
-    .dashboard-item { border-bottom: 1px solid #f1f5f9; padding-bottom: 15px; display: flex; justify-content: space-between; align-items: center; }
+    .dashboard-item { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f1f5f9; padding-bottom: 15px; width: 100%; }
     .dashboard-item:last-child { border-bottom: none; padding-bottom: 0; }
-    .dashboard-item .label { margin: 0; }
-    
+    .big-number { font-size: 2.5rem; } .sub-number { font-size: 1.8rem; }
+
+    .quick-actions-bar { gap: 10px; }
+    .quick-actions-bar button { padding: 15px 20px; font-size: 1rem; width: 50%; }
+
     .card-container { grid-template-columns: 1fr; }
-    
     .input-group { flex-direction: column; }
     .input-group button { width: 100%; padding: 12px; }
-    
-    .admin-card .control-group.button-row { gap: 10px; }
-    #prev, #next { padding: 12px 20px; font-size: 1.1rem; width: 100%; }
+    .input-row { width: 100%; }
 }
