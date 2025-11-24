@@ -1,6 +1,6 @@
 /*
  * ==========================================
- * 伺服器 (index.js) - v18.13 Optimized (Lua/Pipeline/Fixes)
+ * 伺服器 (index.js) - v18.14 Fully Configurable LINE Msgs
  * ==========================================
  */
 
@@ -61,7 +61,6 @@ const redis = new Redis(REDIS_URL, {
 });
 
 // [新增] 定義 Lua Script 以解決競態條件 (Race Condition)
-// 邏輯：只有當 current < issued 時才執行 INCR，否則回傳 -1
 redis.defineCommand("safeNextNumber", {
     numberOfKeys: 2,
     lua: `
@@ -73,6 +72,14 @@ redis.defineCommand("safeNextNumber", {
             return -1
         end
     `
+});
+
+redis.defineCommand("decrIfPositive", {
+    numberOfKeys: 1,
+    lua: `
+        local currentValue = tonumber(redis.call("GET", KEYS[1]))
+        if currentValue and currentValue > 0 then return redis.call("DECR", KEYS[1]) else return currentValue or 0 end
+    `,
 });
 
 // --- Redis Keys ---
@@ -105,6 +112,11 @@ const KEY_LINE_MSG_SET_OK     = 'callsys:line:msg:set_ok';     // 設定提醒�
 const KEY_LINE_MSG_CANCEL     = 'callsys:line:msg:cancel';     // 取消提醒
 const KEY_LINE_MSG_LOGIN_HINT = 'callsys:line:msg:login_hint'; // 登入提示
 
+// [新增] 錯誤與提示訊息 Keys
+const KEY_LINE_MSG_ERR_FORMAT = 'callsys:line:msg:err_format'; // 格式錯誤(設定提醒教學)
+const KEY_LINE_MSG_ERR_PASSED = 'callsys:line:msg:err_passed'; // 設定失敗(已過號)
+const KEY_LINE_MSG_ERR_NO_SUB = 'callsys:line:msg:err_no_sub'; // 取消失敗(無追蹤中)
+
 // --- 預設文案 (Defaults) ---
 const DEFAULT_MSG_APPROACH   = "🔔 叫號提醒！\n\n目前已叫號至 {current} 號。\n您的 {target} 號即將輪到 (剩 {diff} 組)，請準備前往現場！";
 const DEFAULT_MSG_ARRIVAL    = "🎉 輪到您了！\n\n目前號碼：{current} 號\n請立即前往櫃台辦理。";
@@ -115,9 +127,14 @@ const DEFAULT_MSG_SET_OK     = "✅ 提醒設定成功！\n\n目標號碼：{tar
 const DEFAULT_MSG_CANCEL     = "🗑️ 已取消對 {target} 號的提醒通知。";
 const DEFAULT_MSG_LOGIN_HINT = "🔒 請輸入「解鎖密碼」以驗證身份。";
 
+// [新增] 錯誤訊息預設值
+const DEFAULT_MSG_ERR_FORMAT = "💡 設定失敗\n請輸入「設定提醒 號碼」，例如：\n設定提醒 105";
+const DEFAULT_MSG_ERR_PASSED = "⚠️ 設定失敗\n{target} 號已經過號或正在叫號 (目前 {current} 號)。";
+const DEFAULT_MSG_ERR_NO_SUB = "ℹ️ 您目前沒有設定任何叫號提醒。";
+
 const onlineAdmins = new Map();
 
-// 安全設定 - 支援 Google Fonts
+// 安全設定
 app.use(helmet({
     contentSecurityPolicy: {
       directives: {
@@ -186,19 +203,10 @@ cron.schedule('0 4 * * *', async () => {
         io.emit("update", 0);
         io.emit("updateQueue", { current: 0, issued: 0 });
         io.emit("updatePassed", []);
-        // 廣播給 admin 房間
         io.to("admin").emit("newAdminLog", "[系統] ⏰ 執行每日自動歸零"); 
         addAdminLog("系統", "⏰ 執行每日自動歸零");
     } catch (e) { console.error("❌ 自動重置失敗:", e); }
 }, { timezone: "Asia/Taipei" });
-
-redis.defineCommand("decrIfPositive", {
-    numberOfKeys: 1,
-    lua: `
-        local currentValue = tonumber(redis.call("GET", KEYS[1]))
-        if currentValue and currentValue > 0 then return redis.call("DECR", KEYS[1]) else return currentValue or 0 end
-    `,
-});
 
 // --- Helper Functions ---
 function sanitize(str) {
@@ -241,7 +249,6 @@ async function broadcastQueueStatus() {
     const currentNum = parseInt(current) || 0;
     let issuedNum = parseInt(issued) || 0;
     
-    // 防呆：發號數不應小於叫號數
     if (issuedNum < currentNum) {
         issuedNum = currentNum;
         await redis.set(KEY_LAST_ISSUED, issuedNum);
@@ -251,14 +258,12 @@ async function broadcastQueueStatus() {
     io.emit("updateQueue", { current: currentNum, issued: issuedNum });
 }
 
-// [Performance & Security] 只發送給 'admin' 房間
 async function addAdminLog(nickname, message) {
     try {
         const timeString = new Date().toLocaleTimeString('zh-TW', { timeZone: 'Asia/Taipei', hour12: false });
         const log = `[${timeString}] [${nickname}] ${message}`;
         await redis.lpush(KEY_ADMIN_LOG, log);
         await redis.ltrim(KEY_ADMIN_LOG, 0, 99); 
-        // 只傳給管理員，不廣播給全網
         io.to("admin").emit("newAdminLog", log); 
     } catch (e) { console.error("Log error:", e); }
 }
@@ -288,7 +293,6 @@ async function calculateSmartWaitTime() {
     } catch (e) { return 0; }
 }
 
-// [Fix] 修正統計漏洞：允許 delta <= 0 時仍記錄操作，但只在 delta > 0 時增加人數
 async function logHistory(number, operator, delta = 1) {
     try {
         const { dateStr, hour } = getTaiwanDateInfo();
@@ -298,7 +302,6 @@ async function logHistory(number, operator, delta = 1) {
         pipeline.lpush(KEY_HISTORY_STATS, JSON.stringify(record));
         pipeline.ltrim(KEY_HISTORY_STATS, 0, 999); 
         
-        // 只有當 delta > 0 時才去增加每小時的統計計數
         if (delta > 0) {
             pipeline.hincrby(`${KEY_STATS_HOURLY_PREFIX}${dateStr}`, hour, delta); 
         }
@@ -308,34 +311,29 @@ async function logHistory(number, operator, delta = 1) {
     } catch (e) { console.error("Log history error:", e); }
 }
 
-// [Performance & Security] 只發送給 'admin' 房間
 function broadcastOnlineAdmins() {
     io.to("admin").emit("updateOnlineAdmins", Array.from(onlineAdmins.values()));
 }
 
-// [修改] 使用 Pipeline 優化 LINE 通知查詢
 async function checkAndNotifyLineUsers(currentNum) {
     if (!lineClient) return;
     try {
         currentNum = parseInt(currentNum);
         const notifyTarget = currentNum + REMIND_BUFFER;
         
-        // [優化] 使用 Pipeline 一次取回所有需要的資料，減少 RTT
         const pipeline = redis.pipeline();
         pipeline.get(KEY_LINE_MSG_APPROACH);
         pipeline.get(KEY_LINE_MSG_ARRIVAL);
-        pipeline.smembers(`${KEY_LINE_SUB_PREFIX}${notifyTarget}`); // 快到了訂閱者
-        pipeline.smembers(`${KEY_LINE_SUB_PREFIX}${currentNum}`);   // 到號了訂閱者
+        pipeline.smembers(`${KEY_LINE_SUB_PREFIX}${notifyTarget}`);
+        pipeline.smembers(`${KEY_LINE_SUB_PREFIX}${currentNum}`);
         
         const results = await pipeline.exec(); 
-        // results 格式: [[err, val], [err, val], ...]
         
         let tplApproach = results[0][1] || DEFAULT_MSG_APPROACH;
         let tplArrival  = results[1][1] || DEFAULT_MSG_ARRIVAL;
         const approachSubs = results[2][1] || [];
         const exactSubs    = results[3][1] || [];
 
-        // 發送 "快到了" 通知
         if (approachSubs.length > 0) {
             const msgText = tplApproach
                 .replace(/{current}/g, currentNum)
@@ -344,7 +342,6 @@ async function checkAndNotifyLineUsers(currentNum) {
             await lineClient.multicast(approachSubs, [{ type: 'text', text: msgText }]);
         }
 
-        // 發送 "到號了" 通知
         if (exactSubs.length > 0) {
             const msgText = tplArrival
                 .replace(/{current}/g, currentNum)
@@ -352,7 +349,6 @@ async function checkAndNotifyLineUsers(currentNum) {
                 .replace(/{diff}/g, 0);
             await lineClient.multicast(exactSubs, [{ type: 'text', text: msgText }]);
             
-            // 清理 Redis 資料
             const cleanPipe = redis.multi();
             exactSubs.forEach(uid => cleanPipe.del(`${KEY_LINE_USER_STATUS}${uid}`));
             cleanPipe.del(`${KEY_LINE_SUB_PREFIX}${currentNum}`);
@@ -369,20 +365,26 @@ async function handleLineEvent(event) {
     const userId = event.source.userId;
     const replyToken = event.replyToken;
 
-    // 1. 讀取所有設定文案 (包含新增的 login_hint)
+    // 1. 讀取所有設定文案 (包含新增的錯誤訊息 Key)
     const keys = [
         KEY_LINE_MSG_STATUS, KEY_LINE_MSG_PERSONAL, 
         KEY_LINE_MSG_PASSED, KEY_LINE_MSG_SET_OK, KEY_LINE_MSG_CANCEL,
-        KEY_LINE_MSG_LOGIN_HINT
+        KEY_LINE_MSG_LOGIN_HINT,
+        KEY_LINE_MSG_ERR_FORMAT, KEY_LINE_MSG_ERR_PASSED, KEY_LINE_MSG_ERR_NO_SUB
     ];
-    const [tplStatus, tplPersonal, tplPassed, tplSetOk, tplCancel, tplLoginHint] = await redis.mget(keys);
+    const results = await redis.mget(keys);
     
-    const MSG_STATUS = tplStatus || DEFAULT_MSG_STATUS;
-    const MSG_PERSONAL = tplPersonal || DEFAULT_MSG_PERSONAL;
-    const MSG_PASSED = tplPassed || DEFAULT_MSG_PASSED;
-    const MSG_SET_OK = tplSetOk || DEFAULT_MSG_SET_OK;
-    const MSG_CANCEL = tplCancel || DEFAULT_MSG_CANCEL;
-    const MSG_LOGIN_HINT = tplLoginHint || DEFAULT_MSG_LOGIN_HINT;
+    const MSG_STATUS     = results[0] || DEFAULT_MSG_STATUS;
+    const MSG_PERSONAL   = results[1] || DEFAULT_MSG_PERSONAL;
+    const MSG_PASSED     = results[2] || DEFAULT_MSG_PASSED;
+    const MSG_SET_OK     = results[3] || DEFAULT_MSG_SET_OK;
+    const MSG_CANCEL     = results[4] || DEFAULT_MSG_CANCEL;
+    const MSG_LOGIN_HINT = results[5] || DEFAULT_MSG_LOGIN_HINT;
+    
+    // [新增] 錯誤訊息變數
+    const MSG_ERR_FORMAT = results[6] || DEFAULT_MSG_ERR_FORMAT;
+    const MSG_ERR_PASSED = results[7] || DEFAULT_MSG_ERR_PASSED;
+    const MSG_ERR_NO_SUB = results[8] || DEFAULT_MSG_ERR_NO_SUB;
 
     // 2. 後台解鎖功能
     if (text === '後台登入') {
@@ -451,12 +453,15 @@ async function handleLineEvent(event) {
         const targetNum = parseInt(inputNumStr);
 
         if (isNaN(targetNum)) {
-            return lineClient.replyMessage(replyToken, { type: "text", text: "💡 設定失敗\n請輸入「設定提醒 號碼」，例如：\n設定提醒 105" });
+            return lineClient.replyMessage(replyToken, { type: "text", text: MSG_ERR_FORMAT });
         }
 
         const currentNum = parseInt(await redis.get(KEY_CURRENT_NUMBER)) || 0;
         if (targetNum <= currentNum) {
-            return lineClient.replyMessage(replyToken, { type: "text", text: `⚠️ 設定失敗\n${targetNum} 號已經過號或正在叫號 (目前 ${currentNum} 號)。` });
+            const errorMsg = MSG_ERR_PASSED
+                .replace(/{target}/g, targetNum)
+                .replace(/{current}/g, currentNum);
+            return lineClient.replyMessage(replyToken, { type: "text", text: errorMsg });
         }
 
         const oldTarget = await redis.get(`${KEY_LINE_USER_STATUS}${userId}`);
@@ -482,7 +487,7 @@ async function handleLineEvent(event) {
     if (['取消提醒', '取消', 'cancel'].includes(text)) {
         const trackingNum = await redis.get(`${KEY_LINE_USER_STATUS}${userId}`);
         if (!trackingNum) {
-            return lineClient.replyMessage(replyToken, { type: "text", text: "ℹ️ 您目前沒有設定任何叫號提醒。" });
+            return lineClient.replyMessage(replyToken, { type: "text", text: MSG_ERR_NO_SUB });
         }
         const pipeline = redis.multi();
         pipeline.del(`${KEY_LINE_USER_STATUS}${userId}`); 
@@ -533,13 +538,16 @@ const protectedAPIs = [
 app.use(protectedAPIs, apiLimiter, authMiddleware);
 
 // --- API: LINE Settings ---
+
+// [修改] /api/admin/line-settings/get: 加入錯誤訊息欄位
 app.post("/api/admin/line-settings/get", async (req, res) => {
     try {
         const keys = [
             KEY_LINE_MSG_APPROACH, KEY_LINE_MSG_ARRIVAL, 
             KEY_LINE_MSG_STATUS, KEY_LINE_MSG_PERSONAL, 
             KEY_LINE_MSG_PASSED, KEY_LINE_MSG_SET_OK, KEY_LINE_MSG_CANCEL,
-            KEY_LINE_MSG_LOGIN_HINT
+            KEY_LINE_MSG_LOGIN_HINT,
+            KEY_LINE_MSG_ERR_FORMAT, KEY_LINE_MSG_ERR_PASSED, KEY_LINE_MSG_ERR_NO_SUB
         ];
         const results = await redis.mget(keys);
         res.json({ 
@@ -551,14 +559,22 @@ app.post("/api/admin/line-settings/get", async (req, res) => {
             passed:     results[4] || DEFAULT_MSG_PASSED,
             set_ok:     results[5] || DEFAULT_MSG_SET_OK,
             cancel:     results[6] || DEFAULT_MSG_CANCEL,
-            login_hint: results[7] || DEFAULT_MSG_LOGIN_HINT
+            login_hint: results[7] || DEFAULT_MSG_LOGIN_HINT,
+            err_format: results[8] || DEFAULT_MSG_ERR_FORMAT,
+            err_passed: results[9] || DEFAULT_MSG_ERR_PASSED,
+            err_no_sub: results[10] || DEFAULT_MSG_ERR_NO_SUB
         });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// [修改] /api/admin/line-settings/save: 加入錯誤訊息欄位儲存
 app.post("/api/admin/line-settings/save", async (req, res) => {
     try {
-        const { approach, arrival, status, personal, passed, set_ok, cancel, login_hint } = req.body;
+        const { 
+            approach, arrival, status, personal, passed, set_ok, cancel, login_hint,
+            err_format, err_passed, err_no_sub 
+        } = req.body;
+        
         if (!approach || !arrival || !status) return res.status(400).json({ error: "主要文案不可為空" });
 
         const pipeline = redis.multi();
@@ -571,19 +587,26 @@ app.post("/api/admin/line-settings/save", async (req, res) => {
         pipeline.set(KEY_LINE_MSG_CANCEL, sanitize(cancel));
         pipeline.set(KEY_LINE_MSG_LOGIN_HINT, sanitize(login_hint));
         
+        // 儲存錯誤訊息
+        pipeline.set(KEY_LINE_MSG_ERR_FORMAT, sanitize(err_format));
+        pipeline.set(KEY_LINE_MSG_ERR_PASSED, sanitize(err_passed));
+        pipeline.set(KEY_LINE_MSG_ERR_NO_SUB, sanitize(err_no_sub));
+        
         await pipeline.exec();
         addAdminLog(req.user.nickname, "📝 更新了 LINE 自動回覆文案");
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// [修改] /api/admin/line-settings/reset: 加入錯誤訊息欄位重置
 app.post("/api/admin/line-settings/reset", async (req, res) => {
     try {
         const keys = [
             KEY_LINE_MSG_APPROACH, KEY_LINE_MSG_ARRIVAL, 
             KEY_LINE_MSG_STATUS, KEY_LINE_MSG_PERSONAL, 
             KEY_LINE_MSG_PASSED, KEY_LINE_MSG_SET_OK, KEY_LINE_MSG_CANCEL,
-            KEY_LINE_MSG_LOGIN_HINT
+            KEY_LINE_MSG_LOGIN_HINT,
+            KEY_LINE_MSG_ERR_FORMAT, KEY_LINE_MSG_ERR_PASSED, KEY_LINE_MSG_ERR_NO_SUB
         ];
         await redis.del(keys);
         addAdminLog(req.user.nickname, "↺ 重置了 LINE 自動回覆文案");
@@ -596,7 +619,10 @@ app.post("/api/admin/line-settings/reset", async (req, res) => {
             passed:     DEFAULT_MSG_PASSED,
             set_ok:     DEFAULT_MSG_SET_OK,
             cancel:     DEFAULT_MSG_CANCEL,
-            login_hint: DEFAULT_MSG_LOGIN_HINT
+            login_hint: DEFAULT_MSG_LOGIN_HINT,
+            err_format: DEFAULT_MSG_ERR_FORMAT,
+            err_passed: DEFAULT_MSG_ERR_PASSED,
+            err_no_sub: DEFAULT_MSG_ERR_NO_SUB
         });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -620,7 +646,7 @@ app.post("/api/admin/line-settings/get-unlock-pass", superAdminAuthMiddleware, a
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// [修改] CSV 匯出部分 (檔名優化)
+// CSV 匯出 (檔名時間戳記優化)
 app.post("/api/admin/export-csv", superAdminAuthMiddleware, async (req, res) => {
     try {
         const historyRaw = await redis.lrange(KEY_HISTORY_STATS, 0, -1);
@@ -640,7 +666,6 @@ app.post("/api/admin/export-csv", superAdminAuthMiddleware, async (req, res) => 
             csvContent += `${time},${item.num},${item.operator},${duration},${note}\n`;
         }
 
-        // 產生更精確的時間戳記：YYYY-MM-DD_HHmm
         const now = new Date();
         const timestamp = now.toLocaleString('zh-TW', { 
             timeZone: 'Asia/Taipei', 
@@ -679,13 +704,12 @@ app.post("/set-system-mode", superAdminAuthMiddleware, async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// [修改] /change-number 路由 (Lua Script 應用)
+// Lua Script 應用於 /change-number
 app.post("/change-number", async (req, res) => {
     try {
         const { direction } = req.body;
         let num;
         if (direction === "next") {
-            // [優化] 使用 Lua Script 原子操作，防止多人同時按下一號時跳號
             const result = await redis.safeNextNumber(KEY_CURRENT_NUMBER, KEY_LAST_ISSUED);
             
             if (result === -1) {
@@ -696,7 +720,6 @@ app.post("/change-number", async (req, res) => {
             await logHistory(num, req.user.nickname, 1);
             addAdminLog(req.user.nickname, `號碼增加為 ${num}`);
         } else if (direction === "prev") {
-            // prev 操作競態風險較低，維持原樣
             num = await redis.decrIfPositive(KEY_CURRENT_NUMBER);
             await logHistory(num, req.user.nickname, 0); 
             addAdminLog(req.user.nickname, `號碼回退為 ${num}`);
@@ -781,7 +804,6 @@ app.post("/set-issued-number", async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// [新增] 一鍵過號功能
 app.post("/api/control/pass-current", async (req, res) => {
     try {
         const current = parseInt(await redis.get(KEY_CURRENT_NUMBER)) || 0;
@@ -803,7 +825,6 @@ app.post("/api/control/pass-current", async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// [新增] 過號回溯 (插隊/重呼)
 app.post("/api/control/recall-passed", async (req, res) => {
     try {
         const { number } = req.body;
@@ -950,11 +971,9 @@ app.post("/api/admin/set-nickname", async (req, res) => {
     res.json({ success: true });
 });
 
-// [Security & Performance] Socket 連線處理與房間分流
 io.on("connection", async (socket) => {
     const token = socket.handshake.auth.token;
     
-    // 1. 管理員驗證與房間加入
     if (token) {
         const session = await redis.get(`${SESSION_PREFIX}${token}`);
         if (session) {
@@ -1016,5 +1035,5 @@ process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
 
 server.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Server v18.13 (Lua/Pipeline/Fixes) ready on port ${PORT}`);
+    console.log(`🚀 Server v18.14 (Line Msgs Configurable) ready on port ${PORT}`);
 });
