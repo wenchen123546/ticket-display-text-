@@ -57,7 +57,7 @@
                     <p data-i18n="online_ticket_desc" style="color:#666; font-size: 0.9rem; margin-bottom: 20px;">
                         免排隊、免等待！線上領取號碼牌，<br>到號自動通知您。
                     </p>
-                    <div style="display:flex; justify-content:center; align-items:center; gap:15px; flex-direction:column;">
+                    <div style="display:flex; justify-content:center; align-items:center; gap:15px;">
                         <button id="btn-take-ticket" class="btn-primary-action" data-i18n="take_ticket">
                             🎫 立即取號
                         </button>
@@ -80,27 +80,27 @@
                 </div>
             </div>
 
-            <div id="my-ticket-view" style="display: none; background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%); color: white; padding: 25px; position: relative;">
+            <div id="my-ticket-view" class="my-ticket-card" style="display: none;">
                 
-                <button id="btn-cancel-ticket" type="button" style="position: absolute; top: 15px; right: 15px; background: rgba(255,255,255,0.25); border: 1px solid rgba(255,255,255,0.4); padding: 6px 12px; border-radius: 20px; font-size: 0.85rem; cursor: pointer; color: white; z-index: 10; user-select: none;">
+                <button id="btn-cancel-ticket" type="button" class="btn-cancel-ticket">
                     <span data-i18n="btn_give_up">🗑️ 放棄</span>
                 </button>
                 
-                <h3 data-i18n="my_number" style="margin:0; font-size:1rem; opacity:0.9; border:none; padding:0;">您的號碼</h3>
-                <div style="font-size: 5rem; font-weight: bold; line-height: 1; margin: 10px 0;">
+                <h3 data-i18n="my_number">您的號碼</h3>
+                <div class="my-ticket-number-display">
                     <span id="my-ticket-num">?</span>
                 </div>
                 
-                <div style="background: rgba(255,255,255,0.15); border-radius: 12px; padding: 15px; margin-top: 10px; display: flex; justify-content: space-around; align-items: center;">
-                    <div style="text-align: center;">
-                        <span data-i18n="ticket_current_label" style="display:block; font-size:0.8rem; opacity:0.8;">目前叫號</span>
-                        <span id="ticket-current-display" style="font-size:1.5rem; font-weight:bold;">0</span>
+                <div class="my-ticket-info-block">
+                    <div class="info-item">
+                        <span data-i18n="ticket_current_label" class="info-label">目前叫號</span>
+                        <span id="ticket-current-display" class="info-value">0</span>
                     </div>
-                    <div style="width:1px; height: 30px; background:rgba(255,255,255,0.3);"></div>
-                    <div style="text-align: center;">
-                        <span data-i18n="wait_count" style="display:block; font-size:0.8rem; opacity:0.8;">前方等待</span>
-                        <span id="ticket-waiting-count" style="font-size:1.5rem; font-weight:bold;">0</span> 
-                        <span data-i18n="unit_group" style="font-size:0.8rem;">組</span>
+                    <div class="info-divider"></div>
+                    <div class="info-item">
+                        <span data-i18n="wait_count" class="info-label">前方等待</span>
+                        <span id="ticket-waiting-count" class="info-value">0</span> 
+                        <span data-i18n="unit_group" class="info-unit">組</span>
                     </div>
                 </div>
 
