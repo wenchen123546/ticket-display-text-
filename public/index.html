@@ -81,9 +81,8 @@
 
                     <div id="input-mode-container" class="mode-container" style="display: none;">
                         <div class="action-header">
-                            <h3 data-i18n="manual_input_title">手動追蹤</h3>
-                            <p class="func-desc" data-i18n="help_track_ticket">輸入您的號碼即可開啟到號提醒。</p>
-                        </div>
+                            <h3 data-i18n="manual_input_title">號碼提醒</h3>
+                            </div>
                         <div class="input-wrapper">
                             <input type="number" id="manual-ticket-input" class="fancy-input" placeholder="#" inputmode="numeric">
                             <button id="btn-track-ticket" class="btn-track" data-i18n="set_reminder">追蹤</button>
@@ -114,9 +113,14 @@
                         <div class="links-label" data-i18n="links_title">精選連結</div>
                         <div id="featured-container"></div>
                     </div>
+                    
                     <div class="util-btns">
-                        <button id="copy-link-prompt" class="btn-pill">🔗</button>
-                        <button id="sound-prompt" class="btn-pill">🔊</button>
+                        <button id="copy-link-prompt" class="btn-util">
+                            <span>🔗</span> <span data-i18n="copy_link">複製連結</span>
+                        </button>
+                        <button id="sound-prompt" class="btn-util">
+                            <span>🔊</span> <span data-i18n="sound_enable">音效</span>
+                        </button>
                     </div>
                 </div>
 
