@@ -1,6 +1,6 @@
 /*
  * ==========================================
- * 前端邏輯 (main.js) - v28.0 (Correct Text & Labels)
+ * 前端邏輯 (main.js) - v29.0
  * ==========================================
  */
 
@@ -9,11 +9,10 @@ const i18nData = {
         "current_number": "目前叫號",
         "issued_number": "已發至",
         "online_ticket_title": "線上取號",
-        "help_take_ticket": "手機領號，即時通知",
-        "manual_input_title": "手動追蹤",
-        "help_track_ticket": "輸入您的號碼即可開啟到號提醒。", // 修正文案
+        "help_take_ticket": "免排隊，手機領號",
+        "manual_input_title": "號碼提醒", // 修改
+        "manual_input_placeholder": "輸入您的號碼開啟到號提醒", // 修改：整合提示語
         "take_ticket": "立即取號",
-        "manual_input_placeholder": "號碼",
         "set_reminder": "追蹤",
         "my_number": "我的號碼",
         "wait_count": "前方",
@@ -22,8 +21,8 @@ const i18nData = {
         "status_passed": "⚠️ 已過號",
         "passed_list_title": "過號",
         "passed_empty": "無",
-        "links_title": "精選連結", // 新增標題
-        "copy_link": "複製",
+        "links_title": "精選連結",
+        "copy_link": "複製連結", // 修改
         "sound_enable": "音效",
         "sound_on": "開啟",
         "sound_mute": "靜音",
@@ -47,10 +46,9 @@ const i18nData = {
         "issued_number": "Issued",
         "online_ticket_title": "Get Ticket",
         "help_take_ticket": "Digital ticket & notify",
-        "manual_input_title": "Track #",
-        "help_track_ticket": "Enter your number to track.", // 修正文案
+        "manual_input_title": "Number Alert", // Modified
+        "manual_input_placeholder": "Enter number to get alerted", // Modified
         "take_ticket": "Get Ticket",
-        "manual_input_placeholder": "#",
         "set_reminder": "Track",
         "my_number": "Your #",
         "wait_count": "Ahead",
@@ -59,8 +57,8 @@ const i18nData = {
         "status_passed": "⚠️ Passed",
         "passed_list_title": "Passed",
         "passed_empty": "None",
-        "links_title": "Links", // 新增標題
-        "copy_link": "Copy",
+        "links_title": "Links",
+        "copy_link": "Copy Link", // Modified
         "sound_enable": "Sound",
         "sound_on": "On",
         "sound_mute": "Mute",
@@ -171,7 +169,12 @@ function playNotificationSound() {
 }
 
 function applyI18n() {
-    document.querySelectorAll('[data-i18n]').forEach(el => { const key = el.getAttribute('data-i18n'); if(T[key]) el.textContent = T[key]; });
+    document.querySelectorAll('[data-i18n]').forEach(el => { 
+        const key = el.getAttribute('data-i18n'); 
+        if(T[key]) el.textContent = T[key]; 
+    });
+    // 更新 Placeholder
+    if(DOM.manualTicketInput) DOM.manualTicketInput.placeholder = T["manual_input_placeholder"];
 }
 
 function updateTimeText() {
@@ -326,7 +329,7 @@ if(DOM.btnCancelTicket) DOM.btnCancelTicket.addEventListener("click", () => {
 function updateMuteUI(isMuted, needsPermission = false) { 
     isLocallyMuted = isMuted; 
     if (!DOM.soundPrompt) return; 
-    DOM.soundPrompt.innerHTML = needsPermission || isMuted ? '🔇' : '🔊'; 
+    // icon only handled by HTML structure now
 }
 
 if (DOM.soundPrompt) DOM.soundPrompt.addEventListener("click", () => handleUserInteraction(() => { 
@@ -336,9 +339,13 @@ if (DOM.soundPrompt) DOM.soundPrompt.addEventListener("click", () => handleUserI
 if (DOM.copyLinkPrompt) DOM.copyLinkPrompt.addEventListener("click", () => { 
     if (!navigator.clipboard) return alert("Use HTTPS"); 
     navigator.clipboard.writeText(window.location.href).then(() => { 
-        const originalText = DOM.copyLinkPrompt.textContent;
-        DOM.copyLinkPrompt.textContent = "✔"; 
-        setTimeout(() => { DOM.copyLinkPrompt.textContent = "🔗"; }, 2000); 
+        const originalText = DOM.copyLinkPrompt.innerHTML;
+        DOM.copyLinkPrompt.innerHTML = `<span>✔</span> <span>${T["copy_success"]}</span>`; 
+        setTimeout(() => { 
+            DOM.copyLinkPrompt.innerHTML = originalText;
+            // Re-apply correct text based on lang
+            DOM.copyLinkPrompt.querySelector('span:last-child').textContent = T["copy_link"];
+        }, 2000); 
     }); 
 });
 
