@@ -1,10 +1,10 @@
 /*
  * ==========================================
- * 後台邏輯 (admin.js) - v18.21 Fixes
+ * 後台邏輯 (admin.js) - v18.35 Optimized (Anti-Double-Submit & Efficient Render)
  * ==========================================
  */
 
-// [新增] 防抖動工具函式
+// 防抖動工具函式
 function debounce(func, delay) {
     let timer;
     return function(...args) {
@@ -360,9 +360,11 @@ socket.on("updateSystemMode", (mode) => {
     for(let r of radios) { if(r.value === mode) r.checked = true; }
 });
 
+// [優化] 高效日誌渲染，使用 prepend 而非清空重繪
 function renderLogs(logs, isInit) {
     const ui = document.getElementById("admin-log-ui");
     
+    // 初始化時，清空列表
     if(isInit) ui.replaceChildren();
 
     if(!logs || logs.length === 0) {
@@ -374,7 +376,8 @@ function renderLogs(logs, isInit) {
         return;
     }
     
-    if(isInit && ui.firstElementChild && (ui.firstElementChild.textContent.includes("載入中") || ui.firstElementChild.textContent.includes("尚無"))) {
+    // 如果是新日誌，且列表目前顯示"載入中"，則先清空
+    if(!isInit && ui.firstElementChild && (ui.firstElementChild.textContent.includes("載入中") || ui.firstElementChild.textContent.includes("尚無"))) {
         ui.replaceChildren();
     }
     
@@ -388,13 +391,15 @@ function renderLogs(logs, isInit) {
     if(isInit) {
         ui.appendChild(fragment);
     } else {
+        // 新日誌插入到最上方 (prepend)
         ui.insertBefore(fragment, ui.firstChild); 
     }
-    // 日誌在上方插入，不需要捲動到底部
 }
 
-// --- API Wrapper ---
+// --- API Wrapper [優化：增加防連點鎖] ---
 async function apiRequest(endpoint, body, a_returnResponse = false) {
+    // 檢查是否有正在進行的請求 (簡易版：透過 disabled 按鈕狀態)
+    // 這裡實作一個通用的錯誤處理，防連點由按鈕點擊事件層控制
     try {
         const res = await fetch(endpoint, {
             method: "POST",
@@ -419,6 +424,24 @@ async function apiRequest(endpoint, body, a_returnResponse = false) {
     } catch (err) { 
         showToast(`❌ 連線失敗: ${err.message}`, "error"); 
         return false; 
+    }
+}
+
+// 通用按鈕鎖定邏輯
+async function handleLockedAction(btn, action) {
+    if (!btn || btn.disabled) return;
+    btn.disabled = true;
+    const originalText = btn.innerHTML; // 保存原始按鈕內容 (可能包含 icon)
+    // 可選：btn.innerHTML = '...'; 
+    
+    try {
+        await action();
+    } finally {
+        // 延遲一點點再解鎖，避免極快連點
+        setTimeout(() => {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }, 300);
     }
 }
 
@@ -591,19 +614,18 @@ const btnMarkPassed = document.getElementById("btn-mark-passed");
 const btnIssuePrev = document.getElementById("btn-issue-prev");
 const btnIssueNext = document.getElementById("btn-issue-next");
 
-if(btnCallPrev) btnCallPrev.onclick = () => apiRequest("/api/control/call", { direction: "prev" });
-if(btnCallNext) btnCallNext.onclick = () => apiRequest("/api/control/call", { direction: "next" });
+// [優化] 使用 handleLockedAction 防止連點
+if(btnCallPrev) btnCallPrev.onclick = () => handleLockedAction(btnCallPrev, () => apiRequest("/api/control/call", { direction: "prev" }));
+if(btnCallNext) btnCallNext.onclick = () => handleLockedAction(btnCallNext, () => apiRequest("/api/control/call", { direction: "next" }));
 
-if(btnMarkPassed) btnMarkPassed.onclick = async () => {
-    btnMarkPassed.disabled = true;
+if(btnMarkPassed) btnMarkPassed.onclick = () => handleLockedAction(btnMarkPassed, async () => {
     if(await apiRequest("/api/control/pass-current", {})) showToast(at["toast_passed_marked"], "warning");
-    btnMarkPassed.disabled = false;
-};
+});
 
-if(btnIssuePrev) btnIssuePrev.onclick = () => apiRequest("/api/control/issue", { direction: "prev" });
-if(btnIssueNext) btnIssueNext.onclick = () => apiRequest("/api/control/issue", { direction: "next" });
+if(btnIssuePrev) btnIssuePrev.onclick = () => handleLockedAction(btnIssuePrev, () => apiRequest("/api/control/issue", { direction: "prev" }));
+if(btnIssueNext) btnIssueNext.onclick = () => handleLockedAction(btnIssueNext, () => apiRequest("/api/control/issue", { direction: "next" }));
 
-// [新增] 快速輸入按鈕邏輯
+// 快速輸入按鈕邏輯
 const btnQuickAdd1 = document.getElementById("quick-add-1");
 const btnQuickAdd5 = document.getElementById("quick-add-5");
 const btnQuickClear = document.getElementById("quick-clear");
@@ -651,7 +673,7 @@ if(setIssuedBtn) setIssuedBtn.onclick = async () => {
 // 重置叫號
 setupConfirmationButton(document.getElementById("resetNumber"), "btn_reset_call", "btn_confirm_reset", async () => { if (await apiRequest("/api/control/set-call", { number: 0 })) { document.getElementById("manualNumber").value = ""; showToast(at["toast_reset_zero"], "success"); } });
 
-// 重置發號 (新增)
+// 重置發號
 setupConfirmationButton(
     document.getElementById("resetIssued"), 
     "↺ 重置發號歸零", 
