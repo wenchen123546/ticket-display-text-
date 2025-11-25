@@ -1,6 +1,6 @@
 /*
  * ==========================================
- * 後台樣式 (admin.css) - v3.4 Final (Neat Layout & Scroll Fix)
+ * 後台樣式 (admin.css) - v3.5 Final (Flex Fix for LINE Settings)
  * ==========================================
  */
 
@@ -170,17 +170,17 @@ body {
 .dashboard-item:nth-child(2)::after { background: var(--success); }
 .dashboard-item:nth-child(3)::after { background: var(--warning); }
 
-/* --- 3. 卡片系統 (Cards) - [整齊化核心] --- */
+/* --- 3. 卡片系統 (Cards) --- */
 .card-container {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); 
     gap: 24px;
-    align-items: stretch; /* [關鍵] 強制讓同一列的卡片高度一致 */
+    align-items: stretch; /* 強制等高 */
 }
 .full-width-card { grid-column: 1 / -1; }
 
 .card-wrapper {
-    height: 100%; /* 確保 wrapper 撐滿 grid cell */
+    height: 100%; 
     display: flex;
     flex-direction: column;
 }
@@ -190,7 +190,7 @@ body {
     border-radius: var(--radius-lg);
     padding: 24px;
     box-shadow: var(--shadow-card);
-    height: 100%; /* [關鍵] 確保卡片撐滿高度 */
+    height: 100%; 
     display: flex; flex-direction: column;
     border: 1px solid white;
 }
@@ -253,23 +253,22 @@ button:active { transform: scale(0.97); }
     line-height: 1; padding-bottom: 3px;
 }
 
-/* [關鍵] 強制讓重置/底部按鈕沉底，對齊卡片底部 */
+/* 強制讓重置/底部按鈕沉底，對齊卡片底部 */
 .btn-reset-single {
     width: 100%; padding: 12px; border-radius: var(--radius-md);
     background: transparent; border: 1px dashed var(--border-color); color: var(--text-light);
     font-size: 0.85rem; 
-    margin-top: auto; /* Push to bottom */
+    margin-top: auto; 
 }
 .btn-reset-single:hover { border-color: var(--danger); color: var(--danger); background: #fef2f2; }
 
 /* --- 5. 輸入與表單 (Inputs) --- */
-/* [關鍵] 讓中間的控制項區塊佔據剩餘空間 */
 .control-group { 
     margin-bottom: 20px; width: 100%; 
-    flex-shrink: 0; /* 防止被擠壓 */
+    flex-shrink: 0;
 }
 .list-editor {
-    flex: 1; /* 對於列表類，讓它自動長高填充 */
+    flex: 1; 
     display: flex; flex-direction: column;
 }
 
@@ -320,13 +319,12 @@ ul { list-style: none; padding: 0; margin: 0; }
     background: #f9fafb; border-radius: var(--radius-md);
     border: 1px solid #f3f4f6; 
     max-height: 220px; 
-    min-height: 100px; /* 統一最小高度 */
+    min-height: 100px;
     overflow-y: auto;
     margin-bottom: 12px;
 }
-/* 特殊調整：過號名單和連結列表可以稍微長一點 */
 #passed-list-ui, #featured-list-ui {
-    flex: 1; /* 佔滿剩餘高度 */
+    flex: 1;
     min-height: 150px;
     max-height: 300px;
 }
@@ -462,20 +460,27 @@ li:last-child { border-bottom: none; }
         background: #f9fafb; padding: 20px; border-radius: var(--radius-md); border: 1px solid var(--border-color);
     }
 
-    /* LINE 設定網格化 */
+    /* [關鍵修復] LINE 設定改用 Flexbox 避免右側空白 */
     #card-line-settings details {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
+        display: flex;
+        flex-wrap: wrap;
         gap: 16px;
         width: 100%;
     }
-    #card-line-settings summary { grid-column: 1 / -1; margin-bottom: 10px; border-bottom: 2px solid #f3f4f6; }
-    #card-line-settings .control-group.form-group-boxed:nth-of-type(1), 
-    #card-line-settings .control-group.form-group-boxed:nth-of-type(2) { grid-column: span 1; }
-    #card-line-settings details:nth-of-type(2) .control-group.form-group-boxed { margin-bottom: 0; height: 100%; }
+    #card-line-settings summary { 
+        width: 100%;
+        margin-bottom: 10px;
+        border-bottom: 2px solid #f3f4f6; 
+    }
+    
+    /* 讓每個區塊精準佔 50% 寬度 (扣除 gap) */
+    #card-line-settings .control-group.form-group-boxed {
+        width: calc(50% - 8px); 
+        margin-bottom: 0; /* 在 Flex 排版中，讓 gap 負責間距 */
+    }
 }
 
 @media (min-width: 1440px) {
-    /* [大螢幕整齊化] 固定為 3 欄，避免寬度過度拉伸 */
+    /* [大螢幕整齊化] 固定為 3 欄 */
     .card-container { grid-template-columns: repeat(3, 1fr); }
 }
