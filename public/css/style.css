@@ -1,6 +1,6 @@
 /*
  * ==========================================
- * Theme: Maximized Compact v29.0 (User Feedback Fixes)
+ * Theme: Maximized Compact v30.0 (Final Fixes)
  * ==========================================
  */
 
@@ -73,19 +73,17 @@ body {
 
 /* --- Hero Section (極限壓縮空白) --- */
 .hero-section {
-    flex: 1; /* 佔滿剩餘空間 */
+    flex: 1; 
     display: flex; flex-direction: column; 
-    /* [修改] 減少內距 */
+    justify-content: flex-start; 
     padding: 8px 12px; 
     position: relative; overflow: hidden;
-    /* [修改] 使用 justify-content center 但偏上 */
-    justify-content: flex-start; 
 }
 
 .hero-top-info {
     flex: 0 0 auto;
     display: flex; justify-content: space-between; align-items: center; z-index: 2;
-    margin-bottom: 0; /* 移除底部邊距 */
+    margin-bottom: 0; 
 }
 .hero-label { font-size: 0.95rem; font-weight: 800; color: #94a3b8; text-transform: uppercase; }
 
@@ -99,43 +97,40 @@ body {
 #number {
     flex: 1;
     display: flex; align-items: center; justify-content: center;
-    /* [修改] 自動計算字體大小，盡量填滿 */
     font-size: clamp(8rem, 32vh, 16rem);
     font-weight: 900; 
-    line-height: 0.75; /* [修改] 極限行高，消除上下空白 */
+    line-height: 0.75; 
     background: linear-gradient(180deg, var(--text-main) 10%, var(--primary-dark) 100%);
     -webkit-background-clip: text; -webkit-text-fill-color: transparent;
     letter-spacing: -6px; 
     font-variant-numeric: tabular-nums;
-    /* 微調位置，讓視覺置中 */
     padding-bottom: 4vh; 
 }
 
 /* --- List Section (過號) --- */
 .list-section {
     padding: 6px 10px;
-    display: flex; align-items: flex-start; /* 改為上方對齊，因為內容可能換行 */
+    display: flex; align-items: flex-start; 
     gap: 8px;
     min-height: 50px;
 }
 .list-header { 
     display: flex; align-items: center; gap: 6px; 
     flex-shrink: 0; 
-    padding-top: 6px; /* 對齊第一行號碼 */
+    padding-top: 6px; 
 }
 .list-title { font-size: 0.9rem; font-weight: 700; color: var(--text-sub); }
 .badge { font-size: 0.75rem; background: #cbd5e1; padding: 1px 5px; border-radius: 4px; font-weight: 700; }
 
-/* [修改] 過號列表改為換行 */
 .scroll-view { 
     flex: 1; 
-    max-height: 80px; /* [修改] 限制最大高度，超過捲動 */
+    max-height: 80px; 
     overflow-y: auto; 
     overflow-x: hidden;
 }
 .tag-list { 
     display: flex; 
-    flex-wrap: wrap; /* [修改] 允許換行 */
+    flex-wrap: wrap; 
     gap: 4px; padding: 0; margin: 0; list-style: none; 
 }
 .tag-list li {
@@ -165,13 +160,12 @@ body {
     display: flex; align-items: center; justify-content: center; gap: 8px;
     box-shadow: 0 4px 12px rgba(15, 23, 42, 0.2);
 }
-.btn-main:active { transform: scale(0.98); }
 
 .input-wrapper { display: flex; gap: 6px; }
 .fancy-input {
     flex: 1; border: 2px solid #e2e8f0; text-align: center; outline: none;
     color: var(--text-main); padding: 0 10px; background: white;
-    font-size: 1rem; /* 輸入框字體調整 */
+    font-size: 1rem; 
 }
 .fancy-input::placeholder { font-size: 0.9rem; color: #94a3b8; font-weight: 500; }
 .fancy-input:focus { border-color: var(--primary); background: #f8fafc; }
@@ -182,7 +176,7 @@ body {
     background: #1e293b; color: white; padding: 10px 14px; border-radius: var(--radius-sm);
 }
 .ticket-row { display: flex; justify-content: space-between; align-items: center; }
-.t-label { font-size: 0.7rem; color: #94a3b8; font-weight: 700; text-transform: uppercase; }
+.t-label { font-size: 0.75rem; color: #94a3b8; font-weight: 700; text-transform: uppercase; }
 .btn-close { background: rgba(255,255,255,0.15); border:none; width:22px; height:22px; border-radius:50%; color:white; cursor:pointer;}
 .my-num { font-size: 3rem; font-weight: 800; line-height: 1; }
 .w-val { font-size: 1.6rem; font-weight: 700; color: #fbbf24; line-height: 1; }
@@ -190,19 +184,19 @@ body {
 
 /* --- Footer Tools --- */
 .footer-tools {
-    display: flex; flex-direction: column; gap: 8px;
+    display: flex; flex-direction: column; gap: 8px; 
     border-top: 1px solid #f1f5f9; padding-top: 8px;
 }
 .links-wrapper { width: 100%; }
 .links-label { font-size: 0.7rem; font-weight: 700; color: #94a3b8; margin-bottom: 4px; }
 
-/* [修改] 精選連結顏色：藍色系，易於區別 */
+/* [修改] 精選連結顏色：藍色系 */
 #featured-container { display: flex; flex-wrap: wrap; gap: 6px; }
 .link-chip {
     padding: 6px 12px; font-size: 0.85rem; font-weight: 600; 
-    color: #0369a1; text-decoration: none; /* 深藍字 */
-    background: #e0f2fe; /* 淺藍底 */
-    border: 1px solid #bae6fd; /* 藍邊框 */
+    color: #0369a1; text-decoration: none; 
+    background: #e0f2fe; 
+    border: 1px solid #bae6fd; 
     border-radius: 8px;
     display: inline-block;
 }
@@ -211,19 +205,28 @@ body {
 /* [修改] 功能按鈕區：深色系，加上文字 */
 .util-btns { 
     display: flex; gap: 8px; 
-    border-top: 1px dashed #e2e8f0; padding-top: 8px; /* 與連結區隔 */
+    border-top: 1px dashed #e2e8f0; padding-top: 8px; 
 }
 .btn-util {
     flex: 1;
     background: #f8fafc; border: 1px solid #cbd5e1; 
-    color: #475569; /* 深灰字 */
+    color: #475569; 
     height: 36px; border-radius: 8px;
     display: flex; align-items: center; justify-content: center; gap: 6px;
     font-size: 0.85rem; font-weight: 700; cursor: pointer; 
 }
 .btn-util:active { background: #e2e8f0; }
 
-/* Toast */
+/* [新增] 按鈕反饋樣式 */
+.btn-util.is-feedback {
+    background: #d1fae5 !important;
+    color: #047857 !important;
+    border-color: #a7f3d0 !important;
+    transform: scale(0.98);
+}
+
+
+/* Toast & Status */
 #status-bar { z-index: 9999; position: fixed; top: 0; width: 100%; text-align: center; background: #ef4444; color: white; padding: 2px; font-size: 0.75rem; transform: translateY(-100%); transition: transform 0.3s; }
 #status-bar.visible { transform: translateY(0); }
 #toast-container { position: fixed; bottom: 10%; left: 50%; transform: translateX(-50%); z-index: 2000; width: 90%; text-align: center; pointer-events: none; }
@@ -243,11 +246,11 @@ body {
         max-width: 1400px;
         display: grid;
         grid-template-columns: 1.4fr 1fr; 
-        grid-template-rows: 1fr; /* 填滿高度 */
+        grid-template-rows: 1fr;
         gap: 30px;
         padding: 0;
         height: 100%;
-        max-height: 900px;
+        max-height: 900px; 
         margin: auto;
     }
     
@@ -257,13 +260,15 @@ body {
     .hero-section {
         background: white; border-radius: 30px;
         box-shadow: 0 20px 50px rgba(0,0,0,0.08);
-        padding: 40px;
+        padding: 50px;
     }
-    .hero-top-info { margin-bottom: 20px; }
+    .hero-top-info { margin-bottom: 30px; }
     .hero-label { font-size: 1.5rem; }
+    
     .stat-pill { padding: 10px 24px; border-radius: 20px; }
     .s-label { font-size: 1.2rem; }
-    .s-value { font-size: 2.5rem; } /* 已發號碼大字 */
+    .s-value { font-size: 2.5rem; } 
+    
     #number { font-size: 22rem; line-height: 0.8; padding-bottom: 0; }
     
     /* Right: Panel */
@@ -271,14 +276,15 @@ body {
         gap: 20px; height: 100%;
     }
 
-    /* Passed List (Desktop) */
+    /* Passed List (Top Right) */
     .list-section {
         flex: 0 0 auto;
         background: rgba(255,255,255,0.8);
         padding: 20px; min-height: auto;
     }
-    .scroll-view { max-height: 120px; } /* 增加可視高度 */
-    .tag-list li { font-size: 1.4rem; padding: 6px 14px; } /* 過號大字 */
+    .scroll-view { max-height: 120px; } 
+    .list-title { font-size: 1.2rem; }
+    .tag-list li { font-size: 1.4rem; padding: 6px 14px; } 
 
     /* Control */
     .control-section {
@@ -288,12 +294,14 @@ body {
         box-shadow: 0 20px 50px rgba(0,0,0,0.08);
         display: flex; flex-direction: column; justify-content: center;
     }
+
+    /* Scaling Controls */
     .control-body { margin-bottom: 30px; }
     .action-header h3 { font-size: 2.2rem; margin-bottom: 8px; }
     .func-desc { font-size: 1.2rem; }
     
     .btn-main, .fancy-input, .btn-track { height: 90px; font-size: 1.8rem; border-radius: 20px; }
-    .fancy-input { font-size: 1.5rem; } /* 輸入框字變大 */
+    .fancy-input { font-size: 1.5rem; } 
 
     /* Footer on Desktop */
     .footer-tools { margin-top: auto; padding-top: 30px; }
@@ -301,6 +309,7 @@ body {
     .link-chip { padding: 10px 20px; font-size: 1.1rem; }
     .btn-util { height: 50px; font-size: 1.1rem; }
 
+    /* Desktop QR Code */
     #qr-code-container {
         display: block; position: fixed; bottom: 30px; left: 30px;
         background: white; padding: 20px; border-radius: 20px;
