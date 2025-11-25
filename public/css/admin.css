@@ -92,6 +92,7 @@ input, select, textarea {
     width: var(--sidebar-width); background: var(--bg-sidebar); border-right: 1px solid var(--border-color);
     display: flex; flex-direction: column; height: 100vh; position: fixed; left: 0; top: 0; z-index: 100;
 }
+.sidebar-header { padding: 24px 20px; }
 .sidebar-header .logo { font-size: 1.4rem; font-weight: 800; color: var(--primary); display: flex; align-items: center; gap: 8px; }
 .sidebar-header .user-info { font-size: 0.85rem; color: var(--text-sub); margin-top: 4px; font-weight: 500; }
 .sidebar-nav { flex: 1; padding: 16px 12px; display: flex; flex-direction: column; gap: 4px; overflow-y: auto; }
@@ -280,7 +281,7 @@ li span, .list-editor span, #admin-log-ui li { word-break: break-word; overflow-
 .btn-circle.btn-success { background: var(--success); }
 
 /* [新增]: 連結編輯模式提示樣式 */
-#cancel-edit-hint { margin-left: 8px; color: var(--warning); font-size: 0.85rem; font-weight: 500; }
+#cancel-edit-hint { margin-left: 8px; color: var(--warning-text); font-size: 0.85rem; font-weight: 500; }
 
 
 /* --- RWD 優化 --- */
@@ -312,6 +313,7 @@ li span, .list-editor span, #admin-log-ui li { word-break: break-word; overflow-
 }
 
 @media (min-width: 1024px) {
+    .sidebar { }
     #card-calling.full-width-card { grid-column: auto; }
     #btn-call-next { flex: 1.5; }
     #card-user-management.full-width-card, #card-links.full-width-card { grid-column: auto; }
