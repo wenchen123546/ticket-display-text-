@@ -6,142 +6,143 @@
     <title>即時叫號系統</title>
 
     <link rel="manifest" href="/manifest.json">
-    <meta name="theme-color" content="#ffffff">
+    <meta name="theme-color" content="#f0f2f5">
     
     <script src="/socket.io/socket.io.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
     
     <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
     
-    <div class="background-animation">
-        <div class="blob blob-1"></div>
-        <div class="blob blob-2"></div>
-        <div class="blob blob-3"></div>
-    </div>
-
-    <div id="maintenance-overlay">
-        <div class="glass-modal">
-            <h1>🚧 系統維護中</h1>
-            <p>服務暫停，請稍後再試。</p>
-        </div>
+    <div class="bg-decoration">
+        <div class="orb orb-1"></div>
+        <div class="orb orb-2"></div>
     </div>
 
     <div id="status-bar">連線中斷，正在嘗試重新連線...</div>
     <div id="toast-container"></div>
-    
     <audio id="notify-sound" src="/ding.mp3" preload="auto"></audio>
 
-    <div class="top-header glass-panel">
-        <h1 data-i18n="app_title">Queue System</h1>
-        <div class="header-controls">
-            <span id="last-updated">Updating...</span>
-            <select id="language-selector">
-                <option value="zh-TW">繁中</option>
-                <option value="en">EN</option>
-            </select>
+    <div id="maintenance-overlay">
+        <div class="maintenance-card">
+            <div class="icon-box">🚧</div>
+            <h1>系統維護中</h1>
+            <p>服務暫停，請稍後再試</p>
         </div>
     </div>
-    
-    <div class="content-wrapper">
+
+    <main class="app-container">
         
-        <div class="card glass-card hero-card" id="status-board">
-            <div class="status-main">
+        <header class="app-header glass">
+            <div class="brand">
+                <span class="dot"></span>
+                <h1 data-i18n="app_title">Queue System</h1>
+            </div>
+            <div class="controls">
+                <small id="last-updated">Updating...</small>
+                <select id="language-selector" class="lang-switch">
+                    <option value="zh-TW">繁中</option>
+                    <option value="en">EN</option>
+                </select>
+            </div>
+        </header>
+
+        <section class="hero-section glass">
+            <div class="hero-content">
                 <h2 data-i18n="current_number">目前叫號</h2>
-                <div class="number-wrapper">
-                    <p id="number">0</p>
+                <div class="number-display">
+                    <span id="number">0</span>
                 </div>
             </div>
-            
-            <div class="status-sub-container">
-                <div class="status-sub">
-                    <span class="sub-label" data-i18n="issued_number">已發號碼</span>
-                    <span class="sub-value" id="issued-number-main">0</span>
+            <div class="hero-footer">
+                <div class="stat-item">
+                    <span class="label" data-i18n="issued_number">已發號碼</span>
+                    <span class="value" id="issued-number-main">0</span>
                 </div>
             </div>
-        </div>
+        </section>
 
-        <div class="card glass-card passed-section" id="passed-container">
-            <div class="section-header">
-                <h3 data-i18n="passed_list_title">已過號名單</h3>
+        <section class="list-section glass" id="passed-container">
+            <div class="section-title">
+                <h3 data-i18n="passed_list_title">已過號</h3>
+                <span class="badge-count" id="passed-count">0</span>
             </div>
-            <div class="scroll-area">
-                <ul id="passedList"></ul>
-                <p id="passed-empty-msg" class="empty-state" data-i18n="passed_empty">目前無過號</p>
+            <div class="scroll-view">
+                <ul id="passedList" class="tag-list"></ul>
+                <div id="passed-empty-msg" class="empty-state">
+                    <span>🍃</span> <span data-i18n="passed_empty">目前無過號</span>
+                </div>
             </div>
-        </div>
+        </section>
 
-        <div class="card glass-card control-panel" id="ticket-section">
+        <section class="control-section glass" id="ticket-section">
             
             <div id="ticketing-mode-container">
-                <div id="take-ticket-view" class="control-row">
-                    <div class="text-group">
+                <div id="take-ticket-view" class="action-row">
+                    <div class="action-info">
                         <h3 data-i18n="online_ticket_title">線上取號</h3>
                         <p data-i18n="online_ticket_desc">免排隊，到號通知</p>
                     </div>
-                    <button id="btn-take-ticket" class="btn-gradient" data-i18n="take_ticket">
-                        取號
+                    <button id="btn-take-ticket" class="btn-primary-soft" data-i18n="take_ticket">
+                        立即取號
                     </button>
                 </div>
             </div>
 
             <div id="input-mode-container" style="display: none;">
-                <div id="input-mode-view" class="control-row">
-                    <div class="input-wrapper">
+                <div id="input-mode-view" class="input-row">
+                    <div class="input-field">
                         <input type="number" id="manual-ticket-input" placeholder=" " inputmode="numeric">
-                        <label class="floating-label" data-i18n="manual_input_placeholder">輸入號碼</label>
+                        <label data-i18n="manual_input_placeholder">輸入號碼</label>
                     </div>
-                    <button id="btn-track-ticket" class="btn-primary-ghost" data-i18n="set_reminder">
+                    <button id="btn-track-ticket" class="btn-action" data-i18n="set_reminder">
                         追蹤
                     </button>
                 </div>
             </div>
 
             <div id="my-ticket-view" class="my-ticket-active" style="display: none;">
-                <div class="my-ticket-header">
-                    <span class="badge">YOU</span>
-                    <button id="btn-cancel-ticket" class="btn-icon">✕</button>
+                <div class="ticket-top">
+                    <span class="ticket-tag">MY TICKET</span>
+                    <button id="btn-cancel-ticket" class="btn-close" aria-label="Cancel">✕</button>
                 </div>
-                
-                <div class="my-ticket-body">
-                    <div class="my-number-box">
-                        <small data-i18n="my_number">您的號碼</small>
-                        <span id="my-ticket-num">?</span>
+                <div class="ticket-main">
+                    <div class="ticket-col">
+                        <span class="label" data-i18n="my_number">您的號碼</span>
+                        <span class="value-lg" id="my-ticket-num">?</span>
                     </div>
-                    <div class="wait-info">
-                        <span class="wait-label" data-i18n="wait_count">前方等待</span>
-                        <span id="ticket-waiting-count" class="wait-val">0</span>
+                    <div class="ticket-divider"></div>
+                    <div class="ticket-col align-right">
+                        <span class="label" data-i18n="wait_count">前方等待</span>
+                        <span class="value-md" id="ticket-waiting-count">0</span>
                     </div>
                 </div>
-                
-                <div class="my-ticket-footer">
+                <div class="ticket-footer">
                     <p id="ticket-status-text">計算中...</p>
                     <p id="ticket-wait-time" style="display:none;">...</p>
                 </div>
             </div>
-        </div>
+        </section>
 
-    </div>
+        <footer class="app-footer">
+            <div id="featured-container" class="link-scroll"></div>
+            
+            <div class="tool-actions">
+                <button id="copy-link-prompt" class="btn-pill">
+                    <i class="icon-link">🔗</i> <span data-i18n="copy_link">複製連結</span>
+                </button>
+                <button id="sound-prompt" class="btn-pill">
+                    <i class="icon-sound">🔊</i> <span data-i18n="sound_enable">啟用音效</span>
+                </button>
+            </div>
+        </footer>
 
-    <div class="bottom-tools">
-        <div id="featured-container" class="pill-container">
-            <p id="featured-empty-msg" style="display:none;"></p>
-        </div>
-        
-        <div class="utility-buttons">
-            <button id="copy-link-prompt" class="btn-tool" aria-label="Copy Link">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-            </button>
-            <button id="sound-prompt" class="btn-tool" aria-label="Toggle Sound">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
-            </button>
-        </div>
-    </div>
+    </main>
 
     <div id="qr-code-container">
         <div id="qr-code-placeholder"></div>
