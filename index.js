@@ -1,6 +1,7 @@
 /*
  * ==========================================
- * 伺服器 (index.js) - v18.21 Fixed (Issue Reset Logic)
+ * 伺服器 (index.js) - v18.30 Optimized
+ * 包含：Redis效能優化(移除keys*)、XSS增強、等待時間快取、自動修復邏輯
  * ==========================================
  */
 
@@ -95,11 +96,15 @@ const KEY_NICKNAMES = 'callsys:nicknames';
 const SESSION_PREFIX = 'callsys:session:';
 const KEY_HISTORY_STATS = 'callsys:stats:history';
 const KEY_STATS_HOURLY_PREFIX = 'callsys:stats:hourly:'; 
+
+// LINE 相關 Keys
 const KEY_LINE_SUB_PREFIX = 'callsys:line:notify:'; 
 const KEY_LINE_USER_STATUS = 'callsys:line:user:';
 const KEY_LINE_UNLOCK_PWD = 'callsys:line:unlock_pwd';
 const KEY_LINE_ADMIN_UNLOCK = 'callsys:line:admin_session:';
 const KEY_LINE_CONTEXT = 'callsys:line:context:'; 
+// [優化] 新增：追蹤有哪些號碼有訂閱者，避免使用 keys *
+const KEY_ACTIVE_LINE_SUBS = 'callsys:line:active_subs_set'; 
 
 // --- LINE 文案 Keys ---
 const KEY_LINE_MSG_APPROACH   = 'callsys:line:msg:approach';
@@ -158,7 +163,6 @@ app.use(express.json());
 
 const apiLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 1000 });
 
-// [修改] 放寬登入限制，從 max: 20 改為 max: 100，並加入錯誤訊息
 const loginLimiter = rateLimit({ 
     windowMs: 15 * 60 * 1000, 
     max: 100, 
@@ -185,23 +189,10 @@ const superAdminAuthMiddleware = (req, res, next) => {
     else res.status(403).json({ error: "權限不足" });
 };
 
-// --- CRON Job ---
+// --- CRON Job (每日自動歸零) ---
 cron.schedule('0 4 * * *', async () => {
     try {
-        const multi = redis.multi();
-        multi.set(KEY_CURRENT_NUMBER, 0);
-        multi.set(KEY_LAST_ISSUED, 0);
-        multi.del(KEY_PASSED_NUMBERS);
-        const keys = await redis.keys(`${KEY_LINE_SUB_PREFIX}*`);
-        const userKeys = await redis.keys(`${KEY_LINE_USER_STATUS}*`);
-        const allLineKeys = [...keys, ...userKeys];
-        if(allLineKeys.length > 0) multi.del(allLineKeys);
-
-        await multi.exec();
-        
-        io.emit("update", 0);
-        io.emit("updateQueue", { current: 0, issued: 0 });
-        io.emit("updatePassed", []);
+        await performReset('系統自動');
         io.to("admin").emit("newAdminLog", "[系統] ⏰ 執行每日自動歸零"); 
         addAdminLog("系統", "⏰ 執行每日自動歸零");
     } catch (e) { console.error("❌ 自動重置失敗:", e); }
@@ -209,9 +200,15 @@ cron.schedule('0 4 * * *', async () => {
 
 
 // --- CORE UTILITIES ---
+
+// [優化] 更嚴謹的 XSS 防護
 function sanitize(str) {
     if (typeof str !== 'string') return '';
-    return str.replace(/<[^>]*>?/gm, '');
+    return str.replace(/&/g, "&amp;")
+              .replace(/</g, "&lt;")
+              .replace(/>/g, "&gt;")
+              .replace(/"/g, "&quot;")
+              .replace(/'/g, "&#039;");
 }
 
 async function updateTimestamp() {
@@ -245,28 +242,47 @@ async function addAdminLog(nickname, message) {
     } catch (e) { console.error("Log error:", e); }
 }
 
-async function calculateSmartWaitTime() {
+// [優化] 等待時間快取機制
+let cachedWaitTime = 0;
+let lastWaitTimeCalc = 0;
+
+async function calculateSmartWaitTime(force = false) {
     try {
+        const now = Date.now();
+        // 如果距離上次計算小於 60 秒且不強制刷新，回傳快取值
+        if (!force && (now - lastWaitTimeCalc < 60000)) {
+            return cachedWaitTime;
+        }
+
         const historyRaw = await redis.lrange(KEY_HISTORY_STATS, 0, MAX_HISTORY_FOR_PREDICTION); 
         const history = historyRaw.map(JSON.parse).filter(r => typeof r.num === 'number');
-        if (history.length < 2) return 0;
-        let totalWeightedTime = 0, totalWeight = 0;
-        for (let i = 0; i < history.length - 1; i++) {
-            const current = history[i];
-            const prev = history[i+1];
-            const timeDiff = (new Date(current.time) - new Date(prev.time)) / 1000 / 60;
-            const numDiff = Math.abs(current.num - prev.num);
-            if (numDiff > 0 && timeDiff > 0) {
-                const timePerNum = timeDiff / numDiff;
-                if (timePerNum <= MAX_VALID_SERVICE_MINUTES) {
-                    const weight = MAX_HISTORY_FOR_PREDICTION - i;
-                    totalWeightedTime += timePerNum * weight;
-                    totalWeight += weight;
+        
+        let result = 0;
+        if (history.length >= 2) {
+            let totalWeightedTime = 0, totalWeight = 0;
+            for (let i = 0; i < history.length - 1; i++) {
+                const current = history[i];
+                const prev = history[i+1];
+                const timeDiff = (new Date(current.time) - new Date(prev.time)) / 1000 / 60;
+                const numDiff = Math.abs(current.num - prev.num);
+                if (numDiff > 0 && timeDiff > 0) {
+                    const timePerNum = timeDiff / numDiff;
+                    // 過濾掉異常數值 (例如午休時間)
+                    if (timePerNum <= MAX_VALID_SERVICE_MINUTES) {
+                        const weight = MAX_HISTORY_FOR_PREDICTION - i;
+                        totalWeightedTime += timePerNum * weight;
+                        totalWeight += weight;
+                    }
                 }
             }
+            if (totalWeight > 0) {
+                result = totalWeightedTime / totalWeight;
+            }
         }
-        if (totalWeight === 0) return 0;
-        return totalWeightedTime / totalWeight; 
+        
+        cachedWaitTime = result;
+        lastWaitTimeCalc = now;
+        return result;
     } catch (e) { return 0; }
 }
 
@@ -285,6 +301,9 @@ async function logHistory(number, operator, delta = 1) {
         
         pipeline.expire(`${KEY_STATS_HOURLY_PREFIX}${dateStr}`, 30 * 86400);
         await pipeline.exec();
+        
+        // 觸發重新計算等待時間
+        calculateSmartWaitTime(true);
     } catch (e) { console.error("Log history error:", e); }
 }
 
@@ -306,15 +325,50 @@ async function broadcastQueueStatus() {
     const currentNum = parseInt(current) || 0;
     let issuedNum = parseInt(issued) || 0;
     
+    // [優化] 自動修復邏輯：防止 "已發號 < 目前叫號" 的死鎖狀態
     if (issuedNum < currentNum) {
         issuedNum = currentNum;
         await redis.set(KEY_LAST_ISSUED, issuedNum);
+        console.warn(`⚠️ Auto-fixing: Issued (${issuedNum}) synced to Current (${currentNum})`);
     }
     
     io.emit("update", currentNum);
     io.emit("updateQueue", { current: currentNum, issued: issuedNum });
     io.emit("updateWaitTime", await calculateSmartWaitTime());
     await updateTimestamp();
+}
+
+// [優化] 集中處理系統重置邏輯
+async function performReset(operatorName) {
+    const multi = redis.multi();
+    multi.set(KEY_CURRENT_NUMBER, 0);
+    multi.set(KEY_LAST_ISSUED, 0);
+    multi.del(KEY_PASSED_NUMBERS);
+    multi.del(KEY_FEATURED_CONTENTS); // 根據需求決定是否重置連結
+    
+    // 清除 LINE 訂閱 (優化版：只清除有紀錄的 Keys)
+    const activeSubKeys = await redis.smembers(KEY_ACTIVE_LINE_SUBS);
+    if (activeSubKeys.length > 0) {
+        // 清除所有訂閱者列表
+        activeSubKeys.forEach(key => multi.del(`${KEY_LINE_SUB_PREFIX}${key}`));
+    }
+    multi.del(KEY_ACTIVE_LINE_SUBS); // 清除索引 Set
+    
+    // 清除使用者狀態
+    const userKeys = await redis.keys(`${KEY_LINE_USER_STATUS}*`); // 若量大建議也改用 Set 管理，但 UserKey 較難避免
+    if(userKeys.length > 0) multi.del(userKeys);
+
+    await multi.exec();
+    
+    if (operatorName) addAdminLog(operatorName, `💥 系統全域重置 (包含 LINE 訂閱)`);
+    
+    await broadcastQueueStatus(); 
+    io.emit("updatePassed", []);
+    io.emit("updateFeaturedContents", []);
+    io.emit("updateWaitTime", 0); 
+    await updateTimestamp();
+    
+    cachedWaitTime = 0; // 重置快取
 }
 
 async function checkAndNotifyLineUsers(currentNum) {
@@ -354,12 +408,13 @@ async function checkAndNotifyLineUsers(currentNum) {
             const cleanPipe = redis.multi();
             exactSubs.forEach(uid => cleanPipe.del(`${KEY_LINE_USER_STATUS}${uid}`));
             cleanPipe.del(`${KEY_LINE_SUB_PREFIX}${currentNum}`);
+            cleanPipe.srem(KEY_ACTIVE_LINE_SUBS, currentNum); // [優化] 從索引中移除
             await cleanPipe.exec();
         }
     } catch (e) { console.error("Line Notify Error:", e); }
 }
 
-// --- LINE Event Handler (With Context Flow) ---
+// --- LINE Event Handler ---
 async function handleLineEvent(event) {
     if (event.type !== 'message' || event.message.type !== 'text') return Promise.resolve(null);
     
@@ -460,6 +515,7 @@ async function handleLineEvent(event) {
         pipeline.del(`${KEY_LINE_USER_STATUS}${userId}`); 
         pipeline.srem(`${KEY_LINE_SUB_PREFIX}${trackingNum}`, userId); 
         await pipeline.exec();
+        // 這裡不需急著從 ACTIVE_SUBS 移除，因為只剩 Set 為空沒影響，留給 cron 清理
         
         const finalMsg = MSG_CANCEL.replace(/{target}/g, trackingNum);
         return lineClient.replyMessage(replyToken, { type: "text", text: finalMsg });
@@ -490,7 +546,9 @@ async function handleLineEvent(event) {
 
         const pipeline = redis.multi();
         pipeline.set(`${KEY_LINE_USER_STATUS}${userId}`, targetNum); 
-        pipeline.sadd(`${KEY_LINE_SUB_PREFIX}${targetNum}`, userId); 
+        pipeline.sadd(`${KEY_LINE_SUB_PREFIX}${targetNum}`, userId);
+        pipeline.sadd(KEY_ACTIVE_LINE_SUBS, targetNum); // [優化] 加入活躍訂閱追蹤
+        
         pipeline.expire(`${KEY_LINE_USER_STATUS}${userId}`, 43200);
         pipeline.expire(`${KEY_LINE_SUB_PREFIX}${targetNum}`, 43200);
         await pipeline.exec();
@@ -524,7 +582,15 @@ async function handleNumberControl(type, req) {
             case 'call':
                 if (direction === "next") {
                     const result = await redis.safeNextNumber(KEY_CURRENT_NUMBER, KEY_LAST_ISSUED);
-                    if (result === -1) return { success: false, error: "目前已無等待人數，無法跳號" };
+                    if (result === -1) {
+                        // [優化] 二次檢查：如果 issued 小於 current (異常)，則不拋錯，而是允許下一步重置
+                        if (issuedNum < currentNum) {
+                             // 讓前端接收到目前的數值，廣播會自動修復
+                             await broadcastQueueStatus();
+                             return { success: false, error: "已無等待人數 (系統自動同步完成)" };
+                        }
+                        return { success: false, error: "目前已無等待人數，無法跳號" };
+                    }
                     newNum = result; delta = 1; logMessage = `號碼增加為 ${newNum}`;
                 } else if (direction === "prev") {
                     newNum = await redis.decrIfPositive(KEY_CURRENT_NUMBER);
@@ -574,20 +640,12 @@ async function handleNumberControl(type, req) {
                 newNum = parseInt(number);
                 if (isNaN(newNum) || newNum < 0) return { success: false, error: "無效號碼" };
                 
-                // [修正] 特殊邏輯：如果設定為 0 (重置)，則強制將目前叫號也歸零，避免邏輯衝突
+                // [修正] 特殊邏輯：如果設定為 0 (重置)，則強制將目前叫號也歸零
                 if (newNum === 0) {
-                    pipeline.set(KEY_LAST_ISSUED, 0);
-                    pipeline.set(KEY_CURRENT_NUMBER, 0);
-                    await pipeline.exec();
-                    
-                    logMessage = `♻️ 發號機與叫號強制歸零`;
-                    await logHistory(0, req.user.nickname, 0);
-                    checkAndNotifyLineUsers(0);
-                    await broadcastQueueStatus();
+                    await performReset(req.user.nickname);
                     return { success: true };
                 }
 
-                // 一般情況仍需檢查不可小於目前叫號
                 if (newNum < currentNum) return { success: false, error: `發號數 (${newNum}) 不可小於目前叫號 (${currentNum})` };
 
                 await redis.set(KEY_LAST_ISSUED, newNum);
@@ -626,17 +684,12 @@ app.post("/login", loginLimiter, async (req, res) => {
         let nickname = await redis.hget(KEY_NICKNAMES, username);
         if (!nickname) nickname = username;
         
-        // 確保 Session 中包含 role
         await redis.set(`${SESSION_PREFIX}${sessionToken}`, JSON.stringify({ username, role, nickname }), "EX", 28800);
         res.json({ success: true, token: sessionToken, role, username, nickname });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ------------------------------------------
-// [API 權限群組設定]
-// ------------------------------------------
-
-// 1. 一般管理員 (Normal Admin) 可用的 API
+// API 權限設定
 const protectedAPIs = [
     "/api/control/call", 
     "/api/control/issue", 
@@ -653,27 +706,24 @@ const protectedAPIs = [
     "/set-sound-enabled", 
     "/set-public-status",
     "/api/admin/broadcast",
-    "/api/admin/stats",            // 讀取統計
-    "/api/admin/stats/adjust",     // 調整統計
-    "/api/admin/stats/clear",      // 清除統計
-    "/api/logs/clear",             // [新增] 允許清除操作日誌
-    "/api/admin/users",            // [新增] 允許讀取使用者列表 (for 在線名單與暱稱)
-    "/api/admin/set-nickname"      // [新增] 允許修改自己的暱稱
+    "/api/admin/stats",           
+    "/api/admin/stats/adjust",     
+    "/api/admin/stats/clear",      
+    "/api/logs/clear",             
+    "/api/admin/users",            
+    "/api/admin/set-nickname"      
 ];
 app.use(protectedAPIs, apiLimiter, authMiddleware);
 
-// 2. 超級管理員 (Super Admin) 專屬 API
 const superAdminAPIs = [
     "/set-system-mode", 
     "/reset", 
     "/api/admin/export-csv",
-    // [修正] LINE 設定 API 全部移至此處
     "/api/admin/line-settings/get", 
     "/api/admin/line-settings/save", 
     "/api/admin/line-settings/reset",
     "/api/admin/line-settings/set-unlock-pass", 
     "/api/admin/line-settings/get-unlock-pass",
-    // 使用者管理 (新增/刪除)
     "/api/admin/add-user", 
     "/api/admin/del-user"
 ];
@@ -706,6 +756,7 @@ app.post("/api/control/set-issue", async (req, res) => {
     else res.status(400).json({ error: result.error });
 });
 
+// LINE Settings APIs
 app.post("/api/admin/line-settings/get", async (req, res) => {
     try {
         const keys = [
@@ -796,10 +847,8 @@ app.post("/api/admin/line-settings/set-unlock-pass", async (req, res) => {
     try {
         const { password } = req.body;
         if (!password || password.trim() === "") return res.status(400).json({ error: "密碼不可為空" });
-        
         await redis.set(KEY_LINE_UNLOCK_PWD, password.trim());
         addAdminLog(req.user.nickname, "🔑 更新了 LINE 後台解鎖密碼");
-        
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -829,14 +878,12 @@ app.post("/api/admin/export-csv", async (req, res) => {
             } else { duration = "首筆"; }
             csvContent += `${time},${item.num},${item.operator},${duration},${note}\n`;
         }
-
         const now = new Date();
         const timestamp = now.toLocaleString('zh-TW', { 
             timeZone: 'Asia/Taipei', 
             year: 'numeric', month: '2-digit', day: '2-digit', 
             hour: '2-digit', minute: '2-digit', hour12: false 
         }).replace(/\//g, '-').replace(/:/g, '').replace(' ', '_');
-
         res.json({ success: true, csvData: csvContent, fileName: `stats_${timestamp}.csv` });
         addAdminLog(req.user.nickname, "📥 下載了 CSV 報表");
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -970,38 +1017,14 @@ app.post("/set-sound-enabled", async (req, res) => { await redis.set(KEY_SOUND_E
 app.post("/set-public-status", async (req, res) => { await redis.set(KEY_IS_PUBLIC, req.body.isPublic ? "1" : "0"); addAdminLog(req.user.nickname, `系統設為 ${req.body.isPublic ? '開放' : '維護'}`); io.emit("updatePublicStatus", req.body.isPublic); res.json({ success: true }); });
 
 app.post("/reset", async (req, res) => {
-    const multi = redis.multi();
-    multi.set(KEY_CURRENT_NUMBER, 0);
-    multi.set(KEY_LAST_ISSUED, 0);
-    multi.del(KEY_PASSED_NUMBERS);
-    multi.del(KEY_FEATURED_CONTENTS);
-    multi.set(KEY_SOUND_ENABLED, "0");
-    multi.set(KEY_IS_PUBLIC, "1");
-    multi.del(KEY_ADMIN_LOG);
-    multi.del(KEY_HISTORY_STATS); 
-    const keys = await redis.keys(`${KEY_LINE_SUB_PREFIX}*`);
-    const userKeys = await redis.keys(`${KEY_LINE_USER_STATUS}*`);
-    const allLineKeys = [...keys, ...userKeys];
-    if(allLineKeys.length > 0) multi.del(allLineKeys);
-
-    await multi.exec();
-    addAdminLog(req.user.nickname, `💥 系統全域重置`);
-    
-    await broadcastQueueStatus(); 
-    io.emit("updatePassed", []);
-    io.emit("updateFeaturedContents", []);
-    io.emit("updateSoundSetting", false);
-    io.emit("updatePublicStatus", true);
-    io.to("admin").emit("initAdminLogs", []);
-    io.emit("updateWaitTime", 0); 
-    await updateTimestamp();
+    await performReset(req.user.nickname);
     res.json({ success: true });
 });
 
 app.post("/api/logs/clear", async (req, res) => { 
     await redis.del(KEY_ADMIN_LOG); 
     io.to("admin").emit("initAdminLogs", []); 
-    addAdminLog(req.user.nickname, "🗑️ 清空了系統日誌"); // [新增] 紀錄清除操作
+    addAdminLog(req.user.nickname, "🗑️ 清空了系統日誌");
     res.json({ success: true }); 
 });
 
@@ -1034,7 +1057,6 @@ app.post("/api/admin/del-user", async (req, res) => {
 
 app.post("/api/admin/set-nickname", async (req, res) => {
     const { targetUsername, nickname } = req.body;
-    // 一般管理員只能改自己，超級管理員可改任何人
     if (req.user.role !== 'super' && req.user.username !== targetUsername) {
         return res.status(403).json({ error: "只能修改自己的暱稱" });
     }
@@ -1107,5 +1129,5 @@ process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
 
 server.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Server v18.20 (Fixes) ready on port ${PORT}`);
+    console.log(`🚀 Server v18.30 (Optimized) ready on port ${PORT}`);
 });
