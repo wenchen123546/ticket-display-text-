@@ -1,6 +1,6 @@
 /*
  * ==========================================
- * 前端邏輯 (main.js) - v29.0
+ * 前端邏輯 (main.js) - v30.0 (Sound Feedback Fix)
  * ==========================================
  */
 
@@ -10,8 +10,8 @@ const i18nData = {
         "issued_number": "已發至",
         "online_ticket_title": "線上取號",
         "help_take_ticket": "免排隊，手機領號",
-        "manual_input_title": "號碼提醒", // 修改
-        "manual_input_placeholder": "輸入您的號碼開啟到號提醒", // 修改：整合提示語
+        "manual_input_title": "號碼提醒", 
+        "manual_input_placeholder": "輸入您的號碼開啟到號提醒", 
         "take_ticket": "立即取號",
         "set_reminder": "追蹤",
         "my_number": "我的號碼",
@@ -22,7 +22,7 @@ const i18nData = {
         "passed_list_title": "過號",
         "passed_empty": "無",
         "links_title": "精選連結",
-        "copy_link": "複製連結", // 修改
+        "copy_link": "複製連結", 
         "sound_enable": "音效",
         "sound_on": "開啟",
         "sound_mute": "靜音",
@@ -46,8 +46,8 @@ const i18nData = {
         "issued_number": "Issued",
         "online_ticket_title": "Get Ticket",
         "help_take_ticket": "Digital ticket & notify",
-        "manual_input_title": "Number Alert", // Modified
-        "manual_input_placeholder": "Enter number to get alerted", // Modified
+        "manual_input_title": "Number Alert", 
+        "manual_input_placeholder": "Enter number to get alerted",
         "take_ticket": "Get Ticket",
         "set_reminder": "Track",
         "my_number": "Your #",
@@ -58,7 +58,7 @@ const i18nData = {
         "passed_list_title": "Passed",
         "passed_empty": "None",
         "links_title": "Links",
-        "copy_link": "Copy Link", // Modified
+        "copy_link": "Copy Link", 
         "sound_enable": "Sound",
         "sound_on": "On",
         "sound_mute": "Mute",
@@ -298,6 +298,35 @@ function updateTicketUI(currentNum) {
 
 function handleUserInteraction(callback) { unlockAudioContext(); callback(); }
 
+// [新增] 統一的按鈕反饋函式
+function showButtonFeedback(buttonEl, messageKey) {
+    const iconSpan = buttonEl.querySelector('span:first-child');
+    const textSpan = buttonEl.querySelector('span:last-child');
+
+    const originalIcon = iconSpan.textContent;
+    const originalText = textSpan.textContent;
+    
+    // 1. 顯示暫時性反饋
+    buttonEl.classList.add('is-feedback');
+    iconSpan.textContent = '✔';
+    textSpan.textContent = T[messageKey]; 
+
+    // 2. 延遲後恢復
+    setTimeout(() => {
+        buttonEl.classList.remove('is-feedback');
+        iconSpan.textContent = originalIcon;
+        textSpan.textContent = originalText;
+        
+        // 由於反饋期間，persistent state 可能已更新，這裡需強制重新檢查並設置一次 UI
+        if(buttonEl.id === 'sound-prompt') {
+            updateMuteUI(isLocallyMuted); 
+        } else {
+            // 對於非音效按鈕，只需要恢復 I18n
+            applyI18n(); 
+        }
+    }, 1500);
+}
+
 if(DOM.btnTakeTicket) DOM.btnTakeTicket.addEventListener("click", () => handleUserInteraction(async () => {
     if ("Notification" in window && Notification.permission !== "granted") Notification.requestPermission();
     DOM.btnTakeTicket.disabled = true;
@@ -329,24 +358,41 @@ if(DOM.btnCancelTicket) DOM.btnCancelTicket.addEventListener("click", () => {
 function updateMuteUI(isMuted, needsPermission = false) { 
     isLocallyMuted = isMuted; 
     if (!DOM.soundPrompt) return; 
-    // icon only handled by HTML structure now
+    
+    const iconSpan = DOM.soundPrompt.querySelector('span:first-child');
+    const textSpan = DOM.soundPrompt.querySelector('span:last-child');
+
+    const icon = needsPermission || isMuted ? '🔇' : '🔊'; 
+    const isActive = !needsPermission && !isMuted;
+    
+    if(iconSpan) iconSpan.textContent = icon;
+    if(textSpan) textSpan.textContent = T["sound_enable"]; 
+    
+    DOM.soundPrompt.classList.toggle("is-active", isActive); 
 }
 
-if (DOM.soundPrompt) DOM.soundPrompt.addEventListener("click", () => handleUserInteraction(() => { 
-    if (!audioPermissionGranted) playNotificationSound(); else updateMuteUI(!isLocallyMuted); 
-}));
-
+// [修改] 複製按鈕 - 使用統一反饋
 if (DOM.copyLinkPrompt) DOM.copyLinkPrompt.addEventListener("click", () => { 
-    if (!navigator.clipboard) return alert("Use HTTPS"); 
+    if (!navigator.clipboard) return; 
     navigator.clipboard.writeText(window.location.href).then(() => { 
-        const originalText = DOM.copyLinkPrompt.innerHTML;
-        DOM.copyLinkPrompt.innerHTML = `<span>✔</span> <span>${T["copy_success"]}</span>`; 
-        setTimeout(() => { 
-            DOM.copyLinkPrompt.innerHTML = originalText;
-            // Re-apply correct text based on lang
-            DOM.copyLinkPrompt.querySelector('span:last-child').textContent = T["copy_link"];
-        }, 2000); 
+        showButtonFeedback(DOM.copyLinkPrompt, 'copy_success');
     }); 
+});
+
+// [修改] 音效按鈕 - 使用統一反饋
+if (DOM.soundPrompt) DOM.soundPrompt.addEventListener("click", () => {
+    
+    // 1. 執行核心邏輯 (這會立即改變 isLocallyMuted 和 updateMuteUI 的持久狀態)
+    handleUserInteraction(() => { 
+        if (!audioPermissionGranted) {
+            playNotificationSound(); 
+        } else {
+            updateMuteUI(!isLocallyMuted); 
+        }
+    });
+
+    // 2. 顯示暫時性反饋 (✔ 音效開啟)
+    showButtonFeedback(DOM.soundPrompt, 'sound_on'); 
 });
 
 document.addEventListener("DOMContentLoaded", () => { 
