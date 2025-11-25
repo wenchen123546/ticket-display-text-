@@ -1,6 +1,6 @@
 /*
  * ==========================================
- * 後台樣式 (admin.css) - v18.35 Optimized
+ * 後台樣式 (admin.css) - v19.0 (Scroll & Overflow Fix)
  * ==========================================
  */
 
@@ -92,7 +92,6 @@ input, select, textarea {
     width: var(--sidebar-width); background: var(--bg-sidebar); border-right: 1px solid var(--border-color);
     display: flex; flex-direction: column; height: 100vh; position: fixed; left: 0; top: 0; z-index: 100;
 }
-.sidebar-header { padding: 24px 20px; }
 .sidebar-header .logo { font-size: 1.4rem; font-weight: 800; color: var(--primary); display: flex; align-items: center; gap: 8px; }
 .sidebar-header .user-info { font-size: 0.85rem; color: var(--text-sub); margin-top: 4px; font-weight: 500; }
 .sidebar-nav { flex: 1; padding: 16px 12px; display: flex; flex-direction: column; gap: 4px; overflow-y: auto; }
@@ -208,16 +207,30 @@ textarea { width: 100%; border: 1px solid var(--border-color); border-radius: va
 .system-toggle-group label.is-confirming-label { color: var(--danger); font-weight: bold; }
 input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--primary); cursor: pointer; }
 
-/* --- 6. 列表與日誌 --- */
+/* --- 6. 列表與日誌 (關鍵修改: 限制高度並滾動) --- */
 ul { list-style: none; padding: 0; margin: 0; }
 
 .list-editor, .admin-log-container { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
 
-/* 列表容器 */
+/* 列表容器 - 限制最大高度並啟用滾動 */
 .list-editor ul, #admin-log-ui, #stats-list-ui, #online-users-list, #user-list-ui, #passed-list-ui, #featured-list-ui {
-    flex: 1; background: #f9fafb; border-radius: var(--radius-md); 
-    border: 1px solid #f3f4f6; overflow-y: auto; margin-bottom: 12px;
-    height: 100%; min-height: 150px; max-height: none !important; 
+    flex: 1; 
+    background: #f9fafb; 
+    border-radius: var(--radius-md); 
+    border: 1px solid #f3f4f6; 
+    /* [修改]: 統一限制最大高度，讓頁面不再無限加長 */
+    max-height: 300px; 
+    overflow-y: auto; 
+    overflow-x: hidden;
+    margin-bottom: 12px;
+    height: auto; 
+    min-height: 150px; 
+}
+
+/* [修改]: 確保連結內容(長網址)在列表中可以換行，防止水平溢出 */
+#featured-list-ui li span, #featured-list-ui li small {
+    word-break: break-all; 
+    white-space: normal;
 }
 
 li { 
@@ -231,7 +244,7 @@ li span, .list-editor span, #admin-log-ui li { word-break: break-word; overflow-
 #admin-log-ui { background: #1f2937; border: none; font-family: monospace; }
 #admin-log-ui li { color: #d1d5db; border-bottom: 1px solid #374151; font-size: 0.85rem; display: block; padding: 8px 12px; }
 
-/* --- 7. 圖表 --- */
+/* --- 7. 圖表 (確保統計數據列表滾動) --- */
 .chart-container { 
     height: 180px; display: flex; align-items: flex-end; gap: 4px; margin-bottom: 20px; 
     padding-top: 20px; width: 100%; max-width: 100%; overflow-x: auto;   
@@ -265,6 +278,10 @@ li span, .list-editor span, #admin-log-ui li { word-break: break-word; overflow-
 .btn-circle { width: 44px; height: 44px; border-radius: 50%; font-size: 1.2rem; font-weight: bold; border:none; color:white; cursor:pointer;}
 .btn-circle.btn-warn { background: var(--warning); color: white; }
 .btn-circle.btn-success { background: var(--success); }
+
+/* [新增]: 連結編輯模式提示樣式 */
+#cancel-edit-hint { margin-left: 8px; color: var(--warning); font-size: 0.85rem; font-weight: 500; }
+
 
 /* --- RWD 優化 --- */
 @media (max-width: 768px) {
