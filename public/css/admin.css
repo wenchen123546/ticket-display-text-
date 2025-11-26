@@ -1,5 +1,5 @@
 /* ==========================================
- * 後台樣式 (admin.css) - v36.0 Layout & Wrap Fix
+ * 後台樣式 (admin.css) - v38.0 Final Fix
  * ========================================== */
 :root {
     --bg-body: #f3f4f6; --bg-surface: #ffffff; --bg-sidebar: #ffffff;
@@ -47,7 +47,7 @@ body { margin: 0; width: 100%; min-height: 100vh; font-family: 'Inter', sans-ser
 @media (min-width: 768px) { .card-container { grid-template-columns: repeat(2, 1fr); } } /* Tablet: 2 cols */
 @media (min-width: 1200px) { .card-container { grid-template-columns: repeat(3, 1fr); } } /* Desktop: 3 cols */
 
-/* [修正 1] 針對流量分析頁面，桌機版強制改為兩欄滿版 (1fr 1fr)，使其並排顯示 */
+/* 針對流量分析頁面，桌機版強制改為兩欄滿版 (1fr 1fr) */
 @media (min-width: 1200px) {
     #section-stats .card-container { grid-template-columns: 1fr 1fr; }
 }
@@ -82,15 +82,27 @@ textarea { resize: vertical; min-height: 80px; font-family: inherit; }
 .btn-reset-single:hover { background: #f9fafb; color: var(--text-main); }
 
 /* Lists & Editors */
-/* [修正 3] 加入 flex: 1 確保列表在容器內自動填充高度 */
-.list-editor ul, .log-list { background: #f9fafb; border: 1px solid #f3f4f6; border-radius: var(--radius-md); max-height: 300px; overflow-y: auto; margin: 0 0 12px 0; padding: 0; list-style: none; flex: 1; min-height: 100px; }
+/* 重要修正：設定 min-height 與 flex:1 防止內容消失 */
+.list-editor ul, .log-list { 
+    background: #f9fafb; 
+    border: 1px solid #f3f4f6; 
+    border-radius: var(--radius-md); 
+    max-height: 300px; 
+    overflow-y: auto; 
+    margin: 0 0 12px 0; 
+    padding: 0; 
+    list-style: none; 
+    flex: 1; 
+    min-height: 120px; 
+}
+
 .list-editor li { padding: 10px; border-bottom: 1px solid #f3f4f6; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 
-/* [修正 2] 讓長連結可以換行 */
-.list-editor li > div { overflow: visible; } /* 允許內容撐開 */
+/* 讓長連結可以換行 */
+.list-editor li > div { overflow: visible; } 
 .list-editor li span, .list-editor li small { 
-    white-space: normal; /* 允許換行 */
-    word-break: break-all; /* 強制長網址換行 */
+    white-space: normal; 
+    word-break: break-all; 
     display: block; 
 }
 
@@ -99,8 +111,19 @@ textarea { resize: vertical; min-height: 80px; font-family: inherit; }
 .form-group-boxed { background: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 15px; }
 
 /* Chart */
-/* [修正 3] 強制設定 min-height 避免圖表在並排時消失 */
-.chart-container { min-height: 180px; flex: 1; display: flex; align-items: flex-end; gap: 2px; padding: 10px 0; overflow-x: auto; width: 100%; margin-bottom: 10px; }
+/* 重要修正：設定 min-height 與 flex:1 防止圖表消失 */
+.chart-container { 
+    min-height: 180px; 
+    flex: 1; 
+    display: flex; 
+    align-items: flex-end; 
+    gap: 2px; 
+    padding: 10px 0; 
+    overflow-x: auto; 
+    width: 100%; 
+    margin-bottom: 10px; 
+}
+
 .chart-col { flex: 1; min-width: 15px; display: flex; flex-direction: column; align-items: center; cursor: pointer; opacity: 0.7; transition: 0.2s; }
 .chart-col:hover, .chart-col.current { opacity: 1; }
 .chart-bar { width: 100%; background: var(--primary); border-radius: 4px 4px 0 0; min-height: 4px; }
