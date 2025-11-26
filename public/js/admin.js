@@ -1,5 +1,5 @@
 /* ==========================================
- * 後台邏輯 (admin.js) - v42.0 (Stable)
+ * 後台邏輯 (admin.js) - v43.0 (All Enter Key & Non-Neg Fix)
  * ========================================== */
 const $ = i => document.getElementById(i);
 const $$ = s => document.querySelectorAll(s);
@@ -201,12 +201,14 @@ async function loadUsers() {
         const view = mk("div", null, null, {style:"display:flex; justify-content:space-between; width:100%; align-items:center;"});
         const info = mk("div", null, null, {style:"display:flex; flex-direction:column;"});
         info.append(mk("span", null, `${u.role==='super'?'👑':'👤'} ${u.nickname}`, {style:"font-weight:600"}), mk("small", null, u.username, {style:"color:#666;"}));
+        
         const editDiv = mk("div", null, null, {style:"display:none; width:100%; gap:5px; align-items:center;"});
         const input = mk("input", null, null, {value:u.nickname, type:"text"});
         const saveBtn = mk("button", "btn-secondary success", T.save);
         saveBtn.onclick = async () => { if(input.value === u.nickname) { editDiv.style.display="none"; view.style.display="flex"; return; } if(await req("/api/admin/set-nickname", {targetUsername:u.username, nickname:input.value})) { toast(T.saved, "success"); loadUsers(); } };
         const cancelBtn = mk("button", "btn-secondary", T.cancel, {onclick:()=>{ input.value = u.nickname; editDiv.style.display="none"; view.style.display="flex"; }});
         editDiv.append(input, saveBtn, cancelBtn);
+
         const acts = mk("div", null, null, {style:"display:flex; gap:5px; flex-shrink:0;"});
         const editBtn = mk("button", "btn-secondary", T.edit, {onclick:()=>{ view.style.display="none"; editDiv.style.display="flex"; }});
         acts.appendChild(editBtn);
@@ -218,6 +220,7 @@ async function loadUsers() {
     });
 }
 
+// LINE Settings List Logic
 const lineSettingsConfig = {
     approach: { label: "快到了提醒", hint: "{current} {target} {diff}" },
     arrival:  { label: "正式到號提醒", hint: "{current} {target}" },
@@ -310,8 +313,6 @@ $("btn-broadcast")?.addEventListener("click", async()=>{ const m=$("broadcast-ms
 // Quick Actions (+1, +5, C)
 $("quick-add-1")?.addEventListener("click", async()=>{ await req("/api/control/call", {direction:"next"}); }); 
 $("quick-add-5")?.addEventListener("click", async()=>{ 
-    // 簡單實作：連續呼叫5次，或後端實作 batch。這裡為了安全起見，建議僅作為數字填入輔助，或需後端支援。
-    // 暫時改為：填入目前號碼+5 到輸入框
     const curr = parseInt($("number").textContent)||0;
     $("manualNumber").value = curr + 5;
 });
@@ -344,11 +345,30 @@ $("btn-export-csv")?.addEventListener("click", async()=>{ const d=await req("/ap
 $("btn-save-unlock-pwd")?.addEventListener("click", async()=>{ if(await req("/api/admin/line-settings/set-unlock-pass", {password:$("line-unlock-pwd").value})) toast(T.saved,"success"); });
 $("add-user-btn")?.addEventListener("click", async()=>{ if(await req("/api/admin/add-user", {newUsername:$("new-user-username").value, newPassword:$("new-user-password").value, newNickname:$("new-user-nickname").value})) { toast(T.saved,"success"); $("new-user-username").value=""; $("new-user-password").value=""; $("new-user-nickname").value=""; loadUsers(); }});
 
+// [v43.0] Enhanced Enter Key Binding Logic
 document.addEventListener("DOMContentLoaded", () => {
     $("admin-lang-selector").value = curLang; 
     checkSession();
-    const enter = (i,b) => $(i)?.addEventListener("keyup", e=>{if(e.key==="Enter")$(b).click()});
-    enter("username-input","login-button"); enter("password-input","login-button"); enter("manualNumber","setNumber"); enter("new-link-url","add-featured-btn");
+    
+    const enter = (id, btnId) => {
+        const el = $(id);
+        if(el) el.addEventListener("keyup", e => { if(e.key==="Enter") $(btnId)?.click(); });
+    };
+
+    // All Input-Button Bindings
+    enter("username-input", "login-button");
+    enter("password-input", "login-button");
+    enter("manualNumber", "setNumber");
+    enter("manualIssuedNumber", "setIssuedNumber");
+    enter("new-passed-number", "add-passed-btn");
+    enter("new-link-url", "add-featured-btn");
+    enter("new-link-text", "add-featured-btn");
+    enter("broadcast-msg", "btn-broadcast");
+    enter("line-unlock-pwd", "btn-save-unlock-pwd");
+    enter("new-user-username", "add-user-btn");
+    enter("new-user-password", "add-user-btn");
+    enter("new-user-nickname", "add-user-btn");
+
     $$('.nav-btn').forEach(b => b.addEventListener('click', () => {
         $$('.nav-btn').forEach(x=>x.classList.remove('active')); b.classList.add('active');
         $$('.section-group').forEach(s=>s.classList.remove('active')); $(b.dataset.target)?.classList.add('active');
