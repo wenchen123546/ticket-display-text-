@@ -1,252 +1,261 @@
-<!DOCTYPE html>
-<html lang="zh-TW">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<title>管理後台</title>
-<script src="/socket.io/socket.io.js"></script>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/css/admin.css"> 
-</head>
-<body>
+/* ==========================================
+ * 後台邏輯 (admin.js) - v37.0 (Crash Protection Fix)
+ * ========================================== */
+const $ = i => document.getElementById(i);
+const $$ = s => document.querySelectorAll(s);
+const mk = (t, c, txt, ev={}) => { const e = document.createElement(t); if(c) e.className=c; if(txt) e.textContent=txt; Object.entries(ev).forEach(([k,v])=>e[k]=v); return e; };
 
-<div id="status-bar" data-i18n="status_disconnected">⚠️ 伺服器連線中斷...</div>
+const i18n = {
+    "zh-TW": { status_conn:"✅ 已連線", status_dis:"連線中斷...", wait:"等待組數", login_fail:"登入失敗", denied:"❌ 權限不足", expired:"Session 過期", saved:"✅ 已儲存", confirm:"⚠️ 確認", recall:"↩️ 重呼", edit:"✎", del:"✕", save:"✓", cancel:"✕" },
+    "en": { status_conn:"✅ Connected", status_dis:"Disconnected...", wait:"Waiting", login_fail:"Failed", denied:"❌ Denied", expired:"Expired", saved:"✅ Saved", confirm:"⚠️ Confirm", recall:"↩️ Recall", edit:"Edit", del:"Del", save:"Save", cancel:"Cancel" }
+};
+let curLang = localStorage.getItem('callsys_lang')||'zh-TW', T = i18n[curLang];
+let token="", userRole="normal", username="", uniqueUser="", toastTimer;
+const socket = io({ autoConnect: false, auth: { token: "" } });
 
-<div id="login-container">
-    <div class="login-header">
-        <h1 style="color:var(--primary); margin-bottom:5px;">Admin Console</h1>
-        <p style="color:var(--text-sub);">請登入管理系統</p>
-    </div>
-    <form onsubmit="return false;">
-        <div class="control-group"><input type="text" id="username-input" placeholder="帳號" autocomplete="username"></div>
-        <div class="control-group"><input type="password" id="password-input" placeholder="密碼" autocomplete="current-password"></div>
-        <button id="login-button" type="submit" class="btn-primary">登入</button>
-    </form>
-    <p id="login-error" style="color:var(--danger); margin-top:15px;"></p>
-</div>
+function toast(msg, type='info') {
+    const t = $("toast-notification"); if(!t) return;
+    t.textContent = msg; t.className = `${type} show`;
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 3000);
+}
 
-<div id="admin-panel" style="display:none;">
+// API Wrapper
+async function req(url, data={}, lockBtn=null) {
+    if(lockBtn) lockBtn.disabled=true;
+    try {
+        const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...data, token }) });
+        const res = await r.json();
+        if(!r.ok) {
+            if(r.status===403) { 
+                toast(res.error?.includes("權限")?T.denied:T.expired, "error"); 
+                if(!res.error?.includes("權限")) logout(); 
+            }
+            else toast(`❌ ${res.error||'Error'}`, "error");
+            return null;
+        }
+        return res;
+    } catch(e) { toast(`❌ ${e.message}`, "error"); return null; }
+    finally { if(lockBtn) setTimeout(()=>lockBtn.disabled=false, 300); }
+}
+
+function confirmBtn(el, origTxt, action) {
+    if(!el) return;
+    let t, c=5;
+    el.onclick = (e) => {
+        e.stopPropagation();
+        if(el.classList.contains("is-confirming")) { action(); reset(); } 
+        else {
+            el.classList.add("is-confirming"); el.textContent = `${T.confirm} (${c})`;
+            t = setInterval(() => { c--; el.textContent = `${T.confirm} (${c})`; if(c<=0) reset(); }, 1000);
+        }
+    };
+    const reset = () => { clearInterval(t); el.classList.remove("is-confirming"); el.textContent = origTxt; c=5; };
+}
+
+// Session
+function checkSession() {
+    const storedToken = localStorage.getItem('callsys_token');
+    const storedUser = localStorage.getItem('callsys_user');
+    const storedRole = localStorage.getItem('callsys_role');
+    const storedNick = localStorage.getItem('callsys_nick');
+    if(storedToken && storedUser) {
+        token = storedToken; uniqueUser = storedUser; userRole = storedRole; username = storedNick;
+        showPanel();
+    } else { showLogin(); }
+}
+function logout() {
+    localStorage.removeItem('callsys_token'); localStorage.removeItem('callsys_user');
+    localStorage.removeItem('callsys_role'); localStorage.removeItem('callsys_nick');
+    token=""; location.reload();
+}
+
+function showLogin() { $("login-container").style.display="block"; $("admin-panel").style.display="none"; socket.disconnect(); }
+async function showPanel() {
+    $("login-container").style.display="none"; $("admin-panel").style.display="flex";
+    if($("sidebar-user-info")) $("sidebar-user-info").textContent = `Hi, ${username}`;
+    const isSuper = userRole === 'super';
+    ["card-user-management", "btn-export-csv", "mode-switcher-group", "unlock-pwd-group"].forEach(id => { if($(id)) $(id).style.display = isSuper ? "block" : "none"; });
+    if($('button[data-target="section-line"]')) $('button[data-target="section-line"]').style.display = isSuper?"flex":"none";
+    socket.auth.token = token; socket.connect();
     
-    <aside class="sidebar">
-        <div class="sidebar-header"><div class="logo">⚡ 管理後台</div><div id="sidebar-user-info">Admin</div></div>
-        <nav class="sidebar-nav">
-            <button class="nav-btn active" data-target="section-live"><span class="nav-icon">🎮</span> 現場控台</button>
-            <button class="nav-btn" data-target="section-stats"><span class="nav-icon">📈</span> 數據報表</button>
-            <button class="nav-btn" data-target="section-settings"><span class="nav-icon">⚙️</span> 系統設定</button>
-            <button class="nav-btn" data-target="section-line"><span class="nav-icon">💬</span> LINE設定</button>
-        </nav>
-        <div class="sidebar-footer">
-            <select id="admin-lang-selector" class="lang-select"><option value="zh-TW">繁體中文</option><option value="en">English</option></select>
-            <button id="btn-logout" class="btn-reset-single" style="margin-top:10px; border:none; color:var(--danger);">登出</button>
-        </div>
-    </aside>
+    // Safety Wrap
+    try { await loadStats(); } catch(e){ console.error(e); }
+    if(isSuper) { 
+        try { await loadUsers(); } catch(e){ console.error(e); }
+        try { loadLineSettings(); } catch(e){ console.error(e); }
+    }
+}
 
-    <main class="content-area">
-        <div id="section-live" class="section-group active">
-            <div class="dashboard-header">
-                <div class="dashboard-item"><span class="label">目前叫號</span><span class="value big-number" id="number">0</span></div>
-                <div class="dashboard-item"><span class="label">已發號至</span><span class="value sub-number" id="issued-number">0</span></div>
-                <div class="dashboard-item"><span class="label">等待組數</span><span class="value sub-number" id="waiting-count" style="color:var(--warning);">0</span></div>
-            </div>
+$("btn-logout")?.addEventListener("click", logout);
+$("login-button").onclick = async () => {
+    const b=$("login-button"); b.disabled=true;
+    const res = await fetch("/login", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({username:$("username-input").value, password:$("password-input").value})}).then(r=>r.json()).catch(()=>({error:T.login_fail}));
+    if(res.token) { 
+        token=res.token; userRole=res.role; username=res.nickname; uniqueUser=res.username;
+        localStorage.setItem('callsys_token', token); localStorage.setItem('callsys_user', uniqueUser);
+        localStorage.setItem('callsys_role', userRole); localStorage.setItem('callsys_nick', username);
+        showPanel(); 
+    } else { $("login-error").textContent=res.error||T.login_fail; }
+    b.disabled=false;
+};
 
-            <div class="card-container">
-                <div class="card-wrapper">
-                    <div class="admin-card">
-                        <h3><span class="card-icon">📢</span> 叫號控制</h3>
-                        <div class="big-action-row">
-                            <button id="btn-call-prev" class="btn-glass btn-big">◀ 上一號</button>
-                            <button id="btn-mark-passed" class="btn-warn btn-big">過號</button>
-                            <button id="btn-call-next" class="btn-big" id="hero-btn">下一號 ▶</button>
-                        </div>
-                        <div class="control-group">
-                            <label>指定 / 插隊</label>
-                            <div style="display:flex; gap:8px; margin-bottom:8px;">
-                                <button class="btn-secondary" id="quick-add-1" style="flex:1;">+1</button>
-                                <button class="btn-secondary" id="quick-add-5" style="flex:1;">+5</button>
-                                <button class="btn-secondary" id="quick-clear" style="flex:1; background:#f3f4f6;">C</button>
-                            </div>
-                            <div class="input-group">
-                                <input type="number" id="manualNumber" placeholder="#" inputmode="numeric" pattern="\d*">
-                                <button id="setNumber" class="btn-secondary">執行</button>
-                            </div>
-                        </div>
-                        <button id="resetNumber" class="btn-reset-single">↺ 重置叫號</button>
-                    </div>
-                </div>
+// Socket
+socket.on("connect", () => { $("status-bar").classList.remove("visible"); toast(`${T.status_conn} (${username})`, "success"); });
+socket.on("disconnect", () => { $("status-bar").classList.add("visible"); });
+socket.on("updateQueue", d => { $("number").textContent=d.current; $("issued-number").textContent=d.issued; $("waiting-count").textContent=Math.max(0, d.issued-d.current); loadStats(); });
+socket.on("update", n => { $("number").textContent=n; loadStats(); });
+socket.on("initAdminLogs", l => renderLogs(l, true));
+socket.on("newAdminLog", l => renderLogs([l], false));
+socket.on("updateSoundSetting", b => { if($("sound-toggle")) $("sound-toggle").checked=b; });
+socket.on("updatePublicStatus", b => { if($("public-toggle")) $("public-toggle").checked=b; });
+socket.on("updateSystemMode", m => $$('input[name="systemMode"]').forEach(r => r.checked=(r.value===m)));
 
-                <div class="card-wrapper">
-                    <div class="admin-card">
-                        <h3><span class="card-icon">🎟️</span> 發號機</h3>
-                        <div class="big-action-row">
-                            <button id="btn-issue-prev" class="btn-glass btn-big">➖ 收回</button>
-                            <button id="btn-issue-next" class="btn-success btn-big">發號 ➕</button>
-                        </div>
-                        <div class="control-group" style="margin-top:auto;">
-                            <label>修正發號數</label>
-                            <div class="input-group">
-                                <input type="number" id="manualIssuedNumber" placeholder="#" inputmode="numeric">
-                                <button id="setIssuedNumber" class="btn-secondary">修正</button>
-                            </div>
-                        </div>
-                        <button id="resetIssued" class="btn-reset-single">↺ 重置發號</button>
-                    </div>
-                </div>
+socket.on("updatePassed", list => {
+    const ul = $("passed-list-ui"); if(!ul) return; ul.innerHTML="";
+    list.forEach(n => {
+        const li = mk("li");
+        const div = mk("div", null, null, {style:"display:flex; gap:10px; align-items:center;"});
+        div.append(mk("span", null, n, {style:"font-weight:bold"}), mk("button", "btn-secondary", T.recall, {onclick:()=>{ if(confirm(`Recall ${n}?`)) req("/api/control/recall-passed",{number:n}); }}));
+        const del = mk("button", "delete-item-btn", T.del); confirmBtn(del, T.del, ()=>req("/api/passed/remove",{number:n}));
+        li.append(div, del); ul.appendChild(li);
+    });
+});
 
-                <div class="card-wrapper" id="card-editor">
-                    <div class="admin-card">
-                        <h3><span class="card-icon">📝</span> 過號名單</h3>
-                        <div class="control-group list-editor">
-                            <ul id="passed-list-ui"></ul>
-                            <div class="input-group">
-                                <input type="number" id="new-passed-number" placeholder="加入號碼" inputmode="numeric">
-                                <button id="add-passed-btn" class="btn-add">+</button>
-                            </div>
-                        </div>
-                        <button id="resetPassed" class="btn-reset-single">清空過號</button>
-                    </div>
-                </div>
-            </div>
-        </div>
+socket.on("updateFeaturedContents", list => {
+    const ul = $("featured-list-ui"); if(!ul) return; ul.innerHTML="";
+    list.forEach(item => {
+        const li = mk("li");
+        const view = mk("div", null, null, {style:"display:flex; justify-content:space-between; width:100%; align-items:center;"});
+        const info = mk("div", null, null, {style:"display:flex; flex-direction:column; width:100%;"});
+        info.append(mk("span", null, item.linkText, {style:"font-weight:600"}), mk("small", null, item.linkUrl, {style:"color:#666;"}));
+        
+        const editDiv = mk("div", null, null, {style:"display:none; width:100%; flex-direction:column; gap:5px;"});
+        const i1 = mk("input", null, null, {value:item.linkText, placeholder:"Name"}), i2 = mk("input", null, null, {value:item.linkUrl, placeholder:"URL"});
+        const save = mk("button", "btn-secondary success", T.save, {onclick: async()=>{ if(await req("/api/featured/edit",{oldLinkText:item.linkText,oldLinkUrl:item.linkUrl,newLinkText:i1.value,newLinkUrl:i2.value})) toast(T.saved,"success"); }});
+        
+        const acts = mk("div", null, null, {style:"display:flex; gap:5px; flex-shrink:0;"});
+        acts.append(mk("button", "btn-secondary", T.edit, {onclick:()=>{view.style.display="none"; editDiv.style.display="flex";}}));
+        const del = mk("button", "delete-item-btn", T.del); confirmBtn(del, T.del, ()=>req("/api/featured/remove", item));
+        acts.append(del);
 
-        <div id="section-stats" class="section-group">
-            <div class="card-container">
-                <div class="card-wrapper">
-                    <div class="admin-card">
-                        <h3><span class="card-icon">📊</span> 流量分析</h3>
-                        <div style="display:flex; justify-content:space-between; align-items:flex-end;">
-                            <div><p style="margin:0; color:var(--text-sub);">今日人次</p><span id="stats-today-count" style="font-size:2.2rem; font-weight:800; color:var(--primary);">0</span></div>
-                            <div class="input-group" style="width:auto;"><button id="btn-refresh-stats" class="btn-secondary">重整</button><button id="btn-export-csv" class="btn-success btn-secondary" style="display:none; color:white;">CSV</button></div>
-                        </div>
-                        <div id="hourly-chart" class="chart-container"><p style="margin:auto; color:#ccc;">Loading...</p></div>
-                        <ul id="stats-list-ui" class="log-list" style="margin-top:10px;"><li>Loading...</li></ul>
-                        <button id="btn-clear-stats" class="btn-reset-single">⚠ 清空統計</button>
-                    </div>
-                </div>
-                
-                <div class="card-wrapper">
-                    <div class="admin-card">
-                        <h3><span class="card-icon">📋</span> 操作日誌</h3>
-                        <div class="control-group admin-log-container" style="flex:1; display:flex; flex-direction:column;">
-                            <ul id="admin-log-ui" class="log-list" style="flex:1;"><li>Wait...</li></ul>
-                        </div>
-                        <button id="btn-clear-logs" class="btn-reset-single">清除日誌</button>
-                    </div>
-                </div>
-            </div>
-        </div>
+        editDiv.append(i1, i2, mk("div", null, null, {style:"display:flex; gap:5px; justify-content:flex-end;"}));
+        editDiv.lastChild.append(save, mk("button", "btn-secondary", T.cancel, {onclick:()=>{editDiv.style.display="none"; view.style.display="flex";}}));
+        view.append(info, acts); li.append(view, editDiv); ul.appendChild(li);
+    });
+});
 
-        <div id="section-settings" class="section-group">
-            <div class="card-container">
-                <div class="card-wrapper">
-                    <div class="admin-card">
-                        <h3><span class="card-icon">⚙️</span> 系統</h3>
-                        <div class="control-group system-toggle-group">
-                            <label for="public-toggle" style="cursor:pointer;">🌐 開放前台</label>
-                            <input type="checkbox" id="public-toggle" checked>
-                        </div>
-                        <div class="control-group sound-toggle-group">
-                            <label for="sound-toggle" style="cursor:pointer;">🔊 提示音</label>
-                            <input type="checkbox" id="sound-toggle">
-                        </div>
-                        <div class="control-group">
-                            <label>TTS 廣播</label>
-                            <div class="input-group"><input type="text" id="broadcast-msg" placeholder="輸入文字..."><button id="btn-broadcast" class="btn-secondary">播放</button></div>
-                        </div>
-                        <div id="mode-switcher-group" class="control-group form-group-boxed" style="display:none; margin-top:10px;">
-                            <label>模式</label>
-                            <div style="display:flex; gap:15px; margin-top:5px;">
-                                <label><input type="radio" name="systemMode" value="ticketing" checked> 線上</label>
-                                <label><input type="radio" name="systemMode" value="input"> 手動</label>
-                            </div>
-                        </div>
-                        <button id="resetAll" class="btn-reset-single">💥 全域重置</button>
-                    </div>
-                </div>
+socket.on("updateOnlineAdmins", list => {
+    const ul = $("online-users-list"); if(!ul) return; ul.innerHTML = "";
+    if(!list || !list.length) { ul.innerHTML = `<li>(Offline)</li>`; return; }
+    list.sort((a,b)=>(a.role==='super'?-1:1)).forEach(u => {
+        ul.appendChild(mk("li", null, `${u.role==='super'?'👑':'👤'} ${u.nickname} ${u.username===uniqueUser?'(You)':''}`));
+    });
+});
 
-                <div class="card-wrapper">
-                    <div class="admin-card">
-                        <h3><span class="card-icon">🟢</span> 在線管理</h3>
-                        <div class="control-group list-editor" style="flex:1;">
-                            <ul id="online-users-list" style="min-height:100px;"><li>Loading...</li></ul>
-                        </div>
-                    </div>
-                </div>
+function renderLogs(logs, init) {
+    const ul = $("admin-log-ui"); if(!ul) return; if(init) ul.innerHTML="";
+    if(!logs?.length && init) { ul.innerHTML="<li>[No Logs]</li>"; return; }
+    logs.forEach(msg => { const li=mk("li", null, msg); init ? ul.appendChild(li) : ul.insertBefore(li, ul.firstChild); });
+}
 
-                <div class="card-wrapper">
-                    <div class="admin-card">
-                        <h3><span class="card-icon">🔗</span> 連結管理</h3>
-                        <div class="control-group list-editor">
-                            <ul id="featured-list-ui"></ul>
-                            <div class="input-group vertical">
-                                <input type="text" id="new-link-text" placeholder="顯示名稱">
-                                <div class="input-group"><input type="text" id="new-link-url" placeholder="URL"><button id="add-featured-btn" class="btn-add">+</button></div>
-                            </div>
-                        </div>
-                        <button id="resetFeaturedContents" class="btn-reset-single">清空連結</button>
-                    </div>
-                </div>
+async function loadUsers() {
+    const ul = $("user-list-ui"); if(!ul) return;
+    const d = await req("/api/admin/users");
+    if(!d) return; ul.innerHTML="";
+    d.users.forEach(u => {
+        const li = mk("li");
+        const view = mk("div", null, null, {style:"display:flex; justify-content:space-between; width:100%; align-items:center;"});
+        const info = mk("div", null, null, {style:"display:flex; flex-direction:column;"});
+        info.append(mk("span", null, `${u.role==='super'?'👑':'👤'} ${u.nickname}`, {style:"font-weight:600"}), mk("small", null, u.username, {style:"color:#666;"}));
 
-                <div class="card-wrapper" id="card-user-management" style="display:none;">
-                    <div class="admin-card">
-                        <h3><span class="card-icon">👥</span> 帳號管理</h3>
-                        <div class="control-group list-editor">
-                            <ul id="user-list-ui"></ul>
-                            <label>新增帳號</label>
-                            <div class="input-group vertical">
-                                <div class="input-group"><input type="text" id="new-user-username" placeholder="帳號"><input type="text" id="new-user-nickname" placeholder="暱稱"></div>
-                                <div class="input-group"><input type="password" id="new-user-password" placeholder="密碼"><button id="add-user-btn" class="btn-add">+</button></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+        const editDiv = mk("div", null, null, {style:"display:none; width:100%; gap:5px; align-items:center;"});
+        const input = mk("input", null, null, {value:u.nickname, type:"text", placeholder:"Nickname"});
+        const saveBtn = mk("button", "btn-secondary success", T.save);
+        
+        saveBtn.onclick = async () => { if(await req("/api/admin/set-nickname", {targetUsername:u.username, nickname:input.value})) { toast(T.saved, "success"); loadUsers(); } };
+        const acts = mk("div", null, null, {style:"display:flex; gap:5px; flex-shrink:0;"});
+        acts.append(mk("button", "btn-secondary", T.edit, {onclick:()=>{ view.style.display="none"; editDiv.style.display="flex"; }}));
+        if(u.role!=='super' && userRole==='super') {
+            const del = mk("button", "delete-item-btn", T.del); 
+            confirmBtn(del, T.del, async()=>{ await req("/api/admin/del-user",{delUsername:u.username}); loadUsers(); });
+            acts.appendChild(del);
+        }
+        editDiv.append(input, saveBtn, mk("button", "btn-secondary", T.cancel, {onclick:()=>{ editDiv.style.display="none"; view.style.display="flex"; }}));
+        view.appendChild(info, acts); li.append(view, editDiv); ul.appendChild(li);
+    });
+}
 
-        <div id="section-line" class="section-group">
-            <div class="card-container">
-                <div class="card-wrapper" style="grid-column: 1 / -1;">
-                    <div class="admin-card">
-                        <h3><span class="card-icon">💬</span> LINE 設定</h3>
-                        <div class="control-group form-group-boxed" id="unlock-pwd-group" style="background:#fff7ed; display:none;">
-                            <label style="color:#c2410c;">🔑 後台解鎖密碼</label>
-                            <div class="input-group"><input type="text" id="line-unlock-pwd" placeholder="密碼"><button id="btn-save-unlock-pwd" class="btn-warn">儲存</button></div>
-                        </div>
-                        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap:20px;">
-                            <div>
-                                <h4 style="margin:10px 0; color:var(--primary);">📌 主要通知</h4>
-                                <div class="control-group form-group-boxed"><label>快到了</label><span class="var-hint">{current} {target} {diff}</span><textarea id="line-msg-approach"></textarea></div>
-                                <div class="control-group form-group-boxed"><label>正式到號</label><span class="var-hint">{current} {target}</span><textarea id="line-msg-arrival"></textarea></div>
-                            </div>
-                            <div>
-                                <h4 style="margin:10px 0; color:var(--text-sub);">🤖 自動回覆</h4>
-                                <div class="control-group form-group-boxed"><label>查詢狀態</label><textarea id="line-msg-status" style="height:60px;"></textarea></div>
-                                <div class="control-group form-group-boxed"><label>追蹤文字</label><textarea id="line-msg-personal" style="height:50px;"></textarea></div>
-                            </div>
-                        </div>
-                        <div class="control-group" style="margin-top:20px; display:flex; gap:10px;">
-                            <button id="btn-save-line-msg" class="btn-primary" style="flex:2;">儲存設定</button>
-                            <button id="btn-reset-line-msg" class="btn-reset-single" style="flex:1;">恢復預設</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </main>
-</div>
+// [Safety] Added checks for elements
+async function loadStats() {
+    const d = await req("/api/admin/stats");
+    if(d?.success) {
+        if($("stats-today-count")) $("stats-today-count").textContent = d.todayCount;
+        renderChart(d.hourlyCounts, d.serverHour);
+        const ul = $("stats-list-ui");
+        if(ul) ul.innerHTML = d.history.map(h => `<li><span>${new Date(h.time).toLocaleTimeString('zh-TW',{hour12:false})} - ${h.num} <small>(${h.operator})</small></span></li>`).join("") || `<li>[Empty]</li>`;
+    }
+}
 
-<div id="edit-stats-overlay" class="modal-overlay" style="display:none;">
-    <div class="modal-content">
-        <h3>編輯數據</h3>
-        <div class="modal-actions">
-            <button id="btn-stats-minus" class="btn-circle btn-warn">-1</button>
-            <span id="modal-current-count" style="font-size:2.5rem; font-weight:800; min-width:60px;">0</span>
-            <button id="btn-stats-plus" class="btn-circle btn-success">+1</button>
-        </div>
-        <button id="btn-modal-close" class="btn-secondary" style="width:100%;">完成</button>
-    </div>
-</div>
+function renderChart(counts, curHr) {
+    const c = $("hourly-chart"); if(!c || !counts) return; c.innerHTML=""; const max = Math.max(...counts, 1);
+    counts.forEach((val, i) => {
+        const col = mk("div", `chart-col ${i===curHr?'current':''}`, null, {onclick:()=>openStatModal(i, val)});
+        col.innerHTML = `<div class="chart-val">${val||''}</div><div class="chart-bar" style="height:${Math.max(val/max*100, 2)}%; background:${val===0?'#e5e7eb':''}"></div><div class="chart-label">${String(i).padStart(2,'0')}</div>`;
+        c.appendChild(col);
+    });
+}
 
-<div id="toast-notification"></div>
-<script src="/js/admin.js"></script> 
-</body>
-</html>
+// Bindings
+const act = (id, api, data={}) => $(id)?.addEventListener("click", () => req(api, data, $(id)));
+act("btn-call-prev", "/api/control/call", {direction:"prev"});
+act("btn-call-next", "/api/control/call", {direction:"next"});
+act("btn-mark-passed", "/api/control/pass-current");
+act("btn-issue-prev", "/api/control/issue", {direction:"prev"});
+act("btn-issue-next", "/api/control/issue", {direction:"next"});
+
+$("setNumber")?.addEventListener("click", async()=>{ const n=$("manualNumber").value; if(n>0 && await req("/api/control/set-call",{number:n})) { $("manualNumber").value=""; toast(T.saved,"success"); } });
+$("setIssuedNumber")?.addEventListener("click", async()=>{ const n=$("manualIssuedNumber").value; if(n>=0 && await req("/api/control/set-issue",{number:n})) { $("manualIssuedNumber").value=""; toast(T.saved,"success"); } });
+$("add-passed-btn")?.addEventListener("click", async()=>{ const n=$("new-passed-number").value; if(n>0 && await req("/api/passed/add",{number:n})) $("new-passed-number").value=""; });
+$("add-featured-btn")?.addEventListener("click", async()=>{ const t=$("new-link-text").value, u=$("new-link-url").value; if(t&&u && await req("/api/featured/add",{linkText:t, linkUrl:u})) { $("new-link-text").value=""; $("new-link-url").value=""; } });
+$("btn-broadcast")?.addEventListener("click", async()=>{ const m=$("broadcast-msg").value; if(m && await req("/api/admin/broadcast",{message:m})) { toast("📢 Sent","success"); $("broadcast-msg").value=""; } });
+
+confirmBtn($("resetNumber"), "↺ 重置叫號", ()=>req("/api/control/set-call",{number:0}));
+confirmBtn($("resetIssued"), "↺ 重置發號", ()=>req("/api/control/set-issue",{number:0}));
+confirmBtn($("resetPassed"), "清空列表", ()=>req("/api/passed/clear"));
+confirmBtn($("resetFeaturedContents"), "清空連結", ()=>req("/api/featured/clear"));
+confirmBtn($("resetAll"), "💥 全域重置", ()=>req("/reset"));
+confirmBtn($("btn-clear-logs"), "清除日誌", ()=>req("/api/logs/clear"));
+confirmBtn($("btn-clear-stats"), "🗑️ 清空統計", ()=>req("/api/admin/stats/clear").then(()=>loadStats()));
+confirmBtn($("btn-reset-line-msg"), "↺ 恢復預設", ()=>req("/api/admin/line-settings/reset").then(d=>{if(d)loadLineSettings();}));
+
+$("sound-toggle")?.addEventListener("change", e => req("/set-sound-enabled", {enabled:e.target.checked}));
+$("public-toggle")?.addEventListener("change", e => req("/set-public-status", {isPublic:e.target.checked}));
+$$('input[name="systemMode"]').forEach(r => r.addEventListener("change", ()=>confirm("Switch Mode?")?req("/set-system-mode", {mode:r.value}):(r.checked=!r.checked)));
+$("admin-lang-selector")?.addEventListener("change", e => { curLang=e.target.value; localStorage.setItem('callsys_lang', curLang); T=i18n[curLang]; location.reload(); });
+
+const modal = $("edit-stats-overlay"); let editHr=null;
+function openStatModal(h, val) { $("modal-current-count").textContent=val; editHr=h; modal.style.display="flex"; }
+$("btn-modal-close")?.addEventListener("click", ()=>modal.style.display="none");
+["btn-stats-minus", "btn-stats-plus"].forEach((id, idx) => $(id)?.addEventListener("click", async()=>{
+    if(editHr===null) return; const delta = idx===0 ? -1 : 1; await req("/api/admin/stats/adjust", {hour:editHr, delta}); 
+    const n = parseInt($("modal-current-count").textContent)+delta; $("modal-current-count").textContent = n<0?0:n; loadStats();
+}));
+$("btn-export-csv")?.addEventListener("click", async()=>{ const d=await req("/api/admin/export-csv"); if(d?.csvData) { const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob(["\uFEFF"+d.csvData],{type:'text/csv'})); a.download=d.fileName; a.click(); toast("✅ Downloaded","success"); }});
+
+const lineKeys = ["approach","arrival","status","personal","passed","set_ok","cancel","login_hint","err_passed","err_no_sub","set_hint"];
+async function loadLineSettings() { const d=await req("/api/admin/line-settings/get"); if(d) lineKeys.forEach(k=>{ if($(`line-msg-${k}`)) $(`line-msg-${k}`).value=d[k]||""; }); $("line-unlock-pwd").value = (await req("/api/admin/line-settings/get-unlock-pass"))?.password || ""; }
+$("btn-save-line-msg")?.addEventListener("click", async()=>{ const data={}; lineKeys.forEach(k=>data[k]=$(`line-msg-${k}`).value); if(await req("/api/admin/line-settings/save", data)) toast(T.saved,"success"); });
+$("btn-save-unlock-pwd")?.addEventListener("click", async()=>{ if(await req("/api/admin/line-settings/set-unlock-pass", {password:$("line-unlock-pwd").value})) toast(T.saved,"success"); });
+$("add-user-btn")?.addEventListener("click", async()=>{ if(await req("/api/admin/add-user", {newUsername:$("new-user-username").value, newPassword:$("new-user-password").value, newNickname:$("new-user-nickname").value})) { toast(T.saved,"success"); $("new-user-username").value=""; $("new-user-password").value=""; $("new-user-nickname").value=""; loadUsers(); }});
+
+document.addEventListener("DOMContentLoaded", () => {
+    $("admin-lang-selector").value = curLang; 
+    checkSession();
+    const enter = (i,b) => $(i)?.addEventListener("keyup", e=>{if(e.key==="Enter")$(b).click()});
+    enter("username-input","login-button"); enter("password-input","login-button"); enter("manualNumber","setNumber"); enter("new-link-url","add-featured-btn");
+    $$('.nav-btn').forEach(b => b.addEventListener('click', () => {
+        $$('.nav-btn').forEach(x=>x.classList.remove('active')); b.classList.add('active');
+        $$('.section-group').forEach(s=>s.classList.remove('active')); $(b.dataset.target)?.classList.add('active');
+        if(b.dataset.target === 'section-stats') loadStats();
+    }));
+});
