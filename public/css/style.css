@@ -1,5 +1,5 @@
 /* ==========================================
- * Theme: Maximized Compact v34.0 (Fix Tags & Header)
+ * Theme: Maximized Compact v34.1 (Fix Spacing & Blocking)
  * ========================================== */
 :root {
     --primary: #3b82f6; --primary-dark: #2563eb; --bg-app: #f1f5f9; --text-main: #0f172a; --text-sub: #475569;
@@ -31,19 +31,20 @@ body { margin: 0; width: 100%; height: 100dvh; overflow-y: auto; overflow-x: hid
 .s-value { font-size: 1.3rem; font-weight: 900; line-height: 1; }
 #number { flex: 1; display: flex; align-items: center; justify-content: center; font-size: clamp(6rem, 25vh, 14rem); font-weight: 900; line-height: 1; background: linear-gradient(180deg, var(--text-main) 10%, var(--primary-dark) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: -4px; margin: 0; padding-bottom: 2vh; }
 
-/* Passed List (Compact Fix) */
+/* Passed List (Strict Compact Fix) */
 .list-section { padding: 10px; display: flex; align-items: flex-start; gap: 10px; min-height: 60px; }
 .list-header { display: flex; align-items: center; gap: 6px; flex-shrink: 0; padding-top: 4px; }
 .list-title { font-size: 0.9rem; font-weight: 700; color: var(--text-sub); }
 .badge { font-size: 0.75rem; background: #cbd5e1; padding: 1px 6px; border-radius: 4px; font-weight: 700; }
 .scroll-view { flex: 1; max-height: 80px; overflow-y: auto; overflow-x: hidden; }
 
-/* [修改] 緊湊排列：使用 flex-start 並移除 li 的 flex-grow */
+/* [修正 1] 強制使用 fit-content 解決左右過寬問題 */
 .tag-list { display: flex; flex-wrap: wrap; gap: 6px; padding: 0; margin: 0; list-style: none; justify-content: flex-start; }
 .tag-list li { 
     font-size: 0.95rem; font-weight: 700; color: #ef4444; background: #fee2e2; 
     padding: 2px 8px; border-radius: 6px; border: 1px solid #fecaca; white-space: nowrap;
-    width: auto; flex: 0 0 auto; /* 關鍵：不自動拉伸 */
+    width: fit-content; /* 關鍵：強制貼合文字寬度 */
+    flex: 0 0 auto; /* 禁止伸縮 */
 }
 .empty-state { font-size: 0.85rem; color: #cbd5e1; font-style: italic; padding-top: 4px; }
 
@@ -76,11 +77,13 @@ body { margin: 0; width: 100%; height: 100dvh; overflow-y: auto; overflow-x: hid
 
 /* Desktop */
 @media (min-width: 1024px) {
-    body { padding: 30px; background: #e2e8f0; overflow: hidden; }
+    /* [修正 2] 增加 padding-top (80px) 確保內容不會被按鈕蓋住 */
+    body { padding: 30px; padding-top: 80px; background: #e2e8f0; overflow: hidden; }
+    
     .app-container { max-width: 1400px; display: grid; grid-template-columns: 1.4fr 1fr; gap: 30px; height: 100%; max-height: 900px; margin: auto; padding: 0; }
     
-    /* [修改] Header 改為絕對定位，消除上方空白，不佔版面 */
-    .app-header { position: absolute; top: 20px; right: 30px; width: auto; height: auto; padding: 0; z-index: 50; }
+    /* [修正 2] Header 改為 Fixed 並置於最右上角，不佔據內容流，也不會擋住卡片 */
+    .app-header { position: fixed; top: 20px; right: 20px; width: auto; height: auto; padding: 0; z-index: 9999; }
     
     .status-indicator { display: none; } .lang-switch { background: white; padding: 8px 16px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
     .hero-section { background: white; border-radius: 30px; box-shadow: 0 20px 50px rgba(0,0,0,0.08); padding: 50px; }
@@ -88,7 +91,10 @@ body { margin: 0; width: 100%; height: 100dvh; overflow-y: auto; overflow-x: hid
     #number { font-size: 20rem; }
     .side-panel { gap: 20px; height: 100%; }
     .list-section { flex: 0 0 auto; background: rgba(255,255,255,0.8); padding: 20px; min-height: auto; }
-    .tag-list li { font-size: 1.1rem; padding: 6px 12px; }
+    
+    /* [修正 1] 桌機版過號保持小巧，不跟隨字體放大 */
+    .tag-list li { font-size: 0.95rem; padding: 4px 10px; }
+    
     .control-section { flex: 1; background: white; border-radius: 30px; padding: 40px; box-shadow: 0 20px 50px rgba(0,0,0,0.08); justify-content: center; }
     .btn-main, .fancy-input, .btn-track { height: 80px; font-size: 1.8rem; border-radius: 20px; }
     .footer-tools { margin-top: auto; padding-top: 30px; } .link-chip { padding: 10px 20px; font-size: 1.1rem; } .btn-util { height: 50px; font-size: 1.1rem; }
