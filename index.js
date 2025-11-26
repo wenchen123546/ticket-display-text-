@@ -1,5 +1,5 @@
 /* ==========================================
- * 伺服器 (index.js) - v41.0 Optimized
+ * 伺服器 (index.js) - v41.1 No IPv4 Force
  * ========================================== */
 require('dotenv').config();
 const { Server } = require("http");
@@ -34,10 +34,9 @@ const logSystemDaily = (user, msg) => {
     fs.appendFile(logPath, `[${timeStr}] [${user || 'System'}] ${msg}\n`, (err) => { if(err) console.error("Log Error:", err); });
 };
 
-// [關鍵修正] 加入 family: 4 強制使用 IPv4，解決 Node.js 17+ DNS 解析問題
+// [修改] 移除了 family: 4，恢復 Node.js 預設連線行為
 const redis = new Redis(REDIS_URL, { 
     tls: { rejectUnauthorized: false }, 
-    family: 4,
     retryStrategy: t => Math.min(t * 50, 2000) 
 });
 
@@ -73,7 +72,6 @@ const calcWaitTime = async (force=false) => {
     if(!force && Date.now()-lastWaitCalc<60000) return cacheWait;
     const hist = (await redis.lrange(KEYS.HISTORY, 0, 19)).map(JSON.parse).filter(r=>r.num);
     let total=0, weight=0;
-    // [優化] 防止除以零與 NaN 的計算邏輯
     for(let i=0; i<hist.length-1; i++) {
         const t1 = new Date(hist[i].time), t2 = new Date(hist[i+1].time);
         const diff = (t1 - t2)/60000; 
@@ -104,7 +102,6 @@ async function handleControl(type, { body, user }) {
         } else { newNum = await redis.decrIfPositive(KEYS.CURRENT); logMsg = `號碼回退為 ${newNum}`; }
         
         await logHistory(newNum, user.nickname, delta);
-        // [優化] LINE 通知改為背景執行 (不 await)，避免卡頓
         checkLineNotify(newNum).catch(e => console.error("Line Error:", e)); 
     } else if(type === 'issue') {
         if(direction==='next') { newNum = await redis.incr(KEYS.ISSUED); logMsg = `手動發號至 ${newNum}`; }
@@ -153,7 +150,6 @@ async function logHistory(num, op, delta=0) {
 
 // Middleware
 app.use(helmet({ contentSecurityPolicy: false }));
-// [重要] 確保 public 資料夾結構正確，否則 CSS 會 404
 app.use(express.static("public")); 
 app.use(express.json()); app.set('trust proxy', 1);
 
@@ -341,4 +337,4 @@ io.on("connection", async s => {
     s.emit("updateWaitTime", await calcWaitTime());
 });
 
-server.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server v41.0 running on ${PORT}`));
+server.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server v41.1 running on ${PORT}`));
