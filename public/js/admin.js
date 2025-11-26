@@ -1,5 +1,5 @@
 /* ==========================================
- * 後台邏輯 (admin.js) - v38.2 (Fix Loading Stuck)
+ * 後台邏輯 (admin.js) - v39.0 (Fix Data Rendering)
  * ========================================== */
 const $ = i => document.getElementById(i);
 const $$ = s => document.querySelectorAll(s);
@@ -55,17 +55,11 @@ function toast(msg, type='info') {
     clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 3000);
 }
 
-// [功能] 即時更新語言 UI
+// UI Update
 function updateLangUI() {
     T = i18n[curLang];
-    $$('[data-i18n]').forEach(el => {
-        const k = el.getAttribute('data-i18n');
-        if(T[k]) el.textContent = T[k];
-    });
-    $$('[data-i18n-ph]').forEach(el => {
-        const k = el.getAttribute('data-i18n-ph');
-        if(T[k]) el.placeholder = T[k];
-    });
+    $$('[data-i18n]').forEach(el => { const k = el.getAttribute('data-i18n'); if(T[k]) el.textContent = T[k]; });
+    $$('[data-i18n-ph]').forEach(el => { const k = el.getAttribute('data-i18n-ph'); if(T[k]) el.placeholder = T[k]; });
     loadUsers(); 
     loadStats();
     req("/api/featured/get").then(res => { if(res) socket.emit("updateFeaturedContents", res); });
@@ -78,10 +72,7 @@ async function req(url, data={}, lockBtn=null) {
         const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...data, token }) });
         const res = await r.json();
         if(!r.ok) {
-            if(r.status===403) { 
-                toast(res.error?.includes("權限")?T.denied:T.expired, "error"); 
-                if(!res.error?.includes("權限")) logout(); 
-            }
+            if(r.status===403) { toast(res.error?.includes("權限")?T.denied:T.expired, "error"); if(!res.error?.includes("權限")) logout(); }
             else toast(`❌ ${res.error||'Error'}`, "error");
             return null;
         }
@@ -137,11 +128,9 @@ async function showPanel() {
         try { loadLineSettings(); } catch(e){ console.error(e); }
     }
     
-    // [修復] 在線管理初始化 (解決卡在 Loading 的問題)
+    // Init Online List
     const onlineUl = $("online-users-list");
-    if(onlineUl && onlineUl.textContent === "Loading...") {
-        onlineUl.innerHTML = `<li>👤 ${username} (You)</li>`;
-    }
+    if(onlineUl && onlineUl.textContent === "Loading...") onlineUl.innerHTML = `<li>👤 ${username} (You)</li>`;
 }
 
 $("btn-logout")?.addEventListener("click", logout);
@@ -202,14 +191,9 @@ socket.on("updateFeaturedContents", list => {
     });
 });
 
-// [修復] 在線管理：如果 socket 有回傳才更新，否則保持預設
 socket.on("updateOnlineAdmins", list => {
     const ul = $("online-users-list"); if(!ul) return;
-    if(!list || !list.length) { 
-        // 保持顯示自己，避免空白
-        ul.innerHTML = `<li>👤 ${username} (You)</li>`; 
-        return; 
-    }
+    if(!list || !list.length) { ul.innerHTML = `<li>👤 ${username} (You)</li>`; return; }
     ul.innerHTML = "";
     list.sort((a,b)=>(a.role==='super'?-1:1)).forEach(u => {
         ul.appendChild(mk("li", null, `${u.role==='super'?'👑':'👤'} ${u.nickname} ${u.username===uniqueUser?'(You)':''}`));
@@ -226,7 +210,9 @@ function renderLogs(logs, init) {
 async function loadUsers() {
     const ul = $("user-list-ui"); if(!ul) return;
     const d = await req("/api/admin/users");
-    if(!d) return; ul.innerHTML="";
+    // [FIX] 不檢查 d.success，直接檢查 d.users
+    if(!d || !d.users) return; 
+    ul.innerHTML="";
     d.users.forEach(u => {
         const li = mk("li");
         
@@ -245,10 +231,7 @@ async function loadUsers() {
             } 
         };
 
-        const cancelBtn = mk("button", "btn-secondary", T.cancel, {onclick:()=>{ 
-            input.value = u.nickname;
-            editDiv.style.display="none"; view.style.display="flex"; 
-        }});
+        const cancelBtn = mk("button", "btn-secondary", T.cancel, {onclick:()=>{ input.value = u.nickname; editDiv.style.display="none"; view.style.display="flex"; }});
         editDiv.append(input, saveBtn, cancelBtn);
 
         const acts = mk("div", null, null, {style:"display:flex; gap:5px; flex-shrink:0;"});
@@ -265,25 +248,31 @@ async function loadUsers() {
     });
 }
 
-// [修復] 流量分析：確保列表不會一直 Loading
+// [FIX] 流量分析：移除 d.success 檢查，並確保圖表渲染
 async function loadStats() {
     const ul = $("stats-list-ui");
     const d = await req("/api/admin/stats");
     
-    if(d?.success) {
+    // API 回傳直接是物件，沒有 success 欄位，所以改為檢查是否有 hourlyCounts
+    if(d && d.hourlyCounts) {
         if($("stats-today-count")) $("stats-today-count").textContent = d.todayCount;
         renderChart(d.hourlyCounts, d.serverHour);
         if(ul) {
              ul.innerHTML = d.history.map(h => `<li><span>${new Date(h.time).toLocaleTimeString('zh-TW',{hour12:false})} - ${h.num} <small>(${h.operator})</small></span></li>`).join("") || `<li>[Empty]</li>`;
         }
     } else {
-        if(ul && ul.textContent === "Loading...") ul.innerHTML = "<li>(No Data or API Error)</li>";
+        // 如果失敗，清空 Loading
+        if(ul && ul.textContent.includes("Load")) ul.innerHTML = "<li>[No Data]</li>";
     }
 }
 
 function renderChart(counts, curHr) {
-    const c = $("hourly-chart"); if(!c || !counts) return; c.innerHTML=""; const max = Math.max(...counts, 1);
-    counts.forEach((val, i) => {
+    const c = $("hourly-chart"); if(!c) return; c.innerHTML=""; 
+    // 安全處理：確保 counts 存在
+    const safeCounts = counts || new Array(24).fill(0);
+    const max = Math.max(...safeCounts, 1);
+    
+    safeCounts.forEach((val, i) => {
         const col = mk("div", `chart-col ${i===curHr?'current':''}`, null, {onclick:()=>openStatModal(i, val)});
         col.innerHTML = `<div class="chart-val">${val||''}</div><div class="chart-bar" style="height:${Math.max(val/max*100, 2)}%; background:${val===0?'#e5e7eb':''}"></div><div class="chart-label">${String(i).padStart(2,'0')}</div>`;
         c.appendChild(col);
