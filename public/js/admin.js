@@ -1,5 +1,5 @@
 /* ==========================================
- * 後台邏輯 (admin.js) - v41.0 (Line List Edit)
+ * 後台邏輯 (admin.js) - v42.0 (Stable)
  * ========================================== */
 const $ = i => document.getElementById(i);
 const $$ = s => document.querySelectorAll(s);
@@ -164,16 +164,13 @@ socket.on("updateFeaturedContents", list => {
         const view = mk("div", null, null, {style:"display:flex; justify-content:space-between; width:100%; align-items:center;"});
         const info = mk("div", null, null, {style:"display:flex; flex-direction:column; width:100%;"});
         info.append(mk("span", null, item.linkText, {style:"font-weight:600"}), mk("small", null, item.linkUrl, {style:"color:#666;"}));
-        
         const editDiv = mk("div", null, null, {style:"display:none; width:100%; flex-direction:column; gap:5px;"});
         const i1 = mk("input", null, null, {value:item.linkText, placeholder:"Name"}), i2 = mk("input", null, null, {value:item.linkUrl, placeholder:"URL"});
         const save = mk("button", "btn-secondary success", T.save, {onclick: async()=>{ if(await req("/api/featured/edit",{oldLinkText:item.linkText,oldLinkUrl:item.linkUrl,newLinkText:i1.value,newLinkUrl:i2.value})) toast(T.saved,"success"); }});
-        
         const acts = mk("div", null, null, {style:"display:flex; gap:5px; flex-shrink:0;"});
         acts.append(mk("button", "btn-secondary", T.edit, {onclick:()=>{view.style.display="none"; editDiv.style.display="flex";}}));
         const del = mk("button", "delete-item-btn", T.del); confirmBtn(del, T.del, ()=>req("/api/featured/remove", item));
         acts.append(del);
-
         editDiv.append(i1, i2, mk("div", null, null, {style:"display:flex; gap:5px; justify-content:flex-end;"}));
         editDiv.lastChild.append(save, mk("button", "btn-secondary", T.cancel, {onclick:()=>{editDiv.style.display="none"; view.style.display="flex";}}));
         view.append(info, acts); li.append(view, editDiv); ul.appendChild(li);
@@ -204,14 +201,12 @@ async function loadUsers() {
         const view = mk("div", null, null, {style:"display:flex; justify-content:space-between; width:100%; align-items:center;"});
         const info = mk("div", null, null, {style:"display:flex; flex-direction:column;"});
         info.append(mk("span", null, `${u.role==='super'?'👑':'👤'} ${u.nickname}`, {style:"font-weight:600"}), mk("small", null, u.username, {style:"color:#666;"}));
-        
         const editDiv = mk("div", null, null, {style:"display:none; width:100%; gap:5px; align-items:center;"});
         const input = mk("input", null, null, {value:u.nickname, type:"text"});
         const saveBtn = mk("button", "btn-secondary success", T.save);
         saveBtn.onclick = async () => { if(input.value === u.nickname) { editDiv.style.display="none"; view.style.display="flex"; return; } if(await req("/api/admin/set-nickname", {targetUsername:u.username, nickname:input.value})) { toast(T.saved, "success"); loadUsers(); } };
         const cancelBtn = mk("button", "btn-secondary", T.cancel, {onclick:()=>{ input.value = u.nickname; editDiv.style.display="none"; view.style.display="flex"; }});
         editDiv.append(input, saveBtn, cancelBtn);
-
         const acts = mk("div", null, null, {style:"display:flex; gap:5px; flex-shrink:0;"});
         const editBtn = mk("button", "btn-secondary", T.edit, {onclick:()=>{ view.style.display="none"; editDiv.style.display="flex"; }});
         acts.appendChild(editBtn);
@@ -223,7 +218,6 @@ async function loadUsers() {
     });
 }
 
-// LINE Settings List Logic
 const lineSettingsConfig = {
     approach: { label: "快到了提醒", hint: "{current} {target} {diff}" },
     arrival:  { label: "正式到號提醒", hint: "{current} {target}" },
@@ -312,6 +306,16 @@ $("setIssuedNumber")?.addEventListener("click", async()=>{ const n=$("manualIssu
 $("add-passed-btn")?.addEventListener("click", async()=>{ const n=$("new-passed-number").value; if(n>0 && await req("/api/passed/add",{number:n})) $("new-passed-number").value=""; });
 $("add-featured-btn")?.addEventListener("click", async()=>{ const t=$("new-link-text").value, u=$("new-link-url").value; if(t&&u && await req("/api/featured/add",{linkText:t, linkUrl:u})) { $("new-link-text").value=""; $("new-link-url").value=""; } });
 $("btn-broadcast")?.addEventListener("click", async()=>{ const m=$("broadcast-msg").value; if(m && await req("/api/admin/broadcast",{message:m})) { toast("📢 Sent","success"); $("broadcast-msg").value=""; } });
+
+// Quick Actions (+1, +5, C)
+$("quick-add-1")?.addEventListener("click", async()=>{ await req("/api/control/call", {direction:"next"}); }); 
+$("quick-add-5")?.addEventListener("click", async()=>{ 
+    // 簡單實作：連續呼叫5次，或後端實作 batch。這裡為了安全起見，建議僅作為數字填入輔助，或需後端支援。
+    // 暫時改為：填入目前號碼+5 到輸入框
+    const curr = parseInt($("number").textContent)||0;
+    $("manualNumber").value = curr + 5;
+});
+$("quick-clear")?.addEventListener("click", ()=>{ $("manualNumber").value=""; });
 
 confirmBtn($("resetNumber"), "↺ 重置叫號", ()=>req("/api/control/set-call",{number:0}));
 confirmBtn($("resetIssued"), "↺ 重置發號", ()=>req("/api/control/set-issue",{number:0}));
