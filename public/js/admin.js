@@ -1,5 +1,5 @@
 /* ==========================================
- * 後台邏輯 (admin.js) - v38.1 (Fix No-Change Save)
+ * 後台邏輯 (admin.js) - v38.2 (Fix Loading Stuck)
  * ========================================== */
 const $ = i => document.getElementById(i);
 const $$ = s => document.querySelectorAll(s);
@@ -136,6 +136,12 @@ async function showPanel() {
         try { await loadUsers(); } catch(e){ console.error(e); }
         try { loadLineSettings(); } catch(e){ console.error(e); }
     }
+    
+    // [修復] 在線管理初始化 (解決卡在 Loading 的問題)
+    const onlineUl = $("online-users-list");
+    if(onlineUl && onlineUl.textContent === "Loading...") {
+        onlineUl.innerHTML = `<li>👤 ${username} (You)</li>`;
+    }
 }
 
 $("btn-logout")?.addEventListener("click", logout);
@@ -196,9 +202,15 @@ socket.on("updateFeaturedContents", list => {
     });
 });
 
+// [修復] 在線管理：如果 socket 有回傳才更新，否則保持預設
 socket.on("updateOnlineAdmins", list => {
-    const ul = $("online-users-list"); if(!ul) return; ul.innerHTML = "";
-    if(!list || !list.length) { ul.innerHTML = `<li>(Offline)</li>`; return; }
+    const ul = $("online-users-list"); if(!ul) return;
+    if(!list || !list.length) { 
+        // 保持顯示自己，避免空白
+        ul.innerHTML = `<li>👤 ${username} (You)</li>`; 
+        return; 
+    }
+    ul.innerHTML = "";
     list.sort((a,b)=>(a.role==='super'?-1:1)).forEach(u => {
         ul.appendChild(mk("li", null, `${u.role==='super'?'👑':'👤'} ${u.nickname} ${u.username===uniqueUser?'(You)':''}`));
     });
@@ -210,7 +222,7 @@ function renderLogs(logs, init) {
     logs.forEach(msg => { const li=mk("li", null, msg); init ? ul.appendChild(li) : ul.insertBefore(li, ul.firstChild); });
 }
 
-// [修正重點] 帳號管理邏輯：加入 Dirty Checking (資料未更動檢查)
+// 帳號管理
 async function loadUsers() {
     const ul = $("user-list-ui"); if(!ul) return;
     const d = await req("/api/admin/users");
@@ -218,38 +230,27 @@ async function loadUsers() {
     d.users.forEach(u => {
         const li = mk("li");
         
-        // 1. 顯示模式
         const view = mk("div", null, null, {style:"display:flex; justify-content:space-between; width:100%; align-items:center;"});
         const info = mk("div", null, null, {style:"display:flex; flex-direction:column;"});
         info.append(mk("span", null, `${u.role==='super'?'👑':'👤'} ${u.nickname}`, {style:"font-weight:600"}), mk("small", null, u.username, {style:"color:#666;"}));
         
-        // 2. 編輯模式
         const editDiv = mk("div", null, null, {style:"display:none; width:100%; gap:5px; align-items:center;"});
         const input = mk("input", null, null, {value:u.nickname, type:"text"});
         const saveBtn = mk("button", "btn-secondary success", T.save);
         
-        // 儲存邏輯
         saveBtn.onclick = async () => { 
-            // 檢查：如果內容沒變，直接關閉，不呼叫 API
-            if(input.value === u.nickname) {
-                editDiv.style.display="none"; 
-                view.style.display="flex"; 
-                return;
-            }
+            if(input.value === u.nickname) { editDiv.style.display="none"; view.style.display="flex"; return; }
             if(await req("/api/admin/set-nickname", {targetUsername:u.username, nickname:input.value})) { 
-                toast(T.saved, "success"); 
-                loadUsers(); 
+                toast(T.saved, "success"); loadUsers(); 
             } 
         };
 
         const cancelBtn = mk("button", "btn-secondary", T.cancel, {onclick:()=>{ 
-            input.value = u.nickname; // 取消時還原數值
-            editDiv.style.display="none"; 
-            view.style.display="flex"; 
+            input.value = u.nickname;
+            editDiv.style.display="none"; view.style.display="flex"; 
         }});
         editDiv.append(input, saveBtn, cancelBtn);
 
-        // 3. 按鈕區
         const acts = mk("div", null, null, {style:"display:flex; gap:5px; flex-shrink:0;"});
         const editBtn = mk("button", "btn-secondary", T.edit, {onclick:()=>{ view.style.display="none"; editDiv.style.display="flex"; }});
         acts.appendChild(editBtn);
@@ -264,13 +265,19 @@ async function loadUsers() {
     });
 }
 
+// [修復] 流量分析：確保列表不會一直 Loading
 async function loadStats() {
+    const ul = $("stats-list-ui");
     const d = await req("/api/admin/stats");
+    
     if(d?.success) {
         if($("stats-today-count")) $("stats-today-count").textContent = d.todayCount;
         renderChart(d.hourlyCounts, d.serverHour);
-        const ul = $("stats-list-ui");
-        if(ul) ul.innerHTML = d.history.map(h => `<li><span>${new Date(h.time).toLocaleTimeString('zh-TW',{hour12:false})} - ${h.num} <small>(${h.operator})</small></span></li>`).join("") || `<li>[Empty]</li>`;
+        if(ul) {
+             ul.innerHTML = d.history.map(h => `<li><span>${new Date(h.time).toLocaleTimeString('zh-TW',{hour12:false})} - ${h.num} <small>(${h.operator})</small></span></li>`).join("") || `<li>[Empty]</li>`;
+        }
+    } else {
+        if(ul && ul.textContent === "Loading...") ul.innerHTML = "<li>(No Data or API Error)</li>";
     }
 }
 
@@ -310,7 +317,6 @@ $("sound-toggle")?.addEventListener("change", e => req("/set-sound-enabled", {en
 $("public-toggle")?.addEventListener("change", e => req("/set-public-status", {isPublic:e.target.checked}));
 $$('input[name="systemMode"]').forEach(r => r.addEventListener("change", ()=>confirm("Switch Mode?")?req("/set-system-mode", {mode:r.value}):(r.checked=!r.checked)));
 
-// 語言切換事件
 $("admin-lang-selector")?.addEventListener("change", e => { 
     curLang=e.target.value; localStorage.setItem('callsys_lang', curLang);
     updateLangUI();
