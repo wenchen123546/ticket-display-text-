@@ -1,10 +1,6 @@
-{
-type: uploaded file
-fileName: main.js
-fullContent:
 /*
  * ==========================================
- * 前端邏輯 (main.js) - v31.0 (Sound Logic Fix)
+ * 前端邏輯 (main.js) - v31.1 (Syntax Fix)
  * ==========================================
  */
 
@@ -377,7 +373,7 @@ if (DOM.copyLinkPrompt) DOM.copyLinkPrompt.addEventListener("click", () => {
     }); 
 });
 
-// [修改] 音效按鈕點擊 - 修復邏輯錯誤，不再顯示錯誤的 Feedback
+// 音效按鈕
 if (DOM.soundPrompt) DOM.soundPrompt.addEventListener("click", () => {
     handleUserInteraction(() => { 
         if (!audioPermissionGranted) {
@@ -386,7 +382,6 @@ if (DOM.soundPrompt) DOM.soundPrompt.addEventListener("click", () => {
             updateMuteUI(!isLocallyMuted); 
         }
     });
-    // 注意：這裡移除了 showButtonFeedback，避免強制顯示 "開啟" 導致誤解
 });
 
 document.addEventListener("DOMContentLoaded", () => { 
@@ -399,4 +394,3 @@ document.addEventListener("DOMContentLoaded", () => {
         if (qrEl) new QRCode(qrEl, { text: window.location.href, width: 120, height: 120 }); 
     } catch (e) {}
 });
-}
