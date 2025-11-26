@@ -1,5 +1,5 @@
 /* ==========================================
- * 後台樣式 (admin.css) - v20.2 Fix Layout
+ * 後台樣式 (admin.css) - v20.3 Fixed
  * ========================================== */
 :root {
     --bg-body: #f3f4f6; --bg-surface: #ffffff; --bg-sidebar: #ffffff;
@@ -49,7 +49,9 @@ input, select, textarea { font-size: 16px !important; }
 .input-group { display: flex; gap: 8px; width: 100%; } .input-group.vertical { flex-direction: column; }
 input { flex: 1; padding: 10px; border: 1px solid var(--border-color); border-radius: 6px; background: #f9fafb; min-width: 0; }
 .list-editor ul { background: #f9fafb; border: 1px solid #f3f4f6; border-radius: var(--radius-md); max-height: 300px; overflow-y: auto; margin-bottom: 12px; padding: 0; }
-li { padding: 10px; border-bottom: 1px solid #f3f4f6; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; } /* Added flex-wrap */
+.list-editor li { padding: 10px; border-bottom: 1px solid #f3f4f6; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; }
+/* Log list shouldn't be flex-wrapped strangely */
+.admin-log-container ul li { display: block; font-size: 0.9rem; color: #555; }
 
 /* Charts */
 .chart-container { height: 180px; display: flex; align-items: flex-end; gap: 4px; overflow-x: auto; padding-top: 20px; }
@@ -69,9 +71,9 @@ li { padding: 10px; border-bottom: 1px solid #f3f4f6; display: flex; flex-wrap: 
 
 /* Responsive */
 @media (max-width: 768px) {
-    .sidebar { width: 100%; height: var(--mobile-nav-h); top: auto; bottom: 0; flex-direction: row; border-top: 1px solid var(--border-color); }
-    .sidebar-header, .sidebar-footer { display: none; } .sidebar-nav { flex-direction: row; width: 100%; }
-    .nav-btn { flex-direction: column; justify-content: center; flex: 1; font-size: 0.7rem; border-radius: 0; text-align: center; }
+    .sidebar { width: 100%; height: var(--mobile-nav-h); top: auto; bottom: 0; flex-direction: row; border-top: 1px solid var(--border-color); z-index: 500; }
+    .sidebar-header, .sidebar-footer { display: none; } .sidebar-nav { flex-direction: row; width: 100%; padding:0; }
+    .nav-btn { flex-direction: column; justify-content: center; flex: 1; font-size: 0.7rem; border-radius: 0; text-align: center; height: 100%; padding: 5px; }
     .content-area { margin: 0; padding: 15px 15px 80px; width: 100%; }
     .dashboard-header { grid-template-columns: 1fr 1fr; } .dashboard-item:last-child { grid-column: 1 / -1; }
     .card-container { grid-template-columns: 1fr; } .big-action-row, .input-group { flex-direction: column; }
