@@ -1,747 +1,285 @@
-/*
- * ==========================================
- * 後台邏輯 (admin.js) - v33.0 (Login Fixed)
- * ==========================================
- */
+/* ==========================================
+ * 後台邏輯 (admin.js) - v33.0 Compact
+ * ========================================== */
+const $ = i => document.getElementById(i);
+const $$ = s => document.querySelectorAll(s);
+const debounce = (f, d) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => f(...a), d); }; };
+const mk = (t, c, txt, ev={}) => { const e = document.createElement(t); if(c) e.className=c; if(txt) e.textContent=txt; Object.entries(ev).forEach(([k,v])=>e[k]=v); return e; };
 
-function debounce(func, delay) {
-    let timer;
-    return function(...args) {
-        clearTimeout(timer);
-        timer = setTimeout(() => func.apply(this, args), delay);
-    };
-}
-
-const adminI18n = {
-    "zh-TW": {
-        "status_disconnected": "連線中斷...",
-        "status_connected": "✅ 已連線",
-        "admin_label_current": "目前叫號",
-        "admin_label_issued": "已發號至",
-        "admin_label_waiting": "等待組數",
-        "card_title_calling": "叫號控制台",
-        "card_title_ticketing": "發號機管理",
-        "card_title_broadcast": "前台音效",
-        "card_title_editor": "過號名單",
-        "card_title_logs": "系統日誌",
-        "card_title_system": "系統開關",
-        "card_title_stats": "流量分析",
-        "card_title_links": "前台連結管理",
-        "card_title_online": "在線管理員",
-        "card_title_line": "LINE 自動回覆",
-        "btn_prev": "上一號",
-        "btn_next": "下一號",
-        "btn_pass": "過號", 
-        "btn_issue_prev": "收回",
-        "btn_issue_next": "發號",
-        "btn_set": "設定",
-        "btn_reset_call": "↺ 重置叫號歸零",
-        "btn_broadcast": "播放",
-        "placeholder_broadcast": "輸入文字廣播...",
-        "hint_manual_set": "變更螢幕數字",
-        "label_public_toggle": "🌐 開放前台",
-        "label_sound_toggle": "啟用提示音",
-        "btn_reset_all": "💥 全域重置",
-        "login_verifying": "驗證中...",
-        "login_fail": "登入失敗",
-        "login_error_server": "伺服器錯誤",
-        "toast_permission_denied": "❌ 權限不足",
-        "toast_session_expired": "Session 過期",
-        "toast_mode_switched": "✅ 模式已切換",
-        "confirm_switch_mode": "切換為「%s」模式？",
-        "mode_ticketing": "線上取號",
-        "mode_input": "手動輸入",
-        "toast_num_set": "✅ 號碼已設定",
-        "toast_issued_updated": "✅ 發號已更新",
-        "toast_reset_zero": "✅ 重置為 0",
-        "toast_passed_cleared": "✅ 過號已清空",
-        "toast_featured_cleared": "✅ 連結已清空",
-        "toast_all_reset": "💥 系統已重置",
-        "toast_log_clearing": "🧼 清除日誌...",
-        "alert_positive_int": "請輸入正整數",
-        "alert_link_required": "內容必填",
-        "alert_url_invalid": "網址無效",
-        "alert_broadcast_empty": "內容為空",
-        "toast_broadcast_sent": "📢 已發送",
-        "label_confirm_close": "⚠️ 點此確認",
-        "toast_stats_cleared": "🗑️ 統計已清空",
-        "toast_report_downloaded": "✅ 下載成功",
-        "toast_download_fail": "❌ 下載失敗: ",
-        "toast_line_updated": "✅ 設定已更新",
-        "toast_line_reset": "↺ 已恢復預設",
-        "toast_pwd_saved": "✅ 密碼已設定",
-        "alert_pwd_empty": "密碼為空",
-        "alert_account_required": "帳密必填",
-        "alert_nick_required": "請輸入資料",
-        "list_loading": "載入中...",
-        "list_no_data": "尚無數據",
-        "list_load_fail": "載入失敗",
-        "list_no_online": "(無人在線)",
-        "log_no_data": "[無日誌]",
-        "btn_clear_log": "清除日誌",
-        "btn_reset_passed": "清空列表",
-        "btn_reset_links": "清空連結",
-        "toast_passed_marked": "⏩ 已標記過號",
-        "toast_recalled": "↩️ 已重呼",
-        "toast_link_updated": "✅ 連結已更新",
-        "btn_save_edit": "✓",
-        "nav_live": "現場控台",
-        "nav_stats": "數據報表",
-        "nav_settings": "系統設定",
-        "nav_line": "LINE 設定"
-    },
-    "en": {
-        "status_disconnected": "Disconnected...",
-        "status_connected": "✅ Connected",
-        "admin_label_current": "Current",
-        "admin_label_issued": "Issued",
-        "admin_label_waiting": "Waiting",
-        "card_title_calling": "Control",
-        "card_title_ticketing": "Ticketing",
-        "card_title_broadcast": "Sound",
-        "card_title_editor": "Passed",
-        "card_title_logs": "Logs",
-        "card_title_system": "System",
-        "card_title_stats": "Stats",
-        "card_title_links": "Links",
-        "card_title_online": "Admins",
-        "card_title_line": "LINE Bot",
-        "btn_prev": "Prev",
-        "btn_next": "Next",
-        "btn_pass": "Skip",
-        "btn_issue_prev": "Recall",
-        "btn_issue_next": "Issue",
-        "btn_set": "Set",
-        "btn_reset_call": "↺ Reset Call",
-        "btn_broadcast": "Play",
-        "placeholder_broadcast": "Type text...",
-        "hint_manual_set": "Update display #",
-        "label_public_toggle": "🌐 Public Access",
-        "label_sound_toggle": "Enable Sound",
-        "btn_reset_all": "💥 Global Reset",
-        "login_verifying": "Verifying...",
-        "login_fail": "Failed",
-        "login_error_server": "Error",
-        "toast_permission_denied": "❌ Denied",
-        "toast_session_expired": "Expired",
-        "toast_mode_switched": "✅ Mode Set",
-        "confirm_switch_mode": "Switch mode?",
-        "mode_ticketing": "Ticket",
-        "mode_input": "Input",
-        "toast_num_set": "✅ Set",
-        "toast_issued_updated": "✅ Updated",
-        "toast_reset_zero": "✅ Reset",
-        "toast_passed_cleared": "✅ Cleared",
-        "toast_featured_cleared": "✅ Cleared",
-        "toast_all_reset": "💥 Reset Done",
-        "toast_log_clearing": "🧼 Clearing...",
-        "alert_positive_int": "Integers only",
-        "alert_link_required": "Required",
-        "alert_url_invalid": "Invalid URL",
-        "alert_broadcast_empty": "Empty",
-        "toast_broadcast_sent": "📢 Sent",
-        "label_confirm_close": "⚠️ Confirm",
-        "toast_stats_cleared": "🗑️ Cleared",
-        "toast_report_downloaded": "✅ Downloaded",
-        "toast_download_fail": "❌ Failed: ",
-        "toast_line_updated": "✅ Updated",
-        "toast_line_reset": "↺ Reset",
-        "toast_pwd_saved": "✅ Saved",
-        "alert_pwd_empty": "Empty Pwd",
-        "alert_account_required": "Required",
-        "alert_nick_required": "Required",
-        "list_loading": "Loading...",
-        "list_no_data": "No Data",
-        "list_load_fail": "Failed",
-        "list_no_online": "(Offline)",
-        "log_no_data": "[Empty]",
-        "btn_clear_log": "Clear Logs",
-        "btn_reset_passed": "Clear",
-        "btn_reset_links": "Clear",
-        "toast_passed_marked": "⏩ Skipped",
-        "toast_recalled": "↩️ Recalled",
-        "toast_link_updated": "✅ Updated",
-        "btn_save_edit": "✓",
-        "nav_live": "Live",
-        "nav_stats": "Stats",
-        "nav_settings": "Settings",
-        "nav_line": "LINE"
-    }
+// --- I18n Data (Compressed) ---
+const i18n = {
+    "zh-TW": { status_conn:"✅ 已連線", status_dis:"連線中斷...", wait:"等待組數", login_ing:"驗證中...", login_fail:"登入失敗", denied:"❌ 權限不足", expired:"Session 過期", saved:"✅ 已儲存", cleared:"✅ 已清空", reset:"✅ 已重置", confirm:"⚠️ 確認", empty:"內容為空", pass_mark:"⏩ 已過號", recall:"↩️ 重呼" },
+    "en": { status_conn:"✅ Connected", status_dis:"Disconnected...", wait:"Waiting", login_ing:"Verifying...", login_fail:"Failed", denied:"❌ Denied", expired:"Expired", saved:"✅ Saved", cleared:"✅ Cleared", reset:"✅ Reset", confirm:"⚠️ Confirm", empty:"Empty", pass_mark:"⏩ Skipped", recall:"↩️ Recall" }
 };
+let curLang = localStorage.getItem('callsys_lang')||'zh-TW', T = i18n[curLang];
 
-let currentAdminLang = localStorage.getItem('callsys_lang') || 'zh-TW';
-let at = adminI18n[currentAdminLang];
-
-function applyAdminI18n() {
-    document.querySelectorAll('[data-i18n]').forEach(el => {
-        const key = el.getAttribute('data-i18n');
-        if(at[key]) { el.textContent = at[key]; }
-    });
-    const navTextMap = { 'section-live': 'nav_live', 'section-stats': 'nav_stats', 'section-settings': 'nav_settings', 'section-line': 'nav_line' };
-    document.querySelectorAll('.nav-btn').forEach(btn => {
-        const target = btn.getAttribute('data-target');
-        if(navTextMap[target] && at[navTextMap[target]]) {
-            const txtSpan = btn.querySelector('.nav-text');
-            if(txtSpan) txtSpan.textContent = at[navTextMap[target]];
-        }
-    });
-    const broadcastInput = document.getElementById("broadcast-msg");
-    if(broadcastInput) broadcastInput.placeholder = at["placeholder_broadcast"];
-}
-
-const loginContainer = document.getElementById("login-container");
-const adminPanel = document.getElementById("admin-panel");
-const usernameInput = document.getElementById("username-input");
-const passwordInput = document.getElementById("password-input");
-const loginButton = document.getElementById("login-button");
-const loginError = document.getElementById("login-error");
-const sidebarUserInfo = document.getElementById("sidebar-user-info");
-
-let token = "";
-let userRole = "normal";
-let username = "";
-let uniqueUsername = "";
-let toastTimer = null;
-let publicToggleConfirmTimer = null;
-let editingHour = null;
-
+// --- State & Socket ---
+let token = "", userRole = "normal", username = "", uniqueUser = "", toastTimer, editHr = null;
 const socket = io({ autoConnect: false, auth: { token: "" } });
 
-function addEnterTrigger(inputId, buttonId) {
-    const input = document.getElementById(inputId);
-    const btn = document.getElementById(buttonId);
-    if (input && btn) {
-        input.addEventListener("keyup", (event) => {
-            if (event.key === "Enter") { event.preventDefault(); btn.click(); }
-        });
-    }
+function toast(msg, type='info') {
+    const t = $("toast-notification"); t.textContent = msg; t.className = `${type} show`;
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 3000);
 }
 
-function initTabs() {
-    const navBtns = document.querySelectorAll('.nav-btn');
-    const sections = document.querySelectorAll('.section-group');
-    navBtns.forEach(btn => {
-        btn.addEventListener('click', () => {
-            const targetId = btn.getAttribute('data-target');
-            navBtns.forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            sections.forEach(sec => {
-                if(sec.id === targetId) { sec.classList.add('active'); if(targetId === 'section-stats') loadStats(); } 
-                else { sec.classList.remove('active'); }
-            });
-        });
-    });
-}
-
-function showLogin() {
-    loginContainer.style.display = "block"; adminPanel.style.display = "none";
-    document.title = "後台管理 - 登入"; socket.disconnect();
-}
-
-async function showPanel() {
-    loginContainer.style.display = "none"; adminPanel.style.display = "flex"; 
-    document.title = `後台管理 - ${username}`; if(sidebarUserInfo) sidebarUserInfo.textContent = `Hi, ${username}`;
-    const isSuper = userRole === 'super';
-    ["card-user-management", "btn-export-csv", "mode-switcher-group", "unlock-pwd-group"].forEach(id => {
-        const el = document.getElementById(id); if(el) el.style.display = isSuper ? "block" : "none";
-    });
-    const lineNavBtn = document.querySelector('button[data-target="section-line"]');
-    if (lineNavBtn) {
-        lineNavBtn.style.display = isSuper ? "flex" : "none";
-        if (!isSuper && document.getElementById('section-line').classList.contains('active')) {
-            const homeBtn = document.querySelector('button[data-target="section-live"]'); if (homeBtn) homeBtn.click();
-        }
-    }
-    await loadAdminUsers(); initTabs(); await loadStats();
-    if (isSuper) await loadLineSettings();
-    
-    // 綁定 Enter 鍵
-    addEnterTrigger("manualNumber", "setNumber"); addEnterTrigger("manualIssuedNumber", "setIssuedNumber");
-    addEnterTrigger("new-passed-number", "add-passed-btn"); addEnterTrigger("new-link-text", "add-featured-btn"); 
-    addEnterTrigger("new-link-url", "add-featured-btn"); addEnterTrigger("broadcast-msg", "btn-broadcast");
-    addEnterTrigger("line-unlock-pwd", "btn-save-unlock-pwd"); addEnterTrigger("new-user-password", "add-user-btn");
-    
-    socket.connect();
-}
-
-async function attemptLogin(loginName, loginPass) {
-    if (loginButton.disabled) return;
-    loginButton.disabled = true; const originalBtnText = loginButton.textContent;
-    loginButton.textContent = at["login_verifying"] || "驗證中..."; loginError.textContent = "";
+// --- API Wrapper ---
+async function req(url, data={}, lockBtn=null) {
+    if(lockBtn) { lockBtn.disabled=true; }
     try {
-        const res = await fetch("/login", {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ username: loginName, password: loginPass }),
-        });
-        const data = await res.json();
-        if (!res.ok) {
-            loginError.textContent = data.error || (data.message && data.message.error) || at["login_fail"];
-            showLogin(); loginButton.disabled = false; loginButton.textContent = originalBtnText;
-        } else {
-            token = data.token; userRole = data.role; username = data.nickname; uniqueUsername = data.username; socket.auth.token = token;
-            await showPanel(); loginButton.disabled = false; loginButton.textContent = originalBtnText;
+        const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...data, token }) });
+        const res = await r.json();
+        if(!r.ok) {
+            if(r.status===403) toast(res.error?.includes("權限")?T.denied:T.expired, "error");
+            else toast(`❌ ${res.error||'Error'}`, "error");
+            if(r.status===403 && !res.error?.includes("權限")) showLogin();
+            return null;
         }
-    } catch (err) {
-        loginError.textContent = at["login_error_server"]; loginButton.disabled = false; loginButton.textContent = originalBtnText; return false;
-    }
+        return res;
+    } catch(e) { toast(`❌ ${e.message}`, "error"); return null; }
+    finally { if(lockBtn) setTimeout(()=>lockBtn.disabled=false, 300); }
 }
 
-document.addEventListener("DOMContentLoaded", () => { 
-    const adminLangSelector = document.getElementById('admin-lang-selector');
-    if(adminLangSelector) {
-        adminLangSelector.value = currentAdminLang;
-        adminLangSelector.addEventListener('change', (e) => {
-            currentAdminLang = e.target.value; localStorage.setItem('callsys_lang', currentAdminLang);
-            at = adminI18n[currentAdminLang]; applyAdminI18n(); loadStats();
-        });
-    }
-    applyAdminI18n(); showLogin(); 
-});
-
-loginButton.addEventListener("click", () => { attemptLogin(usernameInput.value, passwordInput.value); });
-usernameInput.addEventListener("keyup", debounce((event) => { if (event.key === "Enter") { passwordInput.focus(); } }, 300));
-passwordInput.addEventListener("keyup", (event) => { if (event.key === "Enter") { attemptLogin(usernameInput.value, passwordInput.value); } });
-
-function showToast(message, type = 'info') {
-    const toast = document.getElementById("toast-notification"); if (!toast) return;
-    toast.textContent = message; toast.className = type; toast.classList.add("show");
-    if (toastTimer) clearTimeout(toastTimer); toastTimer = setTimeout(() => { toast.classList.remove("show"); }, 3000);
-}
-
-socket.on("connect", () => { document.getElementById("status-bar").classList.remove("visible"); showToast(`${at["status_connected"]} (${username})`, "success"); });
-socket.on("disconnect", () => { document.getElementById("status-bar").classList.add("visible"); showToast(at["status_disconnected"], "error"); });
-socket.on("updateQueue", (data) => {
-    document.getElementById("number").textContent = data.current; document.getElementById("issued-number").textContent = data.issued;
-    document.getElementById("waiting-count").textContent = Math.max(0, data.issued - data.current); loadStats();
-});
-socket.on("update", (num) => { document.getElementById("number").textContent = num; loadStats(); });
-socket.on("updatePassed", (numbers) => renderPassedListUI(numbers));
-socket.on("updateFeaturedContents", (contents) => renderFeaturedListUI(contents));
-socket.on("initAdminLogs", (logs) => renderLogs(logs, true));
-socket.on("newAdminLog", (log) => renderLogs([log], false));
-socket.on("updateOnlineAdmins", (admins) => renderOnlineAdmins(admins));
-socket.on("updateSoundSetting", (enabled) => document.getElementById("sound-toggle").checked = enabled);
-socket.on("updatePublicStatus", (isPublic) => document.getElementById("public-toggle").checked = isPublic);
-socket.on("updateSystemMode", (mode) => { const radios = document.getElementsByName("systemMode"); for(let r of radios) { if(r.value === mode) r.checked = true; } });
-
-function renderLogs(logs, isInit) {
-    const ui = document.getElementById("admin-log-ui"); if(isInit) ui.replaceChildren();
-    if(!logs || logs.length === 0) { if(isInit) { const li = document.createElement("li"); li.textContent = at["log_no_data"]; ui.appendChild(li); } return; }
-    if(!isInit && ui.firstElementChild && (ui.firstElementChild.textContent.includes("載入中") || ui.firstElementChild.textContent.includes("尚無"))) ui.replaceChildren();
-    const fragment = document.createDocumentFragment();
-    logs.forEach(logMsg => { const li = document.createElement("li"); li.textContent = logMsg; fragment.appendChild(li); });
-    if(isInit) ui.appendChild(fragment); else ui.insertBefore(fragment, ui.firstChild); 
-}
-
-async function apiRequest(endpoint, body, a_returnResponse = false) {
-    try {
-        const res = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...body, token }), });
-        const responseData = await res.json();
-        if (!res.ok) {
-            if (res.status === 403) { if(responseData.error === "權限不足" || responseData.error === "Permission Denied") showToast(at["toast_permission_denied"], "error"); else { showToast(at["toast_session_expired"], "error"); showLogin(); } } 
-            else showToast(`❌ 錯誤: ${responseData.error || '未知錯誤'}`, "error");
-            return false;
-        }
-        return a_returnResponse ? responseData : true;
-    } catch (err) { showToast(`❌ 連線失敗: ${err.message}`, "error"); return false; }
-}
-
-async function handleLockedAction(btn, action) {
-    if (!btn || btn.disabled) return; btn.disabled = true; const originalText = btn.innerHTML;
-    try { await action(); } finally { setTimeout(() => { btn.disabled = false; btn.innerHTML = originalText; }, 300); }
-}
-
-function setupConfirmationButton(buttonEl, originalTextKey, confirmTextKey, actionCallback) {
-    if (!buttonEl) return; let timer = null; let isConfirming = false; let countdown = 5;
-    let confirmTxtBase;
-    if (confirmTextKey === "btn_confirm_clear") confirmTxtBase = at["zh-TW"] ? "⚠️ 確認清除" : "⚠️ Confirm Clear";
-    else if (confirmTextKey === "btn_confirm_reset") confirmTxtBase = at["zh-TW"] ? "⚠️ 確認重置" : "⚠️ Confirm Reset";
-    else confirmTxtBase = "⚠️"; 
-    const resetBtn = () => { clearInterval(timer); isConfirming = false; countdown = 5; buttonEl.textContent = at[originalTextKey] || originalTextKey; buttonEl.classList.remove("is-confirming"); };
-    buttonEl.addEventListener("click", () => {
-        if (isConfirming) { actionCallback(); resetBtn(); } else {
-            isConfirming = true; countdown = 5; buttonEl.textContent = `${confirmTxtBase} (${countdown}s)`; buttonEl.classList.add("is-confirming");
-            timer = setInterval(() => { countdown--; if (countdown > 0) buttonEl.textContent = `${confirmTxtBase} (${countdown}s)`; else resetBtn(); }, 1000);
-        }
-    });
-}
-
-function renderPassedListUI(numbers) {
-    const ui = document.getElementById("passed-list-ui"); ui.replaceChildren(); 
-    if (!Array.isArray(numbers)) return;
-    const fragment = document.createDocumentFragment();
-    numbers.forEach((number) => {
-        const li = document.createElement("li");
-        const leftDiv = document.createElement("div"); leftDiv.style.display = "flex"; leftDiv.style.gap = "10px"; leftDiv.style.alignItems = "center";
-        const numSpan = document.createElement("span"); numSpan.textContent = number; numSpan.style.fontWeight = "bold";
-        const recallBtn = document.createElement("button"); recallBtn.className = "btn-secondary"; recallBtn.style.padding = "2px 8px"; recallBtn.style.fontSize = "0.8rem";
-        recallBtn.textContent = at["zh-TW"] ? "↩️ 重呼" : "↩️ Recall";
-        recallBtn.onclick = async () => { if(confirm(`${at["zh-TW"] ? '確定要插隊重呼' : 'Confirm recall'} ${number} 號嗎？`)) { await apiRequest("/api/control/recall-passed", { number }); showToast(at["toast_recalled"], "success"); } };
-        leftDiv.appendChild(numSpan); leftDiv.appendChild(recallBtn); li.appendChild(leftDiv);
-        const deleteBtn = document.createElement("button"); deleteBtn.className = "delete-item-btn"; deleteBtn.textContent = "✕";
-        setupConfirmationButton(deleteBtn, "✕", "⚠️", async () => { deleteBtn.disabled = true; await apiRequest("/api/passed/remove", { number }); });
-        li.appendChild(deleteBtn); fragment.appendChild(li);
-    });
-    ui.appendChild(fragment);
-}
-
-// [改寫] 行內編輯精選連結
-function renderFeaturedListUI(contents) {
-    const ui = document.getElementById("featured-list-ui"); ui.replaceChildren();
-    if (!Array.isArray(contents)) return;
-    const fragment = document.createDocumentFragment();
-    
-    contents.forEach((item) => {
-        const li = document.createElement("li");
-        
-        // View Mode
-        const viewDiv = document.createElement("div");
-        viewDiv.style.display = "flex"; viewDiv.style.justifyContent = "space-between"; viewDiv.style.alignItems = "center"; viewDiv.style.width = "100%";
-        
-        const infoDiv = document.createElement("div");
-        infoDiv.style.flex = "1"; infoDiv.style.display = "flex"; infoDiv.style.flexDirection = "column";
-        
-        const span = document.createElement("span");
-        span.style.wordBreak = "break-all"; span.style.fontWeight = "600"; span.textContent = item.linkText;
-        
-        const small = document.createElement("small");
-        small.style.color = "#666"; small.style.wordBreak = "break-all"; small.textContent = item.linkUrl;
-        
-        infoDiv.appendChild(span); infoDiv.appendChild(small);
-        
-        const btnGroup = document.createElement("div");
-        btnGroup.style.display = "flex"; btnGroup.style.gap = "6px"; btnGroup.style.marginLeft = "8px"; btnGroup.style.alignItems = "center";
-
-        const editBtn = document.createElement("button");
-        editBtn.className = "btn-secondary"; editBtn.textContent = "✎"; editBtn.style.padding = "2px 8px";
-        
-        const deleteBtn = document.createElement("button");
-        deleteBtn.className = "delete-item-btn"; deleteBtn.textContent = "✕";
-        setupConfirmationButton(deleteBtn, "✕", "⚠️", async () => { deleteBtn.disabled = true; await apiRequest("/api/featured/remove", { linkText: item.linkText, linkUrl: item.linkUrl }); });
-        
-        btnGroup.appendChild(editBtn); btnGroup.appendChild(deleteBtn);
-        viewDiv.appendChild(infoDiv); viewDiv.appendChild(btnGroup);
-
-        // Edit Mode
-        const editDiv = document.createElement("div");
-        editDiv.style.display = "none"; editDiv.style.width = "100%"; editDiv.style.flexDirection = "column"; editDiv.style.gap = "8px";
-        
-        const inputGroup = document.createElement("div");
-        inputGroup.style.display = "flex"; inputGroup.style.flexDirection = "column"; inputGroup.style.gap = "4px"; inputGroup.style.width = "100%";
-        
-        const nameInput = document.createElement("input"); nameInput.type = "text"; nameInput.value = item.linkText; nameInput.placeholder = "名稱"; nameInput.style.padding = "4px";
-        const urlInput = document.createElement("input"); urlInput.type = "text"; urlInput.value = item.linkUrl; urlInput.placeholder = "URL"; urlInput.style.padding = "4px";
-        
-        inputGroup.appendChild(nameInput); inputGroup.appendChild(urlInput);
-
-        const editActions = document.createElement("div");
-        editActions.style.display = "flex"; editActions.style.gap = "8px"; editActions.style.justifyContent = "flex-end";
-        
-        const saveBtn = document.createElement("button");
-        saveBtn.className = "btn-secondary"; saveBtn.style.background = "var(--success)"; saveBtn.style.color = "white"; saveBtn.textContent = "✓"; saveBtn.style.padding = "4px 12px";
-        
-        const cancelBtn = document.createElement("button");
-        cancelBtn.className = "btn-secondary"; cancelBtn.style.background = "#e5e7eb"; cancelBtn.style.color = "#374151"; cancelBtn.textContent = "✕"; cancelBtn.style.padding = "4px 12px";
-
-        editActions.appendChild(saveBtn); editActions.appendChild(cancelBtn);
-        editDiv.appendChild(inputGroup); editDiv.appendChild(editActions);
-
-        // Events
-        editBtn.onclick = () => { viewDiv.style.display = "none"; editDiv.style.display = "flex"; nameInput.focus(); };
-        cancelBtn.onclick = () => { editDiv.style.display = "none"; viewDiv.style.display = "flex"; nameInput.value = item.linkText; urlInput.value = item.linkUrl; };
-        
-        saveBtn.onclick = async () => {
-            const txt = nameInput.value.trim(); const u = urlInput.value.trim();
-            if(!txt || !u) return showToast(at["alert_link_required"], "error");
-            saveBtn.disabled = true;
-            const success = await apiRequest("/api/featured/edit", { oldLinkText: item.linkText, oldLinkUrl: item.linkUrl, newLinkText: txt, newLinkUrl: u });
-            if(success) showToast(at["toast_link_updated"], "success");
-            else saveBtn.disabled = false;
-        };
-
-        li.appendChild(viewDiv); li.appendChild(editDiv);
-        fragment.appendChild(li);
-    });
-    ui.appendChild(fragment);
-}
-
-function renderOnlineAdmins(admins) {
-    const ui = document.getElementById("online-users-list"); if (!ui) return; ui.replaceChildren();
-    if (!admins || admins.length === 0) { const li = document.createElement("li"); li.textContent = at["list_no_online"]; ui.appendChild(li); return; }
-    admins.sort((a, b) => {
-        if (a.username === uniqueUsername) return -1; if (b.username === uniqueUsername) return 1;
-        if (a.role === 'super' && b.role !== 'super') return -1; if (a.role !== 'super' && b.role === 'super') return 1;
-        return a.nickname.localeCompare(b.nickname);
-    });
-    const fragment = document.createDocumentFragment();
-    admins.forEach(admin => {
-        const li = document.createElement("li");
-        const icon = admin.role === 'super' ? '👑' : '👤'; const iconSpan = document.createElement("span"); iconSpan.className = "role-icon"; iconSpan.textContent = icon;
-        const nameSpan = document.createElement("span"); nameSpan.className = "username"; if(admin.username === uniqueUsername) nameSpan.classList.add("is-self"); nameSpan.textContent = ` ${admin.nickname}`;
-        li.appendChild(iconSpan); li.appendChild(nameSpan); fragment.appendChild(li);
-    });
-    ui.appendChild(fragment);
-}
-
-const btnCallPrev = document.getElementById("btn-call-prev");
-const btnCallNext = document.getElementById("btn-call-next");
-const btnMarkPassed = document.getElementById("btn-mark-passed"); 
-const btnIssuePrev = document.getElementById("btn-issue-prev");
-const btnIssueNext = document.getElementById("btn-issue-next");
-
-if(btnCallPrev) btnCallPrev.onclick = () => handleLockedAction(btnCallPrev, () => apiRequest("/api/control/call", { direction: "prev" }));
-if(btnCallNext) btnCallNext.onclick = () => handleLockedAction(btnCallNext, () => apiRequest("/api/control/call", { direction: "next" }));
-if(btnMarkPassed) btnMarkPassed.onclick = () => handleLockedAction(btnMarkPassed, async () => { if(await apiRequest("/api/control/pass-current", {})) showToast(at["toast_passed_marked"], "warning"); });
-if(btnIssuePrev) btnIssuePrev.onclick = () => handleLockedAction(btnIssuePrev, () => apiRequest("/api/control/issue", { direction: "prev" }));
-if(btnIssueNext) btnIssueNext.onclick = () => handleLockedAction(btnIssueNext, () => apiRequest("/api/control/issue", { direction: "next" }));
-
-const btnQuickAdd1 = document.getElementById("quick-add-1");
-const btnQuickAdd5 = document.getElementById("quick-add-5");
-const btnQuickClear = document.getElementById("quick-clear");
-const manualInput = document.getElementById("manualNumber");
-
-if(btnQuickAdd1 && manualInput) btnQuickAdd1.onclick = () => { manualInput.value = (parseInt(document.getElementById("number").innerText) || 0) + 1; };
-if(btnQuickAdd5 && manualInput) btnQuickAdd5.onclick = () => { manualInput.value = (parseInt(document.getElementById("number").innerText) || 0) + 5; };
-if(btnQuickClear && manualInput) btnQuickClear.onclick = () => { manualInput.value = ""; };
-
-document.getElementById("setNumber").onclick = async () => {
-    const num = document.getElementById("manualNumber").value; const n = Number(num);
-    if (num === "" || n <= 0 || !Number.isInteger(n)) return showToast(at["alert_positive_int"], "error");
-    if (await apiRequest("/api/control/set-call", { number: num })) { document.getElementById("manualNumber").value = ""; showToast(at["toast_num_set"], "success"); }
-};
-
-const setIssuedBtn = document.getElementById("setIssuedNumber");
-if(setIssuedBtn) setIssuedBtn.onclick = async () => {
-    const num = document.getElementById("manualIssuedNumber").value; const n = Number(num);
-    if (num === "" || n < 0 || !Number.isInteger(n)) return showToast(at["alert_positive_int"], "error");
-    if (await apiRequest("/api/control/set-issue", { number: n })) { document.getElementById("manualIssuedNumber").value = ""; showToast(n === 0 ? at["toast_reset_zero"] : at["toast_issued_updated"], "success"); }
-};
-
-setupConfirmationButton(document.getElementById("resetNumber"), "btn_reset_call", "btn_confirm_reset", async () => { if (await apiRequest("/api/control/set-call", { number: 0 })) { document.getElementById("manualNumber").value = ""; showToast(at["toast_reset_zero"], "success"); } });
-setupConfirmationButton(document.getElementById("resetIssued"), "btn_reset_call", "btn_confirm_reset", async () => { if (await apiRequest("/api/control/set-issue", { number: 0 })) { document.getElementById("manualIssuedNumber").value = ""; showToast(at["toast_reset_zero"], "success"); } });
-setupConfirmationButton(document.getElementById("resetPassed"), "btn_reset_passed", "btn_confirm_reset", async () => { if (await apiRequest("/api/passed/clear", {})) showToast(at["toast_passed_cleared"], "success"); });
-setupConfirmationButton(document.getElementById("resetFeaturedContents"), "btn_reset_links", "btn_confirm_reset", async () => { if (await apiRequest("/api/featured/clear", {})) showToast(at["toast_featured_cleared"], "success"); });
-setupConfirmationButton(document.getElementById("resetAll"), "btn_reset_all", "btn_confirm_reset", async () => { if (await apiRequest("/reset", {})) { document.getElementById("manualNumber").value = ""; showToast(at["toast_all_reset"], "success"); await loadStats(); } });
-
-const btnClearLogs = document.getElementById("btn-clear-logs");
-if (btnClearLogs) setupConfirmationButton(btnClearLogs, "btn_clear_log", "btn_confirm_clear", async () => { if (await apiRequest("/api/logs/clear", {})) showToast(at["toast_log_clearing"] || "Logs cleared", "success"); });
-
-const newPassedNumberInput = document.getElementById("new-passed-number");
-const addPassedBtn = document.getElementById("add-passed-btn");
-if(addPassedBtn) addPassedBtn.onclick = async () => {
-    const num = Number(newPassedNumberInput.value);
-    if (num <= 0 || !Number.isInteger(num)) return showToast(at["alert_positive_int"], "error");
-    addPassedBtn.disabled = true;
-    if (await apiRequest("/api/passed/add", { number: num })) newPassedNumberInput.value = "";
-    addPassedBtn.disabled = false;
-};
-
-const newLinkTextInput = document.getElementById("new-link-text");
-const newLinkUrlInput = document.getElementById("new-link-url");
-const addFeaturedBtn = document.getElementById("add-featured-btn");
-if(addFeaturedBtn) addFeaturedBtn.onclick = async () => {
-    const text = newLinkTextInput.value.trim(); const url = newLinkUrlInput.value.trim();
-    if (!text || !url) return showToast(at["alert_link_required"], "error");
-    if (!url.startsWith('http://') && !url.startsWith('https://')) return showToast(at["alert_url_invalid"], "error");
-    addFeaturedBtn.disabled = true;
-    if (await apiRequest("/api/featured/add", { linkText: text, linkUrl: url })) { newLinkTextInput.value = ""; newLinkUrlInput.value = ""; }
-    await apiRequest("/api/featured/get", {}, true); addFeaturedBtn.disabled = false;
-};
-
-const broadcastBtn = document.getElementById("btn-broadcast");
-const broadcastInput = document.getElementById("broadcast-msg");
-if (broadcastBtn) broadcastBtn.onclick = async () => {
-    const msg = broadcastInput.value.trim();
-    if (!msg) return showToast(at["alert_broadcast_empty"], "error");
-    broadcastBtn.disabled = true;
-    if (await apiRequest("/api/admin/broadcast", { message: msg })) { showToast(at["toast_broadcast_sent"], "success"); broadcastInput.value = ""; }
-    broadcastBtn.disabled = false;
-};
-
-const soundToggle = document.getElementById("sound-toggle");
-const publicToggle = document.getElementById("public-toggle");
-const publicToggleLabel = publicToggle ? publicToggle.closest('.system-toggle-group').querySelector('label[for="public-toggle"]') : null; 
-
-if(soundToggle) soundToggle.addEventListener("change", () => { apiRequest("/set-sound-enabled", { enabled: soundToggle.checked }); });
-if(publicToggle && publicToggleLabel) publicToggle.addEventListener("change", () => {
-    const isPublic = publicToggle.checked;
-    const originalText = publicToggleLabel.getAttribute('data-i18n') ? at[publicToggleLabel.getAttribute('data-i18n')] : '🌐 對外開放前台頁面';
-    if (isPublic) {
-        if (publicToggleConfirmTimer) { clearInterval(publicToggleConfirmTimer.interval); clearTimeout(publicToggleConfirmTimer.timer); publicToggleConfirmTimer = null; publicToggleLabel.textContent = originalText; publicToggleLabel.classList.remove("is-confirming-label"); }
-        apiRequest("/set-public-status", { isPublic: true });
-    } else {
-        if (publicToggleConfirmTimer) { clearInterval(publicToggleConfirmTimer.interval); clearTimeout(publicToggleConfirmTimer.timer); publicToggleConfirmTimer = null; publicToggleLabel.classList.remove("is-confirming-label"); apiRequest("/set-public-status", { isPublic: false }); } 
+// --- UI Helpers ---
+function confirmBtn(id, origTxt, action) {
+    const b = $(id); if(!b) return;
+    let t, c=5;
+    b.onclick = () => {
+        if(b.classList.contains("is-confirming")) { action(); reset(); } 
         else {
-            publicToggle.checked = true; let countdown = 5; const closeTxt = at["label_confirm_close"];
-            publicToggleLabel.textContent = `${closeTxt} (${countdown}s)`; publicToggleLabel.classList.add("is-confirming-label");
-            const interval = setInterval(() => { countdown--; if (countdown > 0) publicToggleLabel.textContent = `${closeTxt} (${countdown}s)`; else { clearInterval(interval); publicToggleLabel.textContent = originalText; publicToggleLabel.classList.remove("is-confirming-label"); publicToggleConfirmTimer = null; } }, 1000);
-            const timer = setTimeout(() => { clearInterval(interval); publicToggleLabel.textContent = originalText; publicToggleLabel.classList.remove("is-confirming-label"); publicToggleConfirmTimer = null; }, 5000);
-            publicToggleConfirmTimer = { timer, interval };
+            b.classList.add("is-confirming"); b.textContent = `${T.confirm} (${c}s)`;
+            t = setInterval(() => { c--; b.textContent = `${T.confirm} (${c}s)`; if(c<=0) reset(); }, 1000);
         }
-    }
-});
-
-const modeRadios = document.getElementsByName("systemMode");
-if (modeRadios) modeRadios.forEach(radio => {
-    radio.addEventListener("change", async () => {
-        const val = radio.value; const modeName = val === 'ticketing' ? at["mode_ticketing"] : at["mode_input"];
-        const msg = at["confirm_switch_mode"].replace("%s", modeName);
-        if(confirm(msg)) { if(await apiRequest("/set-system-mode", { mode: val })) { showToast(at["toast_mode_switched"], "success"); } else { socket.emit("requestUpdate"); } } 
-        else { const other = val === 'ticketing' ? 'input' : 'ticketing'; document.querySelector(`input[name="systemMode"][value="${other}"]`).checked = true; }
-    });
-});
-
-async function loadAdminUsers() {
-    const ui = document.getElementById("user-list-ui"); if (!ui) return;
-    const data = await apiRequest("/api/admin/users", {}, true);
-    if (data && data.users) {
-        ui.replaceChildren(); 
-        data.users.sort((a, b) => { if (a.role === 'super' && b.role !== 'super') return -1; if (a.role !== 'super' && b.role === 'super') return 1; return a.username.localeCompare(b.username); });
-        const fragment = document.createDocumentFragment();
-        data.users.forEach(user => {
-            const li = document.createElement("li");
-            // View
-            const viewDiv = document.createElement("div"); viewDiv.style.display = "flex"; viewDiv.style.justifyContent = "space-between"; viewDiv.style.alignItems = "center"; viewDiv.style.width = "100%";
-            const infoDiv = document.createElement("div"); infoDiv.style.display = "flex"; infoDiv.style.alignItems = "center"; infoDiv.style.gap = "8px";
-            const icon = user.role === 'super' ? '👑' : '👤'; const strong = document.createElement("strong"); strong.textContent = user.nickname; strong.style.fontSize = "1rem";
-            const smallUser = document.createElement("span"); smallUser.textContent = `(${user.username})`; smallUser.style.color = "#666"; smallUser.style.fontSize = "0.85rem";
-            infoDiv.append(icon, strong, smallUser);
-            const actionDiv = document.createElement("div"); actionDiv.style.display = "flex"; actionDiv.style.gap = "5px";
-            const editBtn = document.createElement("button"); editBtn.className = "btn-secondary"; editBtn.textContent = "✎"; editBtn.title = "修改暱稱"; editBtn.style.padding = "2px 8px"; editBtn.style.fontSize = "0.9rem"; editBtn.style.minWidth = "30px";
-            editBtn.onclick = () => { viewDiv.style.display = "none"; editDiv.style.display = "flex"; input.focus(); };
-            actionDiv.appendChild(editBtn);
-            if (user.role !== 'super' && userRole === 'super') {
-                const deleteBtn = document.createElement("button"); deleteBtn.className = "delete-item-btn"; deleteBtn.textContent = "✕"; deleteBtn.title = "刪除帳號";
-                setupConfirmationButton(deleteBtn, "✕", "⚠️", async () => { deleteBtn.disabled = true; if (await apiRequest("/api/admin/del-user", { delUsername: user.username })) { showToast(`✅ 已刪除: ${user.username}`, "success"); await loadAdminUsers(); } else { deleteBtn.disabled = false; } });
-                actionDiv.appendChild(deleteBtn);
-            }
-            viewDiv.appendChild(infoDiv); viewDiv.appendChild(actionDiv);
-            // Edit
-            const editDiv = document.createElement("div"); editDiv.style.display = "none"; editDiv.style.justifyContent = "space-between"; editDiv.style.alignItems = "center"; editDiv.style.width = "100%"; editDiv.style.gap = "8px";
-            const input = document.createElement("input"); input.type = "text"; input.value = user.nickname; input.placeholder = "輸入新暱稱"; input.style.padding = "4px 8px"; input.style.fontSize = "0.95rem"; input.style.flex = "1"; 
-            const editActionDiv = document.createElement("div"); editActionDiv.style.display = "flex"; editActionDiv.style.gap = "5px";
-            const saveBtn = document.createElement("button"); saveBtn.className = "btn-secondary"; saveBtn.style.background = "var(--success)"; saveBtn.style.color = "white"; saveBtn.textContent = "✓"; saveBtn.style.padding = "2px 8px";
-            const cancelBtn = document.createElement("button"); cancelBtn.className = "btn-secondary"; cancelBtn.style.background = "#e5e7eb"; cancelBtn.style.color = "#374151"; cancelBtn.textContent = "✕"; cancelBtn.style.padding = "2px 8px";
-            const saveChanges = async () => {
-                const newNick = input.value.trim();
-                if (newNick && newNick !== "") { saveBtn.disabled = true; const success = await apiRequest("/api/admin/set-nickname", { targetUsername: user.username, nickname: newNick }); if (success) { showToast(`✅ 暱稱已更新`, "success"); await loadAdminUsers(); } else { saveBtn.disabled = false; } } 
-                else { editDiv.style.display = "none"; viewDiv.style.display = "flex"; input.value = user.nickname; }
-            };
-            saveBtn.onclick = saveChanges;
-            cancelBtn.onclick = () => { editDiv.style.display = "none"; viewDiv.style.display = "flex"; input.value = user.nickname; };
-            input.addEventListener("keyup", (e) => { if (e.key === "Enter") saveChanges(); if (e.key === "Escape") cancelBtn.click(); });
-            editActionDiv.appendChild(saveBtn); editActionDiv.appendChild(cancelBtn); editDiv.appendChild(input); editDiv.appendChild(editActionDiv);
-            li.appendChild(viewDiv); li.appendChild(editDiv); fragment.appendChild(li);
-        });
-        ui.appendChild(fragment);
-    }
+    };
+    const reset = () => { clearInterval(t); b.classList.remove("is-confirming"); b.textContent = origTxt; c=5; };
 }
 
-const addUserBtn = document.getElementById("add-user-btn");
-const newUserUsernameInput = document.getElementById("new-user-username");
-const newUserPasswordInput = document.getElementById("new-user-password");
-const newUserNicknameInput = document.getElementById("new-user-nickname");
-if (addUserBtn) addUserBtn.onclick = async () => {
-    const newUsername = newUserUsernameInput.value.trim(); const newPassword = newUserPasswordInput.value.trim(); const newNickname = newUserNicknameInput.value.trim();
-    if (!newUsername || !newPassword) return showToast(at["alert_account_required"], "error");
-    addUserBtn.disabled = true;
-    if (await apiRequest("/api/admin/add-user", { newUsername, newPassword, newNickname })) { showToast(`✅ 已新增: ${newUsername}`, "success"); newUserUsernameInput.value = ""; newUserPasswordInput.value = ""; newUserNicknameInput.value = ""; await loadAdminUsers(); }
-    addUserBtn.disabled = false;
+function bindEnter(inpId, btnId) { $(inpId)?.addEventListener("keyup", e => { if(e.key==="Enter") $(btnId).click(); }); }
+function applyLang() { 
+    $$('[data-i18n]').forEach(e => { const k=e.dataset.i18n; if(i18n[curLang][k]) e.textContent=i18n[curLang][k]; }); 
+    if($("broadcast-msg")) $("broadcast-msg").placeholder = curLang==='zh-TW'?"輸入文字廣播...":"Type text...";
+}
+
+// --- Main Views ---
+function showLogin() {
+    $("login-container").style.display="block"; $("admin-panel").style.display="none"; socket.disconnect();
+}
+async function showPanel() {
+    $("login-container").style.display="none"; $("admin-panel").style.display="flex";
+    if($("sidebar-user-info")) $("sidebar-user-info").textContent = `Hi, ${username}`;
+    const isSuper = userRole === 'super';
+    ["card-user-management", "btn-export-csv", "mode-switcher-group", "unlock-pwd-group"].forEach(id => $(id).style.display = isSuper ? "block" : "none");
+    if($('button[data-target="section-line"]')) $('button[data-target="section-line"]').style.display = isSuper?"flex":"none";
+    await loadUsers(); await loadStats(); if(isSuper) loadLineSettings();
+    socket.auth.token = token; socket.connect();
+}
+
+// --- Login Logic ---
+$("login-button").onclick = async () => {
+    const b=$("login-button"), u=$("username-input").value, p=$("password-input").value;
+    b.disabled=true; $("login-error").textContent="";
+    const res = await fetch("/login", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({username:u, password:p})}).then(r=>r.json()).catch(()=>({error:T.login_fail}));
+    if(res.token) { token=res.token; userRole=res.role; username=res.nickname; uniqueUser=res.username; showPanel(); }
+    else { $("login-error").textContent=res.error||T.login_fail; showLogin(); }
+    b.disabled=false;
 };
 
-const statsListUI = document.getElementById("stats-list-ui");
-const hourlyChartEl = document.getElementById("hourly-chart");
-const statsTodayCount = document.getElementById("stats-today-count");
+// --- Socket Events ---
+socket.on("connect", () => { $("status-bar").classList.remove("visible"); toast(`${T.status_conn} (${username})`, "success"); });
+socket.on("disconnect", () => { $("status-bar").classList.add("visible"); toast(T.status_dis, "error"); });
+socket.on("updateQueue", d => { $("number").textContent=d.current; $("issued-number").textContent=d.issued; $("waiting-count").textContent=Math.max(0, d.issued-d.current); loadStats(); });
+socket.on("update", n => { $("number").textContent=n; loadStats(); });
+socket.on("updatePassed", list => {
+    const ul = $("passed-list-ui"); ul.innerHTML="";
+    list.forEach(n => {
+        const li = mk("li");
+        const div = mk("div", null, null, {style:"display:flex; gap:10px; align-items:center;"});
+        div.append(mk("span", null, n, {style:"font-weight:bold"}), mk("button", "btn-secondary", T.recall, {onclick:()=>{ if(confirm(`Recall ${n}?`)) req("/api/control/recall-passed",{number:n}); }}));
+        const del = mk("button", "delete-item-btn", "✕"); confirmBtn(del.id=`del-pass-${n}`, "✕", ()=>req("/api/passed/remove",{number:n}));
+        li.append(div, del); ul.appendChild(li);
+    });
+});
+socket.on("updateFeaturedContents", list => {
+    const ul = $("featured-list-ui"); ul.innerHTML="";
+    list.forEach(item => {
+        const li = mk("li");
+        const view = mk("div", null, null, {style:"display:flex; justify-content:space-between; width:100%; align-items:center;"});
+        const info = mk("div", null, null, {style:"display:flex; flex-direction:column;"});
+        info.append(mk("span", null, item.linkText, {style:"font-weight:600"}), mk("small", null, item.linkUrl, {style:"color:#666"}));
+        
+        const editDiv = mk("div", null, null, {style:"display:none; width:100%; flex-direction:column; gap:5px;"});
+        const i1 = mk("input", null, null, {value:item.linkText, placeholder:"Name"}), i2 = mk("input", null, null, {value:item.linkUrl, placeholder:"URL"});
+        const save = mk("button", "btn-secondary", "✓", {onclick: async()=>{ if(await req("/api/featured/edit",{oldLinkText:item.linkText,oldLinkUrl:item.linkUrl,newLinkText:i1.value,newLinkUrl:i2.value})) toast(T.saved,"success"); }});
+        
+        const acts = mk("div", null, null, {style:"display:flex; gap:5px;"});
+        acts.append(mk("button", "btn-secondary", "✎", {onclick:()=>{view.style.display="none"; editDiv.style.display="flex";}}));
+        const del = mk("button", "delete-item-btn", "✕"); acts.append(del);
+        confirmBtn(del.id=`del-link-${Math.random()}`, "✕", ()=>req("/api/featured/remove", item));
+
+        editDiv.append(i1, i2, mk("div", null, null, {style:"display:flex; gap:5px; justify-content:end;"}));
+        editDiv.lastChild.append(save, mk("button", "btn-secondary", "✕", {onclick:()=>{editDiv.style.display="none"; view.style.display="flex";}}));
+        view.append(info, acts); li.append(view, editDiv); ul.appendChild(li);
+    });
+});
+socket.on("initAdminLogs", l => renderLogs(l, true));
+socket.on("newAdminLog", l => renderLogs([l], false));
+socket.on("updateOnlineAdmins", list => {
+    const ul = $("online-users-list"); ul.innerHTML = "";
+    if(!list.length) ul.innerHTML = `<li>${T.zh==="zh-TW"?"(無人在線)":"(Offline)"}</li>`;
+    list.sort((a,b)=>(a.role==='super'?-1:1)).forEach(u => {
+        ul.appendChild(mk("li", null, `${u.role==='super'?'👑':'👤'} ${u.nickname} ${u.username===uniqueUser?'(You)':''}`));
+    });
+});
+socket.on("updateSoundSetting", b => $("sound-toggle").checked=b);
+socket.on("updatePublicStatus", b => $("public-toggle").checked=b);
+socket.on("updateSystemMode", m => $$('input[name="systemMode"]').forEach(r => r.checked=(r.value===m)));
+
+function renderLogs(logs, init) {
+    const ul = $("admin-log-ui"); if(init) ul.innerHTML="";
+    if(!logs?.length && init) { ul.innerHTML="<li>[No Logs]</li>"; return; }
+    logs.forEach(msg => { const li=mk("li", null, msg); init ? ul.appendChild(li) : ul.insertBefore(li, ul.firstChild); });
+}
+
+// --- Actions & Bindings ---
+const act = (id, api, data={}) => $(id)?.addEventListener("click", () => req(api, data, $(id)));
+act("btn-call-prev", "/api/control/call", {direction:"prev"});
+act("btn-call-next", "/api/control/call", {direction:"next"});
+act("btn-mark-passed", "/api/control/pass-current");
+act("btn-issue-prev", "/api/control/issue", {direction:"prev"});
+act("btn-issue-next", "/api/control/issue", {direction:"next"});
+
+// Input Actions
+$("setNumber")?.addEventListener("click", async()=>{
+    const n = $("manualNumber").value; 
+    if(n>0 && await req("/api/control/set-call", {number:n})) { $("manualNumber").value=""; toast(T.saved,"success"); }
+});
+$("setIssuedNumber")?.addEventListener("click", async()=>{
+    const n = $("manualIssuedNumber").value;
+    if(n>=0 && await req("/api/control/set-issue", {number:n})) { $("manualIssuedNumber").value=""; toast(T.saved,"success"); }
+});
+$("add-passed-btn")?.addEventListener("click", async()=>{
+    const n = $("new-passed-number").value;
+    if(n>0 && await req("/api/passed/add", {number:n})) $("new-passed-number").value="";
+});
+$("add-featured-btn")?.addEventListener("click", async()=>{
+    const t=$("new-link-text").value, u=$("new-link-url").value;
+    if(t&&u && await req("/api/featured/add", {linkText:t, linkUrl:u})) { $("new-link-text").value=""; $("new-link-url").value=""; }
+});
+$("btn-broadcast")?.addEventListener("click", async()=>{
+    const m = $("broadcast-msg").value;
+    if(m && await req("/api/admin/broadcast", {message:m})) { toast("📢 Sent","success"); $("broadcast-msg").value=""; }
+});
+
+// Confirm Actions
+confirmBtn("resetNumber", "↺ 重置叫號", ()=>req("/api/control/set-call", {number:0}));
+confirmBtn("resetIssued", "↺ 重置發號", ()=>req("/api/control/set-issue", {number:0}));
+confirmBtn("resetPassed", "清空列表", ()=>req("/api/passed/clear"));
+confirmBtn("resetFeaturedContents", "清空連結", ()=>req("/api/featured/clear"));
+confirmBtn("resetAll", "💥 全域重置", ()=>req("/reset"));
+confirmBtn("btn-clear-logs", "清除日誌", ()=>req("/api/logs/clear"));
+confirmBtn("btn-clear-stats", "🗑️ 清空統計", ()=>req("/api/admin/stats/clear").then(()=>loadStats()));
+confirmBtn("btn-reset-line-msg", "↺ 恢復預設", ()=>req("/api/admin/line-settings/reset").then(d=>{if(d)loadLineSettings();}));
+
+// Toggles & Selects
+$("sound-toggle")?.addEventListener("change", e => req("/set-sound-enabled", {enabled:e.target.checked}));
+$("public-toggle")?.addEventListener("change", e => req("/set-public-status", {isPublic:e.target.checked}));
+$$('input[name="systemMode"]').forEach(r => r.addEventListener("change", ()=>confirm("Switch Mode?")?req("/set-system-mode", {mode:r.value}):(r.checked=!r.checked)));
+$("admin-lang-selector")?.addEventListener("change", e => { curLang=e.target.value; localStorage.setItem('callsys_lang', curLang); T=i18n[curLang]; applyLang(); loadStats(); });
+
+// Quick Buttons
+if($("quick-add-1")) $("quick-add-1").onclick = () => $("manualNumber").value = (parseInt($("number").innerText)||0)+1;
+if($("quick-add-5")) $("quick-add-5").onclick = () => $("manualNumber").value = (parseInt($("number").innerText)||0)+5;
+if($("quick-clear")) $("quick-clear").onclick = () => $("manualNumber").value = "";
+
+// --- Loaders ---
+async function loadUsers() {
+    const d = await req("/api/admin/users");
+    const ul = $("user-list-ui"); if(!d || !ul) return; ul.innerHTML="";
+    d.users.forEach(u => {
+        const li = mk("li");
+        const view = mk("div", null, null, {style:"display:flex; justify-content:space-between; width:100%"});
+        view.innerHTML = `<span>${u.role==='super'?'👑':'👤'} <b>${u.nickname}</b> <small>(${u.username})</small></span>`;
+        if(u.role!=='super' && userRole==='super') {
+            const del = mk("button", "delete-item-btn", "✕"); confirmBtn(del.id=`del-u-${u.username}`, "✕", async()=>{ await req("/api/admin/del-user",{delUsername:u.username}); loadUsers(); });
+            view.appendChild(del);
+        }
+        li.appendChild(view); ul.appendChild(li);
+    });
+}
 
 async function loadStats() {
-    if (!statsListUI) return;
-    if (statsListUI.children.length === 0 || statsListUI.children[0].textContent.includes(at["list_no_data"]) || statsListUI.children[0].textContent.includes(at["list_load_fail"])) { const li = document.createElement("li"); li.textContent = at["list_loading"]; statsListUI.replaceChildren(li); }
-    const data = await apiRequest("/api/admin/stats", {}, true);
-    if (data && data.success) {
-        statsTodayCount.textContent = data.todayCount; renderHourlyChart(data.hourlyCounts, data.serverHour);
-        statsListUI.replaceChildren(); 
-        if (!data.history || data.history.length === 0) { const li = document.createElement("li"); li.textContent = at["list_no_data"]; statsListUI.appendChild(li); return; }
-        const fragment = document.createDocumentFragment();
-        data.history.forEach(item => {
-            const li = document.createElement("li"); const time = new Date(item.time).toLocaleTimeString('zh-TW', { hour12: false });
-            const span = document.createElement("span"); span.textContent = `${time} - 號碼 ${item.num} `;
-            const small = document.createElement("small"); small.style.color = "#666"; small.textContent = `(${item.operator})`;
-            span.appendChild(small); li.appendChild(span); fragment.appendChild(li);
-        });
-        statsListUI.appendChild(fragment); statsListUI.scrollTop = 0; 
-    } else { const li = document.createElement("li"); li.textContent = at["list_load_fail"]; statsListUI.replaceChildren(li); }
-}
-
-function renderHourlyChart(counts, serverHour) {
-    if (!hourlyChartEl || !Array.isArray(counts)) return; hourlyChartEl.replaceChildren();
-    const maxVal = Math.max(...counts, 1); const currentHour = (typeof serverHour === 'number') ? serverHour : new Date().getHours();
-    const fragment = document.createDocumentFragment();
-    for (let i = 0; i < 24; i++) {
-        const val = counts[i]; const percent = (val / maxVal) * 100;
-        const col = document.createElement("div"); col.className = "chart-col"; if (i === currentHour) col.classList.add("current");
-        col.onclick = () => openEditModal(i, val);
-        const valDiv = document.createElement("div"); valDiv.className = "chart-val"; valDiv.textContent = val > 0 ? val : "";
-        const barDiv = document.createElement("div"); barDiv.className = "chart-bar"; barDiv.style.height = `${Math.max(percent, 2)}%`; if (val === 0) barDiv.style.backgroundColor = "#e5e7eb";
-        const labelDiv = document.createElement("div"); labelDiv.className = "chart-label"; labelDiv.textContent = i.toString().padStart(2, '0');
-        col.appendChild(valDiv); col.appendChild(barDiv); col.appendChild(labelDiv); fragment.appendChild(col);
+    const ul = $("stats-list-ui"); if(!ul) return;
+    const d = await req("/api/admin/stats");
+    if(d?.success) {
+        $("stats-today-count").textContent = d.todayCount;
+        renderChart(d.hourlyCounts, d.serverHour);
+        ul.innerHTML = d.history.map(h => `<li><span>${new Date(h.time).toLocaleTimeString('zh-TW',{hour12:false})} - ${h.num} <small>(${h.operator})</small></span></li>`).join("") || `<li>${T.empty}</li>`;
     }
-    hourlyChartEl.appendChild(fragment);
 }
 
-const modalOverlay = document.getElementById("edit-stats-overlay");
-const modalTitle = document.getElementById("modal-title");
-const modalCurrentCount = document.getElementById("modal-current-count");
-const btnStatsMinus = document.getElementById("btn-stats-minus");
-const btnStatsPlus = document.getElementById("btn-stats-plus");
-const btnModalClose = document.getElementById("btn-modal-close");
-function openEditModal(hour, count) { modalTitle.textContent = `${at["zh-TW"] ? '編輯' : 'Edit'} ${hour}:00 - ${hour}:59 ${at["zh-TW"] ? '數據' : 'Stats'}`; editingHour = hour; modalCurrentCount.textContent = count; modalOverlay.style.display = "flex"; }
-function closeEditModal() { modalOverlay.style.display = "none"; editingHour = null; }
-async function adjustStat(delta) { if (editingHour === null) return; let current = parseInt(modalCurrentCount.textContent); let next = current + delta; if (next < 0) next = 0; modalCurrentCount.textContent = next; await apiRequest("/api/admin/stats/adjust", { hour: editingHour, delta: delta }); await loadStats(); }
-if(btnModalClose) btnModalClose.onclick = closeEditModal; 
-if(btnStatsMinus) btnStatsMinus.onclick = () => adjustStat(-1); 
-if(btnStatsPlus) btnStatsPlus.onclick = () => adjustStat(1);
-if(modalOverlay) modalOverlay.onclick = (e) => { if (e.target === modalOverlay) closeEditModal(); }
+function renderChart(counts, curHr) {
+    const c = $("hourly-chart"); c.innerHTML=""; const max = Math.max(...counts, 1);
+    counts.forEach((val, i) => {
+        const col = mk("div", `chart-col ${i===curHr?'current':''}`, null, {onclick:()=>openStatModal(i, val)});
+        col.innerHTML = `<div class="chart-val">${val||''}</div><div class="chart-bar" style="height:${Math.max(val/max*100, 2)}%; background:${val===0?'#e5e7eb':''}"></div><div class="chart-label">${String(i).padStart(2,'0')}</div>`;
+        c.appendChild(col);
+    });
+}
 
-// --- LINE 設定 ---
-const domKeys = ["approach", "arrival", "status", "personal", "passed", "set_ok", "cancel", "login_hint", "err_passed", "err_no_sub", "set_hint"];
+// Stats Modal
+const modal = $("edit-stats-overlay");
+function openStatModal(h, val) { $("modal-title").textContent=`Edit ${h}:00`; editHr=h; $("modal-current-count").textContent=val; modal.style.display="flex"; }
+$("btn-modal-close")?.addEventListener("click", ()=>modal.style.display="none");
+["btn-stats-minus", "btn-stats-plus"].forEach((id, idx) => $(id)?.addEventListener("click", async()=>{
+    if(editHr===null) return;
+    const delta = idx===0 ? -1 : 1;
+    await req("/api/admin/stats/adjust", {hour:editHr, delta}); 
+    const n = parseInt($("modal-current-count").textContent)+delta; $("modal-current-count").textContent = n<0?0:n; loadStats();
+}));
+
+// LINE Settings
+const lineKeys = ["approach","arrival","status","personal","passed","set_ok","cancel","login_hint","err_passed","err_no_sub","set_hint"];
 async function loadLineSettings() {
-    if (!document.getElementById(`line-msg-${domKeys[0]}`)) return;
-    const data = await apiRequest("/api/admin/line-settings/get", {}, true);
-    if (data && data.success) { domKeys.forEach(key => { const el = document.getElementById(`line-msg-${key}`); if (el && data[key]) el.value = data[key]; }); }
-    if (userRole === 'super') { const pwdData = await apiRequest("/api/admin/line-settings/get-unlock-pass", {}, true); if(pwdData && pwdData.success && document.getElementById("line-unlock-pwd")) { document.getElementById("line-unlock-pwd").value = pwdData.password; } }
+    const d = await req("/api/admin/line-settings/get");
+    if(d) lineKeys.forEach(k => { if($( `line-msg-${k}`)) $(`line-msg-${k}`).value = d[k]||""; });
+    if($("line-unlock-pwd")) $("line-unlock-pwd").value = (await req("/api/admin/line-settings/get-unlock-pass"))?.password || "";
 }
-
-const btnSaveLineMsg = document.getElementById("btn-save-line-msg");
-const btnResetLineMsg = document.getElementById("btn-reset-line-msg");
-const btnSaveUnlockPwd = document.getElementById("btn-save-unlock-pwd");
-
-if (btnSaveLineMsg) btnSaveLineMsg.onclick = async () => { 
-    const payload = {}; domKeys.forEach(key => { const el = document.getElementById(`line-msg-${key}`); if (el) payload[key] = el.value.trim(); });
-    if(!payload.approach || !payload.status) return showToast("主要文案不可為空", "error"); 
-    btnSaveLineMsg.disabled = true; if (await apiRequest("/api/admin/line-settings/save", payload)) { showToast(at["toast_line_updated"], "success"); } btnSaveLineMsg.disabled = false; 
-};
-
-if (btnResetLineMsg) setupConfirmationButton(btnResetLineMsg, "btn_reset_call", "btn_confirm_reset", async () => { 
-    const data = await apiRequest("/api/admin/line-settings/reset", {}, true); 
-    if (data && data.success) { domKeys.forEach(key => { const el = document.getElementById(`line-msg-${key}`); if (el && data[key]) el.value = data[key]; }); showToast(at["toast_line_reset"], "success"); } 
+$("btn-save-line-msg")?.addEventListener("click", async()=>{
+    const data={}; lineKeys.forEach(k=>data[k]=$(`line-msg-${k}`).value);
+    if(await req("/api/admin/line-settings/save", data)) toast(T.saved, "success");
+});
+$("btn-save-unlock-pwd")?.addEventListener("click", async()=>{
+    if(await req("/api/admin/line-settings/set-unlock-pass", {password:$("line-unlock-pwd").value})) toast(T.saved, "success");
 });
 
-if (btnSaveUnlockPwd) btnSaveUnlockPwd.onclick = async () => {
-    const pwd = document.getElementById("line-unlock-pwd").value.trim(); if(!pwd) return showToast(at["alert_pwd_empty"], "error");
-    btnSaveUnlockPwd.disabled = true; if (await apiRequest("/api/admin/line-settings/set-unlock-pass", { password: pwd })) { showToast(at["toast_pwd_saved"], "success"); } btnSaveUnlockPwd.disabled = false;
-};
+// CSV Export
+$("btn-export-csv")?.addEventListener("click", async()=>{
+    const d = await req("/api/admin/export-csv");
+    if(d?.csvData) {
+        const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["\uFEFF"+d.csvData], {type:'text/csv'}));
+        a.download = d.fileName; a.click(); toast("✅ Downloaded", "success");
+    }
+});
 
-const btnRefreshStats = document.getElementById("btn-refresh-stats");
-if (btnRefreshStats) btnRefreshStats.onclick = async () => { showToast(at["list_loading"] || "載入中...", "info"); await loadStats(); showToast("✅ 數據已更新", "success"); };
+// Admin User Management
+$("add-user-btn")?.addEventListener("click", async()=>{
+    if(await req("/api/admin/add-user", {newUsername:$("new-user-username").value, newPassword:$("new-user-password").value, newNickname:$("new-user-nickname").value})) {
+        toast(T.saved,"success"); $("new-user-username").value=""; $("new-user-password").value=""; loadUsers();
+    }
+});
 
-const btnExportCsv = document.getElementById("btn-export-csv");
-if (btnExportCsv) btnExportCsv.onclick = async () => {
-    btnExportCsv.disabled = true; const data = await apiRequest("/api/admin/export-csv", {}, true);
-    if (data && data.success) {
-        const blob = new Blob(["\uFEFF" + data.csvData], { type: 'text/csv;charset=utf-8;' }); const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = data.fileName || "stats.csv"; link.style.display = "none"; document.body.appendChild(link); link.click(); document.body.removeChild(link); showToast(at["toast_report_downloaded"], "success");
-    } else { showToast(at["toast_download_fail"] + (data ? data.error : 'Network Error'), "error"); }
-    btnExportCsv.disabled = false;
-};
-
-const btnClearStats = document.getElementById("btn-clear-stats");
-if (btnClearStats) setupConfirmationButton(btnClearStats, "toast_stats_cleared", "btn_confirm_clear", async () => { if (await apiRequest("/api/admin/stats/clear", {})) { showToast(at["toast_stats_cleared"], "success"); await loadStats(); } });
+// Init
+document.addEventListener("DOMContentLoaded", () => {
+    $("admin-lang-selector").value = curLang; applyLang(); showLogin();
+    // Bind Enters
+    bindEnter("username-input", "login-button"); bindEnter("password-input", "login-button");
+    bindEnter("manualNumber", "setNumber"); bindEnter("manualIssuedNumber", "setIssuedNumber");
+    bindEnter("new-passed-number", "add-passed-btn"); bindEnter("new-link-url", "add-featured-btn");
+    bindEnter("broadcast-msg", "btn-broadcast"); bindEnter("line-unlock-pwd", "btn-save-unlock-pwd");
+    // Nav Tabs
+    $$('.nav-btn').forEach(b => b.addEventListener('click', () => {
+        $$('.nav-btn').forEach(x=>x.classList.remove('active')); b.classList.add('active');
+        $$('.section-group').forEach(s=>s.classList.remove('active'));
+        const t = $(b.dataset.target); if(t) t.classList.add('active');
+        if(b.dataset.target === 'section-stats') loadStats();
+    }));
+});
