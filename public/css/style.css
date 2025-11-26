@@ -1,10 +1,6 @@
-{
-type: uploaded file
-fileName: style.css
-fullContent:
 /*
  * ==========================================
- * Theme: Maximized Compact v32.0 (Mobile Layout & Safe Margin Fix)
+ * Theme: Maximized Compact v32.0 (Fix Missing Layout)
  * ==========================================
  */
 
@@ -91,10 +87,9 @@ body {
 .hero-section {
     flex: 1; 
     display: flex; flex-direction: column; 
-    /* 修正：增加 Padding 防止內容貼邊或重疊 */
     padding: 12px 12px 0 12px;
     position: relative; overflow: hidden;
-    min-height: 0; /* 關鍵：允許 Flex 子元素縮小 */
+    min-height: 0; 
 }
 
 .hero-top-info {
@@ -115,7 +110,6 @@ body {
 #number {
     flex: 1;
     display: flex; align-items: center; justify-content: center;
-    /* 修正：恢復合理的字體大小與行高，防止裁切 */
     font-size: clamp(6rem, 28vh, 14rem);
     font-weight: 900; 
     line-height: 1; 
@@ -123,8 +117,8 @@ body {
     -webkit-background-clip: text; -webkit-text-fill-color: transparent;
     letter-spacing: -6px; 
     font-variant-numeric: tabular-nums;
-    padding-bottom: 2vh; /* 微調底部空間 */
-    margin-top: 0; /* 移除危險的負邊距 */
+    padding-bottom: 2vh; 
+    margin-top: 0;
 }
 
 /* --- List Section (過號) --- */
@@ -346,5 +340,4 @@ body {
         background: white; padding: 20px; border-radius: 20px;
         box-shadow: 0 10px 30px rgba(0,0,0,0.1); text-align: center; z-index: 50;
     }
-}
 }
