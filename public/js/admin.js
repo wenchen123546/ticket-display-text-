@@ -1,10 +1,6 @@
-{
-type: uploaded file
-fileName: admin.js
-fullContent:
 /*
  * ==========================================
- * 後台邏輯 (admin.js) - v20.0 (Full I18n & UX)
+ * 後台邏輯 (admin.js) - v20.1 (Syntax Fix)
  * ==========================================
  */
 
@@ -307,7 +303,7 @@ async function showPanel() {
     addEnterTrigger("manualNumber", "setNumber");
     addEnterTrigger("manualIssuedNumber", "setIssuedNumber");
     addEnterTrigger("new-passed-number", "add-passed-btn");
-    addEnterTrigger("new-link-text", "add-featured-btn"); // 連結文字也可觸發
+    addEnterTrigger("new-link-text", "add-featured-btn"); 
     addEnterTrigger("new-link-url", "add-featured-btn");
     addEnterTrigger("broadcast-msg", "btn-broadcast");
     addEnterTrigger("line-unlock-pwd", "btn-save-unlock-pwd");
@@ -510,7 +506,7 @@ function setupConfirmationButton(buttonEl, originalTextKey, confirmTextKey, acti
 
     const resetBtn = () => {
         clearInterval(timer); isConfirming = false; countdown = 5;
-        buttonEl.textContent = at[originalTextKey] || originalTextKey; // Ensure text is localized
+        buttonEl.textContent = at[originalTextKey] || originalTextKey; 
         buttonEl.classList.remove("is-confirming");
     };
     
@@ -836,7 +832,6 @@ if(addFeaturedBtn) addFeaturedBtn.onclick = async () => {
     let success = false;
 
     if(editingLinkItem) {
-        // [修改] 連結編輯：無論是否修改都執行 API (Force Save)
         const payload = {
             oldLinkText: editingLinkItem.linkText,
             oldLinkUrl: editingLinkItem.linkUrl,
@@ -1048,7 +1043,6 @@ async function loadAdminUsers() {
             const saveChanges = async () => {
                 const newNick = input.value.trim();
                 if (newNick && newNick !== "") {
-                    // [修改] 移除檢查是否相同的邏輯，允許覆寫
                     saveBtn.disabled = true;
                     const success = await apiRequest("/api/admin/set-nickname", { 
                         targetUsername: user.username, 
@@ -1339,5 +1333,4 @@ if (btnClearStats) {
             await loadStats();
         }
     });
-}
 }
