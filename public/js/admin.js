@@ -1,5 +1,5 @@
 /* ==========================================
- * 後台邏輯 (admin.js) - v90.0 Permission Fixed
+ * 後台邏輯 (admin.js) - v91.0 Full Fix (Text Restored)
  * ========================================== */
 const $ = i => document.getElementById(i), $$ = s => document.querySelectorAll(s);
 const mk = (t, c, txt, ev={}, ch=[]) => { 
@@ -9,11 +9,60 @@ const mk = (t, c, txt, ev={}, ch=[]) => {
 };
 const toast = (m, t='info') => { const el=$("toast-notification"); el.textContent=m; el.className=`show ${t}`; setTimeout(()=>el.className="", 3000); };
 
-// --- Config & State ---
+// --- Config & State (已補全所有遺失的翻譯文字) ---
 const i18n = {
-    "zh-TW": { status_conn:"✅ 已連線", status_dis:"⚠️ 連線中斷...", saved:"✅ 已儲存", denied:"❌ 權限不足", expired:"Session 過期", login_fail:"登入失敗", confirm:"⚠️ 確認", recall:"↩️ 重呼", edit:"✎", del:"✕", save:"✓", cancel:"✕", login_title:"請登入管理系統", login_btn:"登入", nav_live:"現場控台", nav_stats:"數據報表", nav_booking:"預約管理", nav_settings:"系統設定", nav_line:"LINE設定", logout:"登出", btn_next:"下一號 ▶", btn_prev:"◀ 上一號", btn_pass:"過號", btn_exec:"GO", btn_recall:"➖ 收回", btn_issue:"發號 ➕", btn_fix:"修正", btn_clear_passed:"清空過號", btn_refresh:"重整", btn_clear_stats:"🗑️ 清空", btn_clear_logs:"清除日誌", btn_play:"播放", btn_reset_all:"💥 全域重置", btn_save:"儲存", btn_restore:"恢復預設值", modal_edit:"編輯數據", btn_done:"完成", wait:"等待" },
-    "en": { status_conn:"✅ Connected", status_dis:"⚠️ Disconnected...", saved:"✅ Saved", denied:"❌ Denied", expired:"Session Expired", login_fail:"Login Failed", confirm:"⚠️ Confirm", recall:"↩️ Recall", edit:"Edit", del:"Del", save:"Save", cancel:"Cancel", login_title:"Login to Admin Panel", login_btn:"Login", nav_live:"Live Console", nav_stats:"Statistics", nav_booking:"Booking", nav_settings:"Settings", nav_line:"Line Config", logout:"Logout", btn_next:"Next ▶", btn_prev:"◀ Prev", btn_pass:"Pass", btn_exec:"GO", btn_recall:"➖ Recall", btn_issue:"Issue ➕", btn_fix:"Fix", btn_clear_passed:"Clear Passed", btn_refresh:"Refresh", btn_clear_stats:"🗑️ Clear", btn_clear_logs:"Clear Logs", btn_play:"Play", btn_reset_all:"💥 Factory Reset", btn_save:"Save", btn_restore:"Restore Defaults", modal_edit:"Edit Data", btn_done:"Done", wait:"Waiting" }
+    "zh-TW": { 
+        status_conn:"✅ 已連線", status_dis:"⚠️ 連線中斷...", saved:"✅ 已儲存", denied:"❌ 權限不足", 
+        expired:"Session 過期", login_fail:"登入失敗", confirm:"⚠️ 確認", recall:"↩️ 重呼", 
+        edit:"✎", del:"✕", save:"✓", cancel:"✕",
+        login_title: "請登入管理系統", ph_account: "帳號", ph_password: "密碼", login_btn: "登入",
+        admin_panel: "管理後台", nav_live: "現場控台", nav_stats: "數據報表", nav_booking: "預約管理",
+        nav_settings: "系統設定", nav_line: "LINE設定", logout: "登出",
+        dash_curr: "目前叫號", dash_issued: "已發號至", dash_wait: "等待組數",
+        card_call: "指揮中心", btn_next: "下一號 ▶", btn_prev: "◀ 上一號", btn_pass: "過號", 
+        lbl_assign: "指定 / 插隊", btn_exec: "GO", btn_reset_call: "↺ 重置叫號",
+        card_issue: "發號管理", btn_recall: "➖ 收回", btn_issue: "發號 ➕", 
+        lbl_fix_issue: "修正發號數", btn_fix: "修正", btn_reset_issue: "↺ 重置發號",
+        card_passed: "過號名單", btn_clear_passed: "清空過號",
+        card_stats: "流量分析", lbl_today: "今日人次", btn_refresh: "重整", btn_clear_stats: "🗑️ 清空統計",
+        card_logs: "操作日誌", btn_clear_logs: "清除日誌",
+        card_sys: "系統", lbl_public: "開放前台", lbl_sound: "提示音效", 
+        lbl_tts: "TTS 語音廣播", btn_play: "播放", 
+        lbl_mode: "取號模式", mode_online: "線上取號", mode_manual: "手動輸入", btn_reset_all: "💥 全域重置",
+        card_online: "在線管理", card_links: "連結管理", ph_link_name: "名稱", btn_clear_links: "清空連結",
+        card_users: "帳號管理", lbl_add_user: "新增帳號", ph_nick: "暱稱",
+        btn_save: "儲存", btn_restore: "恢復預設值",
+        modal_edit: "編輯數據", btn_done: "完成",
+        card_booking: "預約管理", lbl_add_appt: "新增預約",
+        wait: "等待"
+    },
+    "en": { 
+        status_conn:"✅ Connected", status_dis:"⚠️ Disconnected...", saved:"✅ Saved", denied:"❌ Denied", 
+        expired:"Session Expired", login_fail:"Login Failed", confirm:"⚠️ Confirm", recall:"↩️ Recall", 
+        edit:"Edit", del:"Del", save:"Save", cancel:"Cancel",
+        login_title: "Login to Admin Panel", ph_account: "Username", ph_password: "Password", login_btn: "Login",
+        admin_panel: "Admin Panel", nav_live: "Live Console", nav_stats: "Statistics", nav_booking: "Booking",
+        nav_settings: "Settings", nav_line: "Line Config", logout: "Logout",
+        dash_curr: "Current Serving", dash_issued: "Last Issued", dash_wait: "Waiting",
+        card_call: "Command Center", btn_next: "Next ▶", btn_prev: "◀ Prev", btn_pass: "Pass", 
+        lbl_assign: "Assign / Jump", btn_exec: "GO", btn_reset_call: "↺ Reset Call",
+        card_issue: "Ticketing", btn_recall: "➖ Recall", btn_issue: "Issue ➕", 
+        lbl_fix_issue: "Fix Issued #", btn_fix: "Fix", btn_reset_issue: "↺ Reset Issue",
+        card_passed: "Passed List", btn_clear_passed: "Clear Passed",
+        card_stats: "Analytics", lbl_today: "Today's Count", btn_refresh: "Refresh", btn_clear_stats: "🗑️ Clear Stats",
+        card_logs: "Action Logs", btn_clear_logs: "Clear Logs",
+        card_sys: "System", lbl_public: "Public Access", lbl_sound: "Sound FX", 
+        lbl_tts: "TTS Broadcast", btn_play: "Play", 
+        lbl_mode: "Mode", mode_online: "Online Ticket", mode_manual: "Manual Input", btn_reset_all: "💥 Factory Reset",
+        card_online: "Online Users", card_links: "Links Manager", ph_link_name: "Name", btn_clear_links: "Clear Links",
+        card_users: "User Manager", lbl_add_user: "Add User", ph_nick: "Nickname",
+        btn_save: "Save", btn_restore: "Restore Defaults",
+        modal_edit: "Edit Data", btn_done: "Done",
+        card_booking: "Booking Manager", lbl_add_appt: "Add Booking",
+        wait: "Waiting"
+    }
 };
+
 let curLang = localStorage.getItem('callsys_lang')||'zh-TW', T = i18n[curLang], token="", userRole="normal", username="", uniqueUser="", cachedLine=null, isDark = localStorage.getItem('callsys_admin_theme') === 'dark';
 const socket = io({ autoConnect: false, auth: { token: "" } });
 
@@ -33,7 +82,11 @@ const confirmBtn = (el, txt, action) => {
     const reset = () => { clearInterval(t); el.classList.remove("is-confirming"); el.textContent = txt; c=5; };
 };
 const updateLangUI = () => {
-    T = i18n[curLang]||i18n["zh-TW"]; $$('[data-i18n]').forEach(e => e.textContent = T[e.getAttribute('data-i18n')]||"");
+    T = i18n[curLang]||i18n["zh-TW"]; 
+    $$('[data-i18n]').forEach(e => {
+        const k = e.getAttribute('data-i18n');
+        if(T[k]) e.textContent = T[k]; // 修正：只有當翻譯存在時才替換，避免清空
+    });
     $$('[data-i18n-ph]').forEach(e => e.placeholder = T[e.getAttribute('data-i18n-ph')]||"");
     loadUsers(); loadStats(); loadAppointments(); if(cachedLine) renderLineSettings(); else loadLineSettings();
 };
@@ -56,11 +109,10 @@ const checkSession = () => {
 const logout = () => { localStorage.removeItem('callsys_token'); location.reload(); };
 const showLogin = () => { $("login-container").style.display="block"; $("admin-panel").style.display="none"; socket.disconnect(); };
 
-// [Fixed] Permission Logic Updated Here
 const showPanel = () => {
     $("login-container").style.display="none"; $("admin-panel").style.display="flex"; $("sidebar-user-info").textContent = username;
     
-    // 修正：同時檢查 'super' 與 'ADMIN'
+    // 權限修正：同時接受 super 與 ADMIN
     const isSuper = (userRole === 'super' || userRole === 'ADMIN');
     
     if($("nav-btn-booking")) $("nav-btn-booking").style.display = isSuper ? "flex" : "none";
@@ -136,7 +188,6 @@ async function loadUsers() {
                 mk("button","btn-secondary success",T.save,{onclick:async()=>{if(await req("/api/admin/set-nickname",{targetUsername:u.username, nickname:form.children[0].value})) {toast(T.saved,"success"); loadUsers();}}})
             ])
         ]);
-        // 修正：權限檢查增加 ADMIN
         if(u.username === uniqueUser || userRole === 'super' || userRole === 'ADMIN') acts.appendChild(mk("button","btn-secondary",T.edit,{onclick:()=>{view.style.display="none";acts.style.display="none";form.style.display="flex";}}));
         if(u.username !== 'superadmin' && (userRole === 'super' || userRole === 'ADMIN')) {
             const sel = mk("select","role-select",null,{onchange:async()=>await req("/api/admin/set-role",{targetUsername:u.username, newRole:sel.value})});
