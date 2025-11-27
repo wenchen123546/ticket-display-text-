@@ -1,5 +1,5 @@
 /* ==========================================
- * 後台樣式 (admin.css) - v67.1 UI Polish
+ * 後台樣式 (admin.css) - v68.0 Full Fix
  * ========================================== */
 :root {
     --bg-body: #f8fafc; --bg-surface: #ffffff; --bg-sidebar: #ffffff;
@@ -53,27 +53,26 @@ body.dark-mode .nav-btn.active { background: rgba(99, 102, 241, 0.15); color: #8
 .section-group.active { display: block; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 
-/* [優化] Dashboard Headers - 讓數字對齊 */
+/* Dashboard Headers */
 .dashboard-header { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 24px; }
 .dashboard-item { 
     background: var(--bg-surface); border-radius: var(--radius-lg); 
-    padding: 24px; /* 增加內距 */
+    padding: 24px; 
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     position: relative; overflow: hidden; 
     box-shadow: 0 1px 3px rgba(0,0,0,0.05); border: 1px solid var(--border-color); 
-    min-height: 140px; /* 強制最小高度，確保三個方塊一樣高 */
+    min-height: 140px; 
 }
 .dashboard-item.main-stat { background: var(--primary-grad); color: white; border: none; }
 .dashboard-item.main-stat .label, .dashboard-item.main-stat .value { color: white !important; -webkit-text-fill-color: white !important; }
 
-/* 統一數字字體與行高 */
 .big-number { 
     font-size: 3.5rem; 
     font-weight: 800; line-height: 1.1; margin-top: 5px;
     background: var(--primary-grad); -webkit-background-clip: text; -webkit-text-fill-color: transparent; 
 }
 .sub-number { 
-    font-size: 2.5rem; /* 讓另外兩個數字也大一點，視覺較平衡 */
+    font-size: 2.5rem; 
     font-weight: 800; color: var(--text-main); line-height: 1.1; margin-top: 5px;
 }
 .label { font-size: 0.9rem; color: var(--text-sub); text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px; }
@@ -101,7 +100,7 @@ body.dark-mode .nav-btn.active { background: rgba(99, 102, 241, 0.15); color: #8
     display: flex; align-items: center; gap: 8px; font-size: 1.1rem; color: var(--text-main); font-weight: 700;
 }
 
-/* [優化] 控制面板按鈕與輸入框 */
+/* Controls */
 .hero-control-row { margin-bottom: 15px; width: 100%; }
 .btn-hero { 
     width: 100%; padding: 20px; border-radius: 14px; border: none; 
@@ -113,9 +112,8 @@ body.dark-mode .nav-btn.active { background: rgba(99, 102, 241, 0.15); color: #8
 }
 .btn-hero:active { transform: scale(0.98); }
 
-/* 次要按鈕列 (上一號/過號) - 強制等寬 */
 .secondary-actions-row { 
-    display: grid; grid-template-columns: 1fr 1fr; /* 1:1 等寬 */
+    display: grid; grid-template-columns: 1fr 1fr; 
     gap: 12px; margin-bottom: 20px; 
 }
 .btn-big { width: 100%; padding: 12px; border-radius: 10px; font-weight: 700; border: none; cursor: pointer; font-size: 1rem; display: flex; align-items: center; justify-content: center; gap: 6px;}
@@ -127,35 +125,30 @@ body.dark-mode .btn-glass { background: rgba(255,255,255,0.05); color: #e2e8f0; 
 .btn-warn { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
 body.dark-mode .btn-warn { background: rgba(239, 68, 68, 0.2); color: #fca5a5; border-color: rgba(239, 68, 68, 0.3); }
 
-/* [優化] 發號管理的大按鈕 (收回/發號) */
 .big-action-row {
     display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px;
 }
 .btn-success { background: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
 body.dark-mode .btn-success { background: rgba(16, 185, 129, 0.2); color: #6ee7b7; border-color: rgba(16, 185, 129, 0.3); }
 
-/* [優化] 輸入框群組 - 強制對齊 */
 .control-group { margin-bottom: 15px; }
 .control-group label { display: block; margin-bottom: 6px; font-size: 0.9rem; font-weight: 600; color: var(--text-sub); }
 
 .input-group { 
     display: flex; gap: 8px; width: 100%; 
-    align-items: stretch; /* 讓高度自動拉伸一致 */
+    align-items: stretch; 
 }
 .input-group.vertical { flex-direction: column; }
-
-/* 快速按鈕群組 (Assign/Jump) */
 .quick-actions { display: flex; gap: 5px; flex-shrink: 0; }
 
 input, textarea, select { 
-    flex: 1; padding: 0 12px; height: 42px; /* 固定高度 */
+    flex: 1; padding: 0 12px; height: 42px; 
     border: 1px solid var(--border-color); border-radius: 8px; 
     background: var(--bg-body); color: var(--text-main); font-size: 1rem;
     min-width: 0; transition: border 0.2s;
 }
 input:focus { border-color: var(--primary); }
 
-/* 次要按鈕 (GO, Fix, Save) */
 .btn-secondary { 
     height: 42px; padding: 0 16px; 
     background: #e0e7ff; color: #4f46e5; font-weight: 700; 
@@ -172,17 +165,23 @@ body.dark-mode .btn-secondary.success { background: rgba(16, 185, 129, 0.2); col
 .btn-reset-single { width: 100%; padding: 10px; border: 1px dashed var(--border-color); background: transparent; color: var(--text-sub); margin-top: auto; cursor: pointer; border-radius: var(--radius-md); transition: 0.2s; font-size: 0.85rem; }
 .btn-reset-single:hover { border-style: solid; color: var(--danger); border-color: var(--danger); }
 
-/* [優化] 過號名單與其他列表 */
+/* Lists & Tables */
 .list-editor ul, .log-list { 
     background: var(--bg-body); border: 1px solid var(--border-color); border-radius: var(--radius-md); 
     max-height: 320px; overflow-y: auto; margin: 0 0 12px 0; padding: 0; 
     list-style: none; flex: 1; min-height: 120px; width: 100%; 
 }
-.list-editor li, .log-list li { 
+
+/* [修正] 連結管理列表版面 */
+.list-editor li { 
     padding: 10px 12px; border-bottom: 1px solid var(--border-color); 
-    display: flex; gap: 8px; align-items: center; justify-content: space-between; 
+    display: flex; gap: 10px; align-items: center; justify-content: space-between; 
+    word-break: break-all; white-space: normal;
 }
-.list-editor li:last-child { border-bottom: none; }
+.list-editor li div { display: flex; flex-direction: column; max-width: calc(100% - 90px); }
+.list-editor li span { font-weight: 600; color: var(--text-main); }
+.list-editor li small { color: var(--text-sub); font-size: 0.8rem; line-height: 1.2; }
+.list-editor li .actions { display: flex; gap: 5px; flex-shrink: 0; }
 
 .log-list li { font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; display: block; }
 .role-table-wrapper { overflow-x: auto; width: 100%; } 
@@ -230,27 +229,22 @@ body.dark-mode .btn-secondary.success { background: rgba(16, 185, 129, 0.2); col
     .sidebar-nav { flex-direction: row; width: 100%; padding: 0; overflow-x: auto; display: flex; }
     .nav-btn { flex-direction: column; justify-content: center; flex: 1; font-size: 0.75rem; border-radius: 0; text-align: center; height: 100%; padding: 5px; white-space: nowrap; gap: 4px; }
     
-    .content-area { 
-        padding: 16px 12px; 
-        padding-bottom: calc(var(--header-h) + 30px + env(safe-area-inset-bottom)); 
-        width: 100%; 
-    }
+    .content-area { padding: 16px 12px; padding-bottom: calc(var(--header-h) + 30px + env(safe-area-inset-bottom)); width: 100%; }
     
     .dashboard-header { grid-template-columns: 1fr 1fr; } 
     .dashboard-item:last-child { grid-column: 1 / -1; }
-    .dashboard-item { min-height: auto; padding: 15px; } /* 手機版縮小儀表板高度 */
+    .dashboard-item { min-height: auto; padding: 15px; }
     
     .card-container { grid-template-columns: 1fr !important; } 
     #section-stats .card-container { grid-template-columns: 1fr !important; }
     
     .mobile-only-settings { display: block; }
-    
-    /* 手機版按鈕堆疊優化 */
     .hero-control-row { margin-bottom: 12px; }
     .secondary-actions-row { gap: 10px; margin-bottom: 15px; }
-    
-    /* 讓 +1 +5 變大一點好按 */
     .quick-actions button { padding: 0 12px; }
+    
+    /* 修正手機版連結管理輸入框 */
+    .input-group.vertical .input-group { display: flex; width: 100%; }
 }
 
 /* Modal */
