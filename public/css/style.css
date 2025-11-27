@@ -1,8 +1,8 @@
 /* ==========================================
- * 前台樣式 (style.css) - v62.1 Dark Mode Harmony
+ * 前台樣式 (style.css) - v63.0 Multi-Column Tags
  * ========================================== */
 :root {
-    /* [Light Mode - 保持高對比配置] */
+    /* [Light Mode - 高對比清晰版] */
     --primary: #4f46e5;       
     --primary-dark: #4338ca;  
     --primary-soft: #eef2ff;  
@@ -27,27 +27,27 @@
 }
 
 body.dark-mode {
-    /* [Dark Mode - 協調優化版] */
-    --bg-body: #020617;       /* Slate 950 (更深邃的背景，製造沉浸感) */
-    --surface: rgba(30, 41, 59, 0.75); /* Slate 800 (帶透明度，製造玻璃感) */
+    /* [Dark Mode - 深色協調版] */
+    --bg-body: #020617;       
+    --surface: rgba(30, 41, 59, 0.75); 
     
-    --text-main: #e2e8f0;     /* Slate 200 (柔和的白，不刺眼) */
-    --text-sub: #94a3b8;      /* Slate 400 (冷灰色) */
-    --text-light: #64748b;    /* Slate 500 */
+    --text-main: #e2e8f0;     
+    --text-sub: #94a3b8;      
+    --text-light: #64748b;    
     
-    --border: rgba(255, 255, 255, 0.1); /* 纖細的白色邊框光暈 */
+    --border: rgba(255, 255, 255, 0.1); 
     
-    --primary: #818cf8;       /* Indigo 400 (明亮的靛藍，帶螢光感) */
-    --primary-dark: #6366f1;  /* Indigo 500 */
-    --primary-soft: rgba(99, 102, 241, 0.15); /* 深色背景下的柔和高光 */
+    --primary: #818cf8;       
+    --primary-dark: #6366f1;  
+    --primary-soft: rgba(99, 102, 241, 0.15); 
     
-    --accent-bg-red: rgba(225, 29, 72, 0.15); /* 深紅透明底 */
-    --accent-red: #fb7185;    /* Rose 400 (粉紅光感) */
+    --accent-bg-red: rgba(225, 29, 72, 0.15); 
+    --accent-red: #fb7185;    
     
-    --shadow-card: 0 10px 30px -10px rgba(0, 0, 0, 0.7); /* 深沈的陰影，增加浮空感 */
+    --shadow-card: 0 10px 30px -10px rgba(0, 0, 0, 0.7); 
     
     --num-gradient-start: #ffffff; 
-    --num-gradient-end: #818cf8; /* 白到紫的發光漸層 */
+    --num-gradient-end: #818cf8; 
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -67,7 +67,6 @@ body {
 .orb-1 { width: 300px; height: 300px; background: radial-gradient(circle, #c7d2fe 0%, transparent 70%); top: -50px; left: -50px; }
 .orb-2 { width: 250px; height: 250px; background: radial-gradient(circle, #e2e8f0 0%, transparent 70%); bottom: -50px; right: -50px; }
 
-/* 深色模式下的光暈調整 (更隱晦) */
 body.dark-mode .orb { opacity: 0.15; filter: blur(120px); }
 body.dark-mode .orb-1 { background: radial-gradient(circle, #4f46e5 0%, transparent 60%); }
 body.dark-mode .orb-2 { background: radial-gradient(circle, #3b82f6 0%, transparent 60%); }
@@ -100,7 +99,6 @@ body.dark-mode .orb-2 { background: radial-gradient(circle, #3b82f6 0%, transpar
 .btn-icon, .lang-switch { background: rgba(255,255,255,0.8); border: 1px solid var(--border); border-radius: 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text-main); font-size: 1.1rem; transition: 0.2s; }
 .lang-switch { width: auto; border-radius: 20px; padding: 0 12px; font-size: 0.85rem; font-weight: 700; }
 
-/* 深色模式 Header 按鈕 */
 body.dark-mode .status-indicator { background: rgba(15, 23, 42, 0.6); border-color: rgba(255,255,255,0.1); color: #cbd5e1; }
 body.dark-mode .btn-icon, body.dark-mode .lang-switch { background: rgba(30, 41, 59, 0.5); color: #e2e8f0; border-color: rgba(255,255,255,0.1); }
 body.dark-mode .btn-icon:hover { background: rgba(255,255,255,0.1); }
@@ -121,7 +119,6 @@ body.dark-mode .btn-icon:hover { background: rgba(255,255,255,0.1); }
     color: var(--primary);
     filter: drop-shadow(0 4px 6px rgba(0,0,0,0.1)); 
 }
-/* 深色模式下給數字加一點發光感 */
 body.dark-mode #number { filter: drop-shadow(0 0 15px rgba(129, 140, 248, 0.3)); }
 
 @keyframes pop-in { 0% { transform: scale(0.9); opacity: 0.8; } 60% { transform: scale(1.05); } 100% { transform: scale(1); opacity: 1; } }
@@ -159,7 +156,6 @@ body.dark-mode .hero-stats-grid { border: 1px solid rgba(255,255,255,0.05); }
     transition: transform 0.1s, box-shadow 0.2s;
     position: relative; overflow: hidden;
 }
-/* 深色模式按鈕 */
 body.dark-mode .btn-main { 
     background: linear-gradient(135deg, #6366f1 0%, #4338ca 100%);
     box-shadow: 0 0 20px rgba(99, 102, 241, 0.2);
@@ -179,9 +175,8 @@ body.dark-mode .btn-main {
 }
 .fancy-input:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 0 3px var(--primary-soft); }
 
-/* 深色模式輸入框：凹槽感 */
 body.dark-mode .fancy-input { 
-    background: #0f172a; /* 深色背景 */
+    background: #0f172a; 
     border-color: #334155; 
     color: #f1f5f9;
 }
@@ -195,7 +190,6 @@ body.dark-mode .btn-track { background: #334155; color: #f1f5f9; border: 1px sol
     background: var(--text-main); color: white; padding: 20px; border-radius: 18px; margin-top: 16px; 
     box-shadow: 0 10px 25px -5px rgba(0,0,0,0.2); position: relative; overflow: hidden;
 }
-/* 深色模式卡片：深海藍漸層 */
 body.dark-mode .my-ticket-card { 
     background: linear-gradient(135deg, #1e3a8a 0%, #172554 100%); 
     border: 1px solid rgba(255,255,255,0.1);
@@ -224,23 +218,27 @@ body.dark-mode .my-num { color: #ffffff; text-shadow: 0 0 20px rgba(255,255,255,
 
 .scroll-view { overflow-y: auto; max-height: 150px; -webkit-overflow-scrolling: touch; }
 
-/* Tag List (Grid Layout) */
+/* [重要修改] Tag List - 多列顯示 */
 .tag-list { 
-    display: grid; 
-    grid-template-columns: repeat(auto-fill, minmax(50px, 1fr)); 
-    gap: 8px; 
+    display: flex;             /* 改用 Flexbox */
+    flex-wrap: wrap;           /* 允許自動換行，讓號碼並排 */
+    gap: 8px;                  /* 標籤間距 */
     list-style: none; padding: 0; margin: 0; 
 }
 .tag-list li { 
     font-size: 0.85rem; font-weight: 700; color: var(--accent-red); 
     background: var(--accent-bg-red); 
-    padding: 6px 4px; 
+    padding: 5px 12px; 
     border-radius: 12px; 
     border: 1px solid rgba(225, 29, 72, 0.2);
-    width: 100%; display: flex; justify-content: center; align-items: center;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    
+    /* [重要修改] 寬度自適應 */
+    width: auto;               /* 寬度隨數字長度變化 */
+    min-width: 50px;           /* 設定最小寬度保持整齊 */
+    flex: 0 0 auto;            /* 不要強制撐滿整行 */
+    display: flex; justify-content: center; align-items: center;
+    white-space: nowrap;
 }
-/* 深色模式標籤優化 */
 body.dark-mode .tag-list li { 
     background: rgba(225, 29, 72, 0.1); 
     color: #fda4af; 
