@@ -7,13 +7,6 @@
 <script src="/socket.io/socket.io.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/admin.css"> 
-<style>
-/* 避免表格破版 */
-.role-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-top: 10px; table-layout: fixed; }
-.role-table th, .role-table td { padding: 6px; border: 1px solid var(--border-color); text-align: center; word-wrap: break-word; }
-.role-table th { background: var(--bg-body); font-weight: 600; color: var(--text-sub); }
-.role-chk { width: 16px; height: 16px; accent-color: var(--primary); }
-</style>
 </head>
 <body>
 
@@ -153,7 +146,7 @@
                     <div class="admin-card">
                         <h3><span class="card-icon">📋</span> <span data-i18n="card_logs">操作日誌</span></h3>
                         <div class="control-group admin-log-container" style="flex:1; display:flex; flex-direction:column; min-height: 0;">
-                            <ul id="admin-log-ui" class="log-list" style="flex:1;"><li>Wait...</li></ul>
+                            <ul id="admin-log-ui" class="log-list"><li>Wait...</li></ul>
                         </div>
                         <button id="btn-clear-logs" class="btn-reset-single" data-i18n="btn_clear_logs">清除日誌</button>
                     </div>
