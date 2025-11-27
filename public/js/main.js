@@ -1,5 +1,5 @@
 /* ==========================================
- * 前端邏輯 (main.js) - v56.2 Broadcast Fix
+ * 前端邏輯 (main.js) - v57.0 Optimized
  * ========================================== */
 const $ = i => document.getElementById(i);
 const on = (el, evt, fn) => el?.addEventListener(evt, fn);
@@ -14,13 +14,12 @@ const i18n = {
 // --- State ---
 let lang = localStorage.getItem('callsys_lang')||'zh-TW', T = i18n[lang];
 let myTicket = localStorage.getItem('callsys_ticket'), sysMode = 'ticketing';
-// [修正] sndEnabled 預設為 true，避免初始無聲
 let sndEnabled = true, localMute = false, avgTime = 0, lastUpd = null, audioCtx = null;
 let connTimer;
+let wakeLock = null; // Screen Wake Lock
 const socket = io({ autoConnect: false, reconnection: true });
 
 // --- Core Helpers ---
-// [修正] 增加 duration 參數，預設 3000ms
 const toast = (msg, type='info', duration=3000) => {
     const c = $('toast-container') || document.body.appendChild(Object.assign(document.createElement('div'),{id:'toast-container'}));
     const el = document.createElement('div'); el.className = `toast-message ${type} show`; el.textContent = msg;
@@ -28,26 +27,50 @@ const toast = (msg, type='info', duration=3000) => {
     setTimeout(() => { el.classList.remove('show'); setTimeout(()=>el.remove(), 300); }, duration);
 };
 
+// [新增] 螢幕恆亮 (防止斷線)
+const toggleWakeLock = async (active) => {
+    if ('wakeLock' in navigator) {
+        try {
+            if (active && !wakeLock) {
+                wakeLock = await navigator.wakeLock.request('screen');
+                wakeLock.addEventListener('release', () => { wakeLock = null; });
+                console.log("Wake Lock active");
+            } else if (!active && wakeLock) {
+                await wakeLock.release();
+                wakeLock = null;
+                console.log("Wake Lock released");
+            }
+        } catch (err) { console.error("Wake Lock error:", err); }
+    }
+};
+
+document.addEventListener('visibilitychange', () => {
+    if (wakeLock !== null && document.visibilityState === 'visible') toggleWakeLock(true);
+});
+
+// [優化] iOS 音效解鎖
 const unlockAudio = () => {
     if (!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
-    if (audioCtx.state === 'suspended') audioCtx.resume().then(() => { updateMuteUI(false); });
-    // [新增] 嘗試預載入語音列表，解決部分瀏覽器第一次無聲問題
+    if (audioCtx.state === 'suspended') {
+        // 播放極短靜音 Buffer 來解鎖 iOS AudioContext
+        const buffer = audioCtx.createBuffer(1, 1, 22050);
+        const source = audioCtx.createBufferSource();
+        source.buffer = buffer;
+        source.connect(audioCtx.destination);
+        source.start(0);
+        audioCtx.resume().then(() => updateMuteUI(false));
+    }
     if ('speechSynthesis' in window) window.speechSynthesis.getVoices();
 };
 
 const speak = (txt) => {
-    // [修正] 移除 ttsOk 檢查，只要沒靜音且系統允許就嘗試播放
     if(!localMute && sndEnabled && 'speechSynthesis' in window) {
         window.speechSynthesis.cancel(); 
         const u = new SpeechSynthesisUtterance(txt); 
-        u.lang = 'zh-TW'; 
-        u.rate = 0.9; 
-        
-        // [新增] 強制指定中文語音 (如果有的話)，提升穩定性
+        u.lang = 'zh-TW'; u.rate = 0.9; 
         const voices = window.speechSynthesis.getVoices();
         const zhVoice = voices.find(v => v.lang.includes('zh') || v.lang.includes('TW'));
         if (zhVoice) u.voice = zhVoice;
-
         window.speechSynthesis.speak(u);
     }
 };
@@ -74,7 +97,13 @@ function renderMode() {
     show($("ticketing-mode-container"), isT && !hasT);
     show($("input-mode-container"), !isT && !hasT);
     show($("my-ticket-view"), hasT);
-    if(hasT) { $("my-ticket-num").textContent = myTicket; updateTicket(parseInt($("number").textContent)||0); }
+    if(hasT) { 
+        $("my-ticket-num").textContent = myTicket; 
+        updateTicket(parseInt($("number").textContent)||0); 
+        toggleWakeLock(true); // 有號碼時保持喚醒
+    } else {
+        toggleWakeLock(false);
+    }
 }
 
 function updateTicket(curr) {
@@ -83,7 +112,6 @@ function updateTicket(curr) {
     $("ticket-waiting-count").textContent = diff > 0 ? diff : (diff===0 ? "0" : "-");
     $("ticket-status-text").textContent = diff > 0 ? T.wait.replace("%s",diff) : (diff===0 ? T.arr : T.pass);
     
-    // ETA Display
     if(diff > 0 && avgTime >= 0) { 
         const min = Math.ceil(diff * avgTime);
         const etaTime = new Date(Date.now() + min * 60000);
@@ -125,14 +153,21 @@ socket.on("reconnect_attempt", a => $("status-bar").textContent = T.retry.replac
 
 socket.on("updateQueue", d => {
     if($("issued-number-main")) $("issued-number-main").textContent = d.issued;
-    if($("number").textContent !== String(d.current)) {
+    const numEl = $("number");
+    if(numEl.textContent !== String(d.current)) {
         playDing(); setTimeout(()=>speak(`現在號碼，${d.current}號`), 800);
-        $("number").textContent = d.current; document.title = `${d.current} - Queue`;
+        
+        // [新增] 數字跳動動畫
+        numEl.classList.remove("number-change-anim");
+        void numEl.offsetWidth; // Trigger reflow
+        numEl.classList.add("number-change-anim");
+        
+        numEl.textContent = d.current; 
+        document.title = `${d.current} - Queue`;
     }
     updateTicket(d.current);
 });
 
-// [修正] 廣播時播放語音，並顯示 10 秒鐘的 Toast
 socket.on("adminBroadcast", m => { 
     if(!localMute) speak(m); 
     toast(T.notice+m, 'info', 10000); 
@@ -189,7 +224,6 @@ on($("language-selector"), "change", e => {
 // Init
 document.addEventListener("DOMContentLoaded", () => {
     $("language-selector").value = lang; applyText(); renderMode(); socket.connect();
-    // [修正] 頁面載入後，任何點擊都嘗試解鎖音效，但不強制只執行一次 (確保 SpeechSynthesis 有機會被觸發)
     document.body.addEventListener('click', unlockAudio);
     if($("qr-code-placeholder")) try{ new QRCode($("qr-code-placeholder"), {text:location.href, width:120, height:120}); }catch(e){}
 });
