@@ -8,7 +8,6 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/admin.css"> 
 <style>
-/* 新增：權限編輯表格樣式 */
 .role-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-top: 10px; }
 .role-table th, .role-table td { padding: 6px; border: 1px solid #e5e7eb; text-align: center; }
 .role-table th { background: #f9fafb; font-weight: 600; color: var(--text-sub); }
@@ -121,7 +120,7 @@
                 <div class="card-wrapper">
                     <div class="admin-card">
                         <h3><span class="card-icon">📊</span> <span data-i18n="card_stats">流量分析</span></h3>
-                        <div style="display:flex; justify-content:space-between; align-items:flex-end;">
+                        <div class="stats-header">
                             <div><p style="margin:0; color:var(--text-sub);" data-i18n="lbl_today">今日人次</p><span id="stats-today-count" style="font-size:2.2rem; font-weight:800; color:var(--primary);">0</span></div>
                             <div class="input-group" style="width:auto;"><button id="btn-refresh-stats" class="btn-secondary" data-i18n="btn_refresh">重整</button><button id="btn-export-csv" class="btn-success btn-secondary" style="display:none; color:white;">CSV</button></div>
                         </div>
