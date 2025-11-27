@@ -1,5 +1,5 @@
 /* ==========================================
- * 伺服器 (index.js) - v66.0 Stats Fixed
+ * 伺服器 (index.js) - v67.0 Manual Stats Fixed
  * ========================================== */
 require('dotenv').config();
 const { Server } = require("http");
@@ -136,25 +136,43 @@ async function handleControl(type, { body, user }) {
         } else { newNum = await redis.decrIfPositive(KEYS.CURRENT); logMsg = `號碼回退為 ${newNum}`; }
         checkLineNotify(newNum).catch(()=>{});
         
-        // [修正] 叫號不影響統計，因為發號時已經算過一次了
     } else if(type === 'issue') {
         if(direction==='next') { 
             newNum = await redis.incr(KEYS.ISSUED); logMsg = `手動發號 ${newNum}`; 
-            // [修正] 發號時統計 +1
             await redis.hincrby(`${KEYS.HOURLY}${dateStr}`, hour, 1);
             await redis.expire(`${KEYS.HOURLY}${dateStr}`, 172800);
         }
         else if(issued > curr) { 
             newNum = await redis.decr(KEYS.ISSUED); logMsg = `手動回退 ${newNum}`; 
-            // [修正] 回退發號統計 -1
             await redis.hincrby(`${KEYS.HOURLY}${dateStr}`, hour, -1);
         }
         else return { error: "錯誤" };
     } else if(type.startsWith('set')) {
         newNum = parseInt(number); if(isNaN(newNum)||newNum<0) return { error: "無效號碼" };
         if(type==='set_issue' && newNum===0) { await performReset(user.nickname); return {}; }
-        if(type==='set_call') { await redis.mset(KEYS.CURRENT, newNum, ...(newNum>issued?[KEYS.ISSUED, newNum]:[])); logMsg = `設定叫號 ${newNum}`; checkLineNotify(newNum).catch(()=>{}); }
-        else { await redis.set(KEYS.ISSUED, newNum); logMsg = `修正發號 ${newNum}`; }
+        
+        // [修正] 手動設定發號時，自動補齊統計差額
+        if(type==='set_issue') {
+            const diff = newNum - issued;
+            if (diff !== 0) {
+                await redis.hincrby(`${KEYS.HOURLY}${dateStr}`, hour, diff);
+                await redis.expire(`${KEYS.HOURLY}${dateStr}`, 172800);
+            }
+            await redis.set(KEYS.ISSUED, newNum); 
+            logMsg = `修正發號 ${newNum}`; 
+        }
+        
+        // [修正] 手動設定叫號時，如果超過發號，自動補齊統計
+        if(type==='set_call') { 
+            if (newNum > issued) {
+                const diff = newNum - issued;
+                await redis.hincrby(`${KEYS.HOURLY}${dateStr}`, hour, diff);
+                await redis.expire(`${KEYS.HOURLY}${dateStr}`, 172800);
+            }
+            await redis.mset(KEYS.CURRENT, newNum, ...(newNum>issued?[KEYS.ISSUED, newNum]:[])); 
+            logMsg = `設定叫號 ${newNum}`; 
+            checkLineNotify(newNum).catch(()=>{}); 
+        }
     }
 
     if(logMsg) {
@@ -214,7 +232,7 @@ app.post("/api/ticket/take", rateLimit({windowMs:36e5,max:20}), asyncHandler(asy
     const t = await redis.incr(KEYS.ISSUED); 
     const { dateStr, hour } = getTWTime();
     
-    // [修正] 線上取號時，統計 +1
+    // 取號統計 +1
     await redis.hincrby(`${KEYS.HOURLY}${dateStr}`, hour, 1);
     await redis.expire(`${KEYS.HOURLY}${dateStr}`, 172800);
 
@@ -232,7 +250,7 @@ app.post("/api/control/pass-current", auth, checkPermission('pass'), asyncHandle
     await redis.zadd(KEYS.PASSED, c, c); const act = (await redis.safeNextNumber(KEYS.CURRENT, KEYS.ISSUED) === -1 ? c : await redis.get(KEYS.CURRENT));
     
     const {dateStr, hour} = getTWTime(); 
-    // [修正] 過號時，統計 -1
+    // 過號統計 -1
     await redis.hincrby(`${KEYS.HOURLY}${dateStr}`, hour, -1);
     
     await dbRun(`INSERT INTO history (date_str, timestamp, number, action, operator, wait_time_min) VALUES (?, ?, ?, ?, ?, ?)`, [dateStr, Date.now(), c, 'pass', req.user.nickname, await calcWaitTime()]);
@@ -372,4 +390,4 @@ io.on("connection", async s => {
     s.on("disconnect", () => { setTimeout(broadcastOnlineAdmins, 1000); });
 });
 
-server.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server v66.0 running on ${PORT}`));
+server.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server v67.0 running on ${PORT}`));
