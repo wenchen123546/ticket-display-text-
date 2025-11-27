@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 <title>管理後台</title>
 <script src="/socket.io/socket.io.js"></script>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/admin.css"> 
 <style>
 .role-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-top: 10px; }
-.role-table th, .role-table td { padding: 6px; border: 1px solid #e5e7eb; text-align: center; }
-.role-table th { background: #f9fafb; font-weight: 600; color: var(--text-sub); }
-.role-chk { width: 16px; height: 16px; }
+.role-table th, .role-table td { padding: 6px; border: 1px solid var(--border-color); text-align: center; }
+.role-table th { background: var(--bg-body); font-weight: 600; color: var(--text-sub); }
+.role-chk { width: 16px; height: 16px; accent-color: var(--primary); }
 </style>
 </head>
 <body>
@@ -34,7 +34,10 @@
 <div id="admin-panel" style="display:none;">
     
     <aside class="sidebar">
-        <div class="sidebar-header"><div class="logo">⚡ <span data-i18n="admin_panel">管理後台</span></div><div id="sidebar-user-info">Admin</div></div>
+        <div class="sidebar-header">
+            <div class="logo">⚡ <span data-i18n="admin_panel">管理後台</span></div>
+            <div id="sidebar-user-info">Admin</div>
+        </div>
         <nav class="sidebar-nav">
             <button class="nav-btn active" data-target="section-live"><span class="nav-icon">🎮</span> <span data-i18n="nav_live">現場控台</span></button>
             <button class="nav-btn" data-target="section-stats"><span class="nav-icon">📈</span> <span data-i18n="nav_stats">數據報表</span></button>
@@ -42,8 +45,11 @@
             <button class="nav-btn" data-target="section-line"><span class="nav-icon">💬</span> <span data-i18n="nav_line">LINE設定</span></button>
         </nav>
         <div class="sidebar-footer">
-            <select id="admin-lang-selector" class="lang-select"><option value="zh-TW">繁體中文</option><option value="en">English</option></select>
-            <button id="btn-logout" class="btn-reset-single" style="margin-top:10px; border:none; color:var(--danger);" data-i18n="logout">登出</button>
+            <div style="display:flex; gap:10px; margin-bottom:10px;">
+                <button id="admin-theme-toggle" class="btn-secondary" style="flex:1;">🌙</button>
+                <select id="admin-lang-selector" class="lang-select" style="flex:2;"><option value="zh-TW">繁體中文</option><option value="en">English</option></select>
+            </div>
+            <button id="btn-logout" class="btn-reset-single" style="border:none; color:var(--danger);" data-i18n="logout">登出</button>
         </div>
     </aside>
 
@@ -51,30 +57,43 @@
         
         <div id="section-live" class="section-group active">
             <div class="dashboard-header">
-                <div class="dashboard-item"><span class="label" data-i18n="dash_curr">目前叫號</span><span class="value big-number" id="number">0</span></div>
-                <div class="dashboard-item"><span class="label" data-i18n="dash_issued">已發號至</span><span class="value sub-number" id="issued-number">0</span></div>
-                <div class="dashboard-item"><span class="label" data-i18n="dash_wait">等待組數</span><span class="value sub-number" id="waiting-count" style="color:var(--warning);">0</span></div>
+                <div class="dashboard-item main-stat">
+                    <span class="label" data-i18n="dash_curr">目前叫號</span>
+                    <span class="value big-number" id="number">0</span>
+                </div>
+                <div class="dashboard-item">
+                    <span class="label" data-i18n="dash_issued">已發號至</span>
+                    <span class="value sub-number" id="issued-number">0</span>
+                </div>
+                <div class="dashboard-item">
+                    <span class="label" data-i18n="dash_wait">等待組數</span>
+                    <span class="value sub-number" id="waiting-count" style="color:var(--warning);">0</span>
+                </div>
             </div>
 
             <div class="card-container">
-                <div class="card-wrapper">
-                    <div class="admin-card">
-                        <h3><span class="card-icon">📢</span> <span data-i18n="card_call">叫號控制</span></h3>
-                        <div class="big-action-row">
-                            <button id="btn-call-prev" class="btn-glass btn-big" data-i18n="btn_prev">◀ 上一號</button>
-                            <button id="btn-mark-passed" class="btn-warn btn-big" data-i18n="btn_pass">過號</button>
-                            <button id="btn-call-next" class="btn-big" id="hero-btn" data-i18n="btn_next">下一號 ▶</button>
+                <div class="card-wrapper full-width-mobile">
+                    <div class="admin-card control-deck">
+                        <h3><span class="card-icon">📢</span> <span data-i18n="card_call">指揮中心</span></h3>
+                        
+                        <div class="hero-control-row">
+                             <button id="btn-call-next" class="btn-hero" data-i18n="btn_next">下一號 ▶</button>
                         </div>
-                        <div class="control-group">
+
+                        <div class="secondary-actions-row">
+                            <button id="btn-call-prev" class="btn-glass" data-i18n="btn_prev">◀ 上一號</button>
+                            <button id="btn-mark-passed" class="btn-warn" data-i18n="btn_pass">過號</button>
+                        </div>
+
+                        <div class="control-group compact-group">
                             <label data-i18n="lbl_assign">指定 / 插隊</label>
-                            <div class="quick-actions">
-                                <button class="btn-secondary" id="quick-add-1">+1</button>
-                                <button class="btn-secondary" id="quick-add-5">+5</button>
-                                <button class="btn-secondary" id="quick-clear" style="background:#f3f4f6;">C</button>
-                            </div>
                             <div class="input-group">
+                                <div class="quick-actions">
+                                    <button class="btn-secondary" id="quick-add-1">+1</button>
+                                    <button class="btn-secondary" id="quick-add-5">+5</button>
+                                </div>
                                 <input type="number" id="manualNumber" placeholder="#" inputmode="numeric" pattern="\d*" min="0" oninput="validity.valid||(value='');">
-                                <button id="setNumber" class="btn-secondary" data-i18n="btn_exec">執行</button>
+                                <button id="setNumber" class="btn-secondary success" data-i18n="btn_exec">GO</button>
                             </div>
                         </div>
                         <button id="resetNumber" class="btn-reset-single" data-i18n="btn_reset_call">↺ 重置叫號</button>
@@ -83,7 +102,7 @@
 
                 <div class="card-wrapper">
                     <div class="admin-card">
-                        <h3><span class="card-icon">🎟️</span> <span data-i18n="card_issue">發號機</span></h3>
+                        <h3><span class="card-icon">🎟️</span> <span data-i18n="card_issue">發號管理</span></h3>
                         <div class="big-action-row">
                             <button id="btn-issue-prev" class="btn-glass btn-big" data-i18n="btn_recall">➖ 收回</button>
                             <button id="btn-issue-next" class="btn-success btn-big" data-i18n="btn_issue">發號 ➕</button>
@@ -117,20 +136,19 @@
 
         <div id="section-stats" class="section-group">
             <div class="card-container">
-                <div class="card-wrapper">
+                <div class="card-wrapper full-width-card">
                     <div class="admin-card">
                         <h3><span class="card-icon">📊</span> <span data-i18n="card_stats">流量分析</span></h3>
                         <div class="stats-header">
                             <div><p style="margin:0; color:var(--text-sub);" data-i18n="lbl_today">今日人次</p><span id="stats-today-count" style="font-size:2.2rem; font-weight:800; color:var(--primary);">0</span></div>
                             <div class="input-group" style="width:auto;"><button id="btn-refresh-stats" class="btn-secondary" data-i18n="btn_refresh">重整</button><button id="btn-export-csv" class="btn-success btn-secondary" style="display:none; color:white;">CSV</button></div>
                         </div>
-                        <div id="hourly-chart" class="chart-container"><p style="margin:auto; color:#ccc;">Loading...</p></div>
-                        <ul id="stats-list-ui" class="log-list" style="margin-top:10px; flex:1;"><li>Loading...</li></ul>
-                        <button id="btn-clear-stats" class="btn-reset-single" data-i18n="btn_clear_stats">⚠ 清空統計</button>
+                        <div id="hourly-chart" class="chart-container"><p style="margin:auto; color:var(--text-sub);">Loading...</p></div>
+                        <button id="btn-clear-stats" class="btn-reset-single" style="margin-top:15px;" data-i18n="btn_clear_stats">🗑️ 清空統計</button>
                     </div>
                 </div>
                 
-                <div class="card-wrapper">
+                <div class="card-wrapper full-width-card">
                     <div class="admin-card">
                         <h3><span class="card-icon">📋</span> <span data-i18n="card_logs">操作日誌</span></h3>
                         <div class="control-group admin-log-container" style="flex:1; display:flex; flex-direction:column;">
@@ -173,12 +191,12 @@
                                 <label><input type="radio" name="systemMode" value="input"> <span data-i18n="mode_manual">手動輸入</span></label>
                             </div>
                         </div>
-                        <button id="resetAll" class="btn-reset-single" data-i18n="btn_reset_all">💥 全域重置</button>
+                        <button id="resetAll" class="btn-reset-single" style="color:var(--danger); border-color:var(--danger);" data-i18n="btn_reset_all">💥 全域重置</button>
 
                         <div class="mobile-only-settings">
-                            <div class="control-group">
-                                <label>Language / 語言</label>
-                                <select id="admin-lang-selector-mobile" class="lang-select">
+                            <div class="control-group" style="display:flex; gap:10px;">
+                                <button id="admin-theme-toggle-mobile" class="btn-secondary" style="flex:1;">🌙 Theme</button>
+                                <select id="admin-lang-selector-mobile" class="lang-select" style="flex:2;">
                                     <option value="zh-TW">繁體中文</option>
                                     <option value="en">English</option>
                                 </select>
@@ -224,7 +242,7 @@
                                 </div>
                                 <div class="input-group">
                                     <input type="password" id="new-user-password" data-i18n-ph="ph_password" placeholder="密碼">
-                                    <select id="new-user-role" style="padding:10px; border-radius:6px; background:#f9fafb; border:1px solid #e5e7eb;">
+                                    <select id="new-user-role" class="role-select">
                                         <option value="VIEWER">Viewer</option>
                                         <option value="OPERATOR" selected>Operator</option>
                                         <option value="MANAGER">Manager</option>
@@ -235,12 +253,11 @@
                             </div>
                         </div>
                         
-                        <div id="role-editor-container" style="margin-top:20px; border-top:1px dashed #e5e7eb; padding-top:15px; display:none;">
-                            <label style="font-weight:bold; color:var(--text-main);">權限設定 (Super Admin Only)</label>
-                            <div id="role-editor-content">Loading permissions...</div>
+                        <div id="role-editor-container" style="margin-top:20px; border-top:1px dashed var(--border-color); padding-top:15px; display:none;">
+                            <label style="font-weight:bold; color:var(--text-main);">權限設定 (Super Admin)</label>
+                            <div id="role-editor-content">Loading...</div>
                             <button id="btn-save-roles" class="btn-secondary success" style="width:100%; margin-top:10px;">儲存權限變更</button>
                         </div>
-
                     </div>
                 </div>
             </div>
@@ -256,7 +273,7 @@
                             <div class="sec-content">
                                 <span class="sec-title">後台安全鎖</span>
                                 <div class="input-group">
-                                    <input type="text" id="line-unlock-pwd" placeholder="設定 Line 解鎖密碼..." style="background:white;">
+                                    <input type="text" id="line-unlock-pwd" placeholder="設定 Line 解鎖密碼..." style="background:var(--bg-body);">
                                     <button id="btn-save-unlock-pwd" class="btn-secondary" style="background:#fff7ed; color:#c2410c; border:1px solid #fed7aa;" data-i18n="btn_save">儲存</button>
                                 </div>
                             </div>
