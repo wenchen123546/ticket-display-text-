@@ -1,5 +1,5 @@
 /* ==========================================
- * 後台邏輯 (admin.js) - v69.0 Fixed UI Logic
+ * 後台邏輯 (admin.js) - v70.0 UI Fixed
  * ========================================== */
 const $ = i => document.getElementById(i);
 const $$ = s => document.querySelectorAll(s);
@@ -152,59 +152,106 @@ socket.on("updatePublicStatus", b => { if($("public-toggle")) $("public-toggle")
 socket.on("updateSoundSetting", b => { if($("sound-toggle")) $("sound-toggle").checked=b; });
 socket.on("updateSystemMode", m => { currentSystemMode = m; $$('input[name="systemMode"]').forEach(r => r.checked = (r.value === m)); });
 
+// [UI 修正] 渲染連結管理列表
 socket.on("updateFeaturedContents", list => {
     const ul = $("featured-list-ui"); if(!ul) return; ul.innerHTML="";
     if(!list) return;
     list.forEach(item => {
-        const li = mk("li"), view = mk("div", null, null, {style:"display:flex; justify-content:space-between; width:100%; align-items:center;"});
-        const info = mk("div", null, null, {style:"display:flex; flex-direction:column; width:100%;"});
-        info.append(mk("span", null, item.linkText, {style:"font-weight:600"}), mk("small", null, item.linkUrl, {style:"color:var(--text-sub);"}));
-        const editDiv = mk("div", null, null, {style:"display:none; width:100%; flex-direction:column; gap:5px;"});
-        const i1 = mk("input", null, null, {value:item.linkText}), i2 = mk("input", null, null, {value:item.linkUrl});
-        const save = mk("button", "btn-secondary success", T.save, {onclick: async()=>{ if(await req("/api/featured/edit",{oldLinkText:item.linkText,oldLinkUrl:item.linkUrl,newLinkText:i1.value,newLinkUrl:i2.value})) toast(T.saved,"success"); }});
-        const acts = mk("div", null, null, {style:"display:flex; gap:5px; flex-shrink:0;"});
-        acts.append(mk("button", "btn-secondary", T.edit, {onclick:()=>{view.style.display="none"; editDiv.style.display="flex";}}), mk("button", "btn-secondary", T.del, {onclick:()=>req("/api/featured/remove", item)}));
-        editDiv.append(i1, i2, save, mk("button", "btn-secondary", T.cancel, {onclick:()=>{editDiv.style.display="none"; view.style.display="flex";}}));
-        view.append(info, acts); li.append(view, editDiv); ul.appendChild(li);
+        const li = mk("li", "list-item");
+        
+        // View Mode
+        const viewInfo = mk("div", "list-info");
+        viewInfo.innerHTML = `<span class="list-main-text">${item.linkText}</span><span class="list-sub-text">${item.linkUrl}</span>`;
+        
+        const actions = mk("div", "list-actions");
+        const btnEdit = mk("button", "btn-secondary", T.edit, { onclick:()=>{ li.classList.add('editing'); form.style.display="flex"; viewInfo.style.display="none"; actions.style.display="none"; } });
+        const btnDel = mk("button", "btn-secondary", T.del, { onclick:()=>req("/api/featured/remove", item) });
+        actions.append(btnEdit, btnDel);
+
+        // Edit Mode
+        const form = mk("div", null, null, { style: "display:none; width:100%; gap:8px; flex-wrap:wrap;" });
+        const i1 = mk("input", null, null, {value:item.linkText, style:"flex:1; min-width:100px;"});
+        const i2 = mk("input", null, null, {value:item.linkUrl, style:"flex:2; min-width:150px;"});
+        const btnSave = mk("button", "btn-secondary success", T.save, { onclick: async()=>{ if(await req("/api/featured/edit",{oldLinkText:item.linkText,oldLinkUrl:item.linkUrl,newLinkText:i1.value,newLinkUrl:i2.value})) toast(T.saved,"success"); }});
+        const btnCancel = mk("button", "btn-secondary", T.cancel, { onclick:()=>{ form.style.display="none"; viewInfo.style.display="flex"; actions.style.display="flex"; } });
+        form.append(i1, i2, btnSave, btnCancel);
+
+        li.append(viewInfo, actions, form);
+        ul.appendChild(li);
     });
 });
-socket.on("updateOnlineAdmins", list => {
-    const ul = $("online-users-list"); if(!ul) return; if(!list || !list.length) { ul.innerHTML = `<li><small style="color:var(--text-sub)">等待連線...</small></li>`; return; }
-    ul.innerHTML = ""; list.sort((a,b)=>(a.role==='super'?-1:1)).forEach(u => ul.appendChild(mk("li", null, `🟢 ${u.nickname} (${u.username})`)));
-});
+
+// [UI 修正] 渲染過號名單
 socket.on("updatePassed", list => {
     const ul = $("passed-list-ui"); if(!ul) return; ul.innerHTML="";
     if(!list) return;
     list.forEach(n => {
-        const li = mk("li"), div = mk("div", null, null, {style:"display:flex; gap:10px; align-items:center;"});
-        div.append(mk("span", null, n, {style:"font-weight:bold"}), mk("button", "btn-secondary", T.recall, {onclick:()=>{ if(confirm(`Recall ${n}?`)) req("/api/control/recall-passed",{number:n}); }}));
-        const del = mk("button", "btn-secondary", T.del); confirmBtn(del, T.del, ()=>req("/api/passed/remove",{number:n}));
-        li.append(div, del); ul.appendChild(li);
+        const li = mk("li", "list-item");
+        const info = mk("div", "list-info");
+        info.innerHTML = `<span class="list-main-text" style="font-size:1.2rem; color:var(--primary);">${n} 號</span>`;
+        
+        const actions = mk("div", "list-actions");
+        const btnRecall = mk("button", "btn-secondary", T.recall, {onclick:()=>{ if(confirm(`Recall ${n}?`)) req("/api/control/recall-passed",{number:n}); }});
+        const btnDel = mk("button", "btn-secondary", T.del); 
+        confirmBtn(btnDel, T.del, ()=>req("/api/passed/remove",{number:n}));
+        
+        actions.append(btnRecall, btnDel);
+        li.append(info, actions);
+        ul.appendChild(li);
     });
 });
 
+socket.on("updateOnlineAdmins", list => {
+    const ul = $("online-users-list"); if(!ul) return; 
+    ul.innerHTML = "";
+    if(!list || !list.length) { ul.innerHTML = `<li class="list-item" style="justify-content:center; color:var(--text-sub);">Waiting...</li>`; return; }
+    list.sort((a,b)=>(a.role==='super'?-1:1)).forEach(u => {
+        const li = mk("li", "list-item");
+        li.innerHTML = `<span class="list-main-text">🟢 ${u.nickname}</span><span class="list-sub-text">${u.username}</span>`;
+        ul.appendChild(li);
+    });
+});
+
+// [UI 修正] 渲染使用者列表
 async function loadUsers() {
     const ul = $("user-list-ui"); if(!ul) return; const d = await req("/api/admin/users"); if(!d || !d.users) return; ul.innerHTML="";
     const roleOpts = { 'VIEWER':'Viewer', 'OPERATOR':'Operator', 'MANAGER':'Manager', 'ADMIN':'Admin' };
     d.users.forEach(u => {
-        const li = mk("li"), view = mk("div", null, null, {style:"display:flex; justify-content:space-between; width:100%; align-items:center;"});
-        const info = mk("div", null, null, {style:"display:flex; flex-direction:column;"});
-        info.append(mk("span", null, `${u.role==='ADMIN'?'👑':'👤'} ${u.nickname}`, {style:"font-weight:600"}), mk("small", null, `${u.username} • ${roleOpts[u.role]||u.role}`, {style:"color:var(--text-sub);"}));
-        const editDiv = mk("div", null, null, {style:"display:none; width:100%; gap:5px;"});
-        const inputNick = mk("input", null, null, {value:u.nickname}); const btnSave = mk("button", "btn-secondary success", T.save);
-        btnSave.onclick = async () => { if(await req("/api/admin/set-nickname", {targetUsername:u.username, nickname:inputNick.value})) { toast("Saved", "success"); loadUsers(); } };
-        editDiv.append(inputNick, btnSave, mk("button", "btn-secondary", T.cancel, { onclick:()=>{ editDiv.style.display="none"; view.style.display="flex"; } }));
-        const acts = mk("div", null, null, {style:"display:flex; gap:5px;"});
-        if(u.username === uniqueUser || userRole === 'super') acts.appendChild(mk("button", "btn-secondary", T.edit, { onclick:()=>{ view.style.display="none"; editDiv.style.display="flex"; } }));
+        const li = mk("li", "list-item");
+        
+        // View
+        const info = mk("div", "list-info");
+        info.innerHTML = `<span class="list-main-text">${u.role==='ADMIN'?'👑':(u.role==='MANAGER'?'🛡️':'👤')} ${u.nickname}</span><span class="list-sub-text">${u.username} (${roleOpts[u.role]||u.role})</span>`;
+        
+        const actions = mk("div", "list-actions");
+        
+        // Edit Form
+        const form = mk("div", null, null, { style: "display:none; width:100%; gap:8px; flex-wrap:wrap;" });
+        const iNick = mk("input", null, null, {value:u.nickname});
+        const btnSave = mk("button", "btn-secondary success", T.save);
+        btnSave.onclick = async () => { if(await req("/api/admin/set-nickname", {targetUsername:u.username, nickname:iNick.value})) { toast("Saved", "success"); loadUsers(); } };
+        const btnCancel = mk("button", "btn-secondary", T.cancel, { onclick:()=>{ form.style.display="none"; info.style.display="flex"; actions.style.display="flex"; } });
+        
+        form.append(iNick, btnSave, btnCancel);
+
+        if(u.username === uniqueUser || userRole === 'super') {
+            const btnEdit = mk("button", "btn-secondary", T.edit, { onclick:()=>{ info.style.display="none"; actions.style.display="none"; form.style.display="flex"; } });
+            actions.appendChild(btnEdit);
+        }
+
         if(u.username !== 'superadmin' && userRole === 'super') {
-            const roleSel = mk("select", "role-select", null, {style:"padding:2px; font-size:0.8rem;"});
+            const roleSel = mk("select", "role-select", null, {style:"padding:2px; height:36px;"});
             Object.keys(roleOpts).forEach(k => { const o = mk("option",null,roleOpts[k]); o.value=k; if(u.role===k) o.selected=true; roleSel.appendChild(o); });
             roleSel.onchange = async () => { if(await req("/api/admin/set-role", {targetUsername:u.username, newRole:roleSel.value})) toast("Role Saved", "success"); };
-            acts.appendChild(roleSel);
-            const del = mk("button", "btn-secondary", T.del); confirmBtn(del, T.del, async()=>{ await req("/api/admin/del-user",{delUsername:u.username}); loadUsers(); });
-            acts.appendChild(del);
+            actions.appendChild(roleSel);
+            
+            const btnDel = mk("button", "btn-secondary", T.del); 
+            confirmBtn(btnDel, T.del, async()=>{ await req("/api/admin/del-user",{delUsername:u.username}); loadUsers(); });
+            actions.appendChild(btnDel);
         }
-        view.append(info, acts); li.append(view, editDiv); ul.appendChild(li);
+
+        li.append(info, actions, form);
+        ul.appendChild(li);
     });
 }
 
@@ -316,13 +363,15 @@ async function loadLineSettings() {
     renderLineSettings();
 }
 
-// [修正] LINE 設定渲染 (美化版)
 function renderLineSettings() {
     const ul = $("line-settings-list-ui"); if (!ul || !cachedLineSettings) return; ul.innerHTML=""; 
     req("/api/admin/line-settings/get-unlock-pass").then(res => { if($("line-unlock-pwd") && res) $("line-unlock-pwd").value = res.password || ""; });
     Object.keys(lineSettingsConfig).forEach(key => { 
         const config = lineSettingsConfig[key], val = cachedLineSettings[key] || ""; 
-        const li = mk("li"), view = mk("div", "line-setting-row"); 
+        const li = mk("li", "list-item"); 
+        
+        // View Mode
+        const view = mk("div", "line-setting-row"); 
         const infoDiv = mk("div", "line-setting-info"); 
         const label = mk("span", "line-setting-label", config.label);
         const preview = mk("code", "line-setting-preview", val ? val : "(未設定)");
@@ -330,6 +379,8 @@ function renderLineSettings() {
         infoDiv.append(label, preview);
         const btnEdit = mk("button","btn-secondary", T.edit || "Edit", { onclick:()=>{ view.style.display="none"; editContainer.style.display="flex"; } }); 
         view.append(infoDiv, btnEdit); 
+        
+        // Edit Mode
         const editContainer = mk("div", "line-edit-box", null, {style:"display:none;"});
         const hint = mk("div", "line-edit-hint", `可用變數: ${config.hint || "無"}`);
         const ta = mk("textarea", null, null, {value:val, placeholder:"請輸入訊息內容..."});
@@ -338,6 +389,7 @@ function renderLineSettings() {
         const btnSave = mk("button","btn-secondary success", T.save || "Save", { onclick: async()=>{ if(await req("/api/admin/line-settings/save", {[key]:ta.value})) { cachedLineSettings[key] = ta.value; toast(T.saved, "success"); renderLineSettings(); } } });
         btnRow.append(btnCancel, btnSave);
         editContainer.append(hint, ta, btnRow);
+        
         li.append(view, editContainer); ul.appendChild(li); 
     }); 
 }
