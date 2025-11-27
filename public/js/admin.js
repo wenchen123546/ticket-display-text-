@@ -1,5 +1,5 @@
 /* ==========================================
- * 後台邏輯 (admin.js) - v88.0 Optimized
+ * 後台邏輯 (admin.js) - v89.0 Fixed
  * ========================================== */
 const $ = i => document.getElementById(i), $$ = s => document.querySelectorAll(s);
 const mk = (t, c, txt, ev={}, ch=[]) => { 
@@ -220,8 +220,33 @@ bind("login-button", async () => {
 });
 bind("btn-logout", logout); bind("btn-logout-mobile", logout);
 
+// Fixed: Replaced complex nested ternary operators with clear logical blocks
 ["resetNumber","resetIssued","resetPassed","resetFeaturedContents","resetAll","btn-clear-logs","btn-clear-stats","btn-reset-line-msg"].forEach(id => {
-    confirmBtn($(id), $(id)?.textContent, () => req(id.includes('clear') ? (id.includes('logs') ? "/api/logs/clear" : "/api/admin/stats/clear") : (id==='resetAll' ? "/reset" : (id.includes('line') ? "/api/admin/line-settings/reset" : (id.includes('Passed') ? "/api/passed/clear" : (id.includes('Featured') ? "/api/featured/clear" : `/api/control/${id==='resetNumber'?'set-call':'set-issue'}`))))), id.startsWith('reset') && !id.includes('All') && !id.includes('Passed') && !id.includes('Featured') && !id.includes('line') ? {number:0} : {}));
+    const el = $(id);
+    if(!el) return;
+    
+    // Determine API URL
+    let url;
+    if (id.includes('clear')) {
+        url = id.includes('logs') ? "/api/logs/clear" : "/api/admin/stats/clear";
+    } else if (id === 'resetAll') {
+        url = "/reset";
+    } else if (id.includes('line')) {
+        url = "/api/admin/line-settings/reset";
+    } else if (id.includes('Passed')) {
+        url = "/api/passed/clear";
+    } else if (id.includes('Featured')) {
+        url = "/api/featured/clear";
+    } else {
+        // resetNumber or resetIssued
+        url = `/api/control/${id==='resetNumber'?'set-call':'set-issue'}`;
+    }
+
+    // Determine Data (Only resetNumber and resetIssued need {number: 0})
+    const needsZero = id.startsWith('reset') && !['All','Passed','Featured','line'].some(s => id.includes(s));
+    const data = needsZero ? {number: 0} : {};
+
+    confirmBtn(el, el.textContent, () => req(url, data));
 });
 
 // Misc UI Handlers
