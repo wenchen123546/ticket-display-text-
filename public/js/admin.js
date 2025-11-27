@@ -1,11 +1,10 @@
 /* ==========================================
- * 後台邏輯 (admin.js) - v65.1 Fixed Init
+ * 後台邏輯 (admin.js) - v69.0 Fixed UI Logic
  * ========================================== */
 const $ = i => document.getElementById(i);
 const $$ = s => document.querySelectorAll(s);
 const mk = (t, c, txt, ev={}) => { const e = document.createElement(t); if(c) e.className=c; if(txt) e.textContent=txt; Object.entries(ev).forEach(([k,v])=>e[k]=v); return e; };
 
-// 完整翻譯字典
 const i18n = {
     "zh-TW": { 
         status_conn:"✅ 已連線", status_dis:"⚠️ 連線中斷...", saved:"✅ 已儲存", denied:"❌ 權限不足", 
@@ -59,7 +58,7 @@ let curLang = localStorage.getItem('callsys_lang')||'zh-TW', T = i18n[curLang];
 let token="", userRole="normal", username="", uniqueUser="", toastTimer;
 let currentSystemMode = 'ticketing'; 
 let isDark = localStorage.getItem('callsys_admin_theme') === 'dark';
-let cachedLineSettings = null; // Line 設定快取
+let cachedLineSettings = null; 
 
 const socket = io({ autoConnect: false, auth: { token: "" } });
 
@@ -88,13 +87,7 @@ function updateLangUI() {
     loadUsers(); 
     loadStats(); 
     
-    // [關鍵修正] 如果還沒有資料(第一次載入)，就去抓；如果有資料(切換語言)，直接畫
-    if (!cachedLineSettings) {
-        loadLineSettings();
-    } else {
-        renderLineSettings();
-    }
-    
+    if (!cachedLineSettings) loadLineSettings(); else renderLineSettings();
     req("/api/featured/get").then(res => { if(res) socket.emit("updateFeaturedContents", res); });
 }
 
@@ -315,117 +308,54 @@ $("btn-save-unlock-pwd")?.addEventListener("click", async()=>{ if(await req("/ap
 $("add-user-btn")?.addEventListener("click", async()=>{ const u=$("new-user-username").value, p=$("new-user-password").value, n=$("new-user-nickname").value, r=$("new-user-role")?.value; if(await req("/api/admin/add-user", {newUsername:u, newPassword:p, newNickname:n, newRole:r})) { toast("Saved","success"); $("new-user-username").value=""; $("new-user-password").value=""; $("new-user-nickname").value=""; loadUsers(); } });
 const lineSettingsConfig = { approach: { label: "快到了", hint: "{current} {target}" }, arrival: { label: "正式到號", hint: "{current} {target}" }, status: { label: "狀態回覆", hint: "{current} {issued}" }, personal: { label: "個人資訊", hint: "{target}" }, passed: { label: "過號回覆", hint: "{list}" }, set_ok: { label: "設定成功", hint: "{target}" }, cancel: { label: "取消成功", hint: "{target}" }, login_hint: { label: "登入提示", hint: "" }, err_passed: { label: "已過號錯誤", hint: "" }, err_no_sub: { label: "無設定錯誤", hint: "" }, set_hint: { label: "設定提示", hint: "" } };
 
-// [優化] 讀取設定 (只抓資料，不渲染)
 async function loadLineSettings() { 
-    const ul = $("line-settings-list-ui"); 
-    if (!ul) return;
-    
-    // 向伺服器請求資料
+    const ul = $("line-settings-list-ui"); if (!ul) return;
     const data = await req("/api/admin/line-settings/get"); 
     if(!data) return;
-    
-    // 將資料存入快取
     cachedLineSettings = data;
-    
-    // 渲染畫面
     renderLineSettings();
 }
 
-// [優化] 渲染設定 (使用快取資料，不請求網路)
+// [修正] LINE 設定渲染 (美化版)
 function renderLineSettings() {
-    const ul = $("line-settings-list-ui"); 
-    if (!ul || !cachedLineSettings) return; 
-    
-    ul.innerHTML=""; 
-    
-    // 設定解鎖密碼欄位 (如果有)
-    req("/api/admin/line-settings/get-unlock-pass").then(res => {
-        if($("line-unlock-pwd") && res) $("line-unlock-pwd").value = res.password || "";
-    });
-
+    const ul = $("line-settings-list-ui"); if (!ul || !cachedLineSettings) return; ul.innerHTML=""; 
+    req("/api/admin/line-settings/get-unlock-pass").then(res => { if($("line-unlock-pwd") && res) $("line-unlock-pwd").value = res.password || ""; });
     Object.keys(lineSettingsConfig).forEach(key => { 
-        const config = lineSettingsConfig[key];
-        const val = cachedLineSettings[key] || ""; 
-        
-        const li = mk("li"); 
-        const view = mk("div", "line-setting-row"); 
+        const config = lineSettingsConfig[key], val = cachedLineSettings[key] || ""; 
+        const li = mk("li"), view = mk("div", "line-setting-row"); 
         const infoDiv = mk("div", "line-setting-info"); 
-        
-        // T.edit 會自動讀取當前語言
-        infoDiv.innerHTML = `<span style="font-weight:bold;">${config.label}</span><span class="line-msg-preview">${val||"(未設定)"}</span>`; 
-        
-        const btn = mk("button","btn-secondary", T.edit || "Edit", {
-            onclick:()=>{ view.style.display="none"; edit.style.display="flex" }
-        }); 
-        
-        view.append(infoDiv, btn); 
-        
-        const edit = mk("div",null,null,{style:"display:none;flex-direction:column;gap:5px;width:100%;"}); 
-        const ta = mk("textarea",null,null,{value:val, rows:3}); 
-        
-        const save = mk("button","btn-secondary success", T.save || "Save", {
-            onclick: async()=>{ 
-                if(await req("/api/admin/line-settings/save", {[key]:ta.value})) {
-                    cachedLineSettings[key] = ta.value; // 更新快取
-                    renderLineSettings(); // 重新渲染
-                }
-            }
-        }); 
-        
-        const cancel = mk("button","btn-secondary", T.cancel || "X", {
-            onclick:()=>{ edit.style.display="none"; view.style.display="flex"; ta.value=val; }
-        }); 
-        
-        const row = mk("div",null,null,{style:"display:flex;gap:5px;justify-content:flex-end;"}); 
-        row.append(cancel, save); 
-        
-        edit.append(mk("div",null,config.hint,{style:"font-size:0.8rem;color:var(--text-sub)"}), ta, row); 
-        li.append(view, edit); 
-        ul.appendChild(li); 
+        const label = mk("span", "line-setting-label", config.label);
+        const preview = mk("code", "line-setting-preview", val ? val : "(未設定)");
+        if(!val) preview.style.opacity = "0.5";
+        infoDiv.append(label, preview);
+        const btnEdit = mk("button","btn-secondary", T.edit || "Edit", { onclick:()=>{ view.style.display="none"; editContainer.style.display="flex"; } }); 
+        view.append(infoDiv, btnEdit); 
+        const editContainer = mk("div", "line-edit-box", null, {style:"display:none;"});
+        const hint = mk("div", "line-edit-hint", `可用變數: ${config.hint || "無"}`);
+        const ta = mk("textarea", null, null, {value:val, placeholder:"請輸入訊息內容..."});
+        const btnRow = mk("div", null, null, {style:"display:flex; gap:8px; justify-content:flex-end;"});
+        const btnCancel = mk("button","btn-secondary", T.cancel || "Cancel", { onclick:()=>{ editContainer.style.display="none"; view.style.display="flex"; ta.value=val; } });
+        const btnSave = mk("button","btn-secondary success", T.save || "Save", { onclick: async()=>{ if(await req("/api/admin/line-settings/save", {[key]:ta.value})) { cachedLineSettings[key] = ta.value; toast(T.saved, "success"); renderLineSettings(); } } });
+        btnRow.append(btnCancel, btnSave);
+        editContainer.append(hint, ta, btnRow);
+        li.append(view, editContainer); ul.appendChild(li); 
     }); 
 }
 
-// Init
 document.addEventListener("DOMContentLoaded", () => {
-    // 1. Init Language
     $("admin-lang-selector").value = curLang; 
     if($("admin-lang-selector-mobile")) $("admin-lang-selector-mobile").value = curLang;
-    
-    // 2. Init Session & Theme
-    checkSession(); 
-    applyAdminTheme();
-
-    // 3. Navigation
+    checkSession(); applyAdminTheme();
     $$('.nav-btn').forEach(b => b.addEventListener('click', () => { 
-        $$('.nav-btn').forEach(x=>x.classList.remove('active')); 
-        b.classList.add('active'); 
-        $$('.section-group').forEach(s=>s.classList.remove('active')); 
-        $(b.dataset.target)?.classList.add('active'); 
+        $$('.nav-btn').forEach(x=>x.classList.remove('active')); b.classList.add('active'); 
+        $$('.section-group').forEach(s=>s.classList.remove('active')); $(b.dataset.target)?.classList.add('active'); 
         if(b.dataset.target === 'section-stats') loadStats(); 
     }));
-
-    // 4. Enter Key Bindings
     const enter = (id, btnId) => { $(id)?.addEventListener("keyup", e => { if(e.key==="Enter") $(btnId)?.click(); }); };
-    enter("username-input", "login-button"); 
-    enter("password-input", "login-button"); 
-    enter("manualNumber", "setNumber"); 
-    enter("manualIssuedNumber", "setIssuedNumber"); 
-    enter("new-passed-number", "add-passed-btn"); 
-    enter("broadcast-msg", "btn-broadcast");
-
-    // 5. Unified Language Switch Logic
-    const handleLangChange = (e) => {
-        curLang = e.target.value; 
-        localStorage.setItem('callsys_lang', curLang);
-        if($("admin-lang-selector")) $("admin-lang-selector").value = curLang;
-        if($("admin-lang-selector-mobile")) $("admin-lang-selector-mobile").value = curLang;
-        updateLangUI(); 
-    };
-
+    enter("username-input", "login-button"); enter("password-input", "login-button"); enter("manualNumber", "setNumber"); enter("manualIssuedNumber", "setIssuedNumber"); enter("new-passed-number", "add-passed-btn"); enter("broadcast-msg", "btn-broadcast");
+    const handleLangChange = (e) => { curLang = e.target.value; localStorage.setItem('callsys_lang', curLang); if($("admin-lang-selector")) $("admin-lang-selector").value = curLang; if($("admin-lang-selector-mobile")) $("admin-lang-selector-mobile").value = curLang; updateLangUI(); };
     $("admin-lang-selector")?.addEventListener("change", handleLangChange);
     if($("admin-lang-selector-mobile")) $("admin-lang-selector-mobile").addEventListener("change", handleLangChange);
-
-    // 6. Other Actions
     $("btn-logout-mobile")?.addEventListener("click", logout);
     $("admin-theme-toggle")?.addEventListener("click", () => { isDark = !isDark; applyAdminTheme(); });
     $("admin-theme-toggle-mobile")?.addEventListener("click", () => { isDark = !isDark; applyAdminTheme(); });
