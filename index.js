@@ -1,5 +1,5 @@
 /* ==========================================
- * 伺服器 (index.js) - v53.0 Fix Data Source
+ * 伺服器 (index.js) - v54.0 Optimized
  * ========================================== */
 require('dotenv').config();
 const { Server } = require("http");
@@ -226,19 +226,22 @@ app.post("/api/admin/set-nickname", auth, asyncHandler(async r=>{
 app.post("/api/passed/add", auth, checkPermission('pass'), asyncHandler(async r=>{ await redis.zadd(KEYS.PASSED, r.body.number, r.body.number); io.emit("updatePassed", (await redis.zrange(KEYS.PASSED,0,-1)).map(Number)); }));
 app.post("/api/passed/remove", auth, checkPermission('pass'), asyncHandler(async r=>{ await redis.zrem(KEYS.PASSED, r.body.number); io.emit("updatePassed", (await redis.zrange(KEYS.PASSED,0,-1)).map(Number)); }));
 app.post("/api/passed/clear", auth, checkPermission('pass'), asyncHandler(async r=>{ await redis.del(KEYS.PASSED); io.emit("updatePassed", []); }));
-app.post("/api/appointment/add", auth, checkPermission('appointment'), asyncHandler(async req => { db.run("INSERT INTO appointments (number, scheduled_time) VALUES (?, ?)", [req.body.number, new Date(req.body.timeStr).getTime()]); addLog(req.user.nickname, `📅 預約: ${req.body.number}號`); }));
 
-// [修正] 流量分析 API 改為讀取 SQLite
+// [新增] 預約管理 API
+app.post("/api/appointment/add", auth, checkPermission('appointment'), asyncHandler(async req => { db.run("INSERT INTO appointments (number, scheduled_time) VALUES (?, ?)", [req.body.number, new Date(req.body.timeStr).getTime()]); addLog(req.user.nickname, `📅 預約: ${req.body.number}號`); }));
+app.post("/api/appointment/list", auth, checkPermission('appointment'), asyncHandler(async req => { return new Promise((res, rej) => { db.all("SELECT * FROM appointments WHERE status='pending' ORDER BY scheduled_time ASC", [], (err, rows) => { if(err) rej(err); else res({ appointments: rows }); }); }); }));
+app.post("/api/appointment/remove", auth, checkPermission('appointment'), asyncHandler(async req => { db.run("DELETE FROM appointments WHERE id = ?", [req.body.id]); addLog(req.user.nickname, `🗑️ 刪除預約 ID: ${req.body.id}`); }));
+
 app.post("/api/admin/stats", auth, asyncHandler(async req => {
     const {dateStr, hour} = getTWTime();
     const hData = await redis.hgetall(`${KEYS.HOURLY}${dateStr}`);
     const counts = new Array(24).fill(0); let total=0;
-    for(const [h,c] of Object.entries(hData||{})) { counts[parseInt(h)]=parseInt(c); total+=parseInt(c); }
+    if(hData) { for(const [h,c] of Object.entries(hData)) { const val=parseInt(c)||0; counts[parseInt(h)]=val; total+=val; } }
     
     return new Promise((resolve, reject) => {
         db.all("SELECT * FROM history ORDER BY id DESC LIMIT 50", [], (err, rows) => {
-            if(err) resolve({ history: [], hourlyCounts: counts, todayCount: total, serverHour: hour }); // 降級處理
-            else resolve({ history: rows, hourlyCounts: counts, todayCount: total, serverHour: hour });
+            // [優化] 確保回傳數據，避免前端圖表錯誤
+            resolve({ history: rows || [], hourlyCounts: counts, todayCount: total, serverHour: hour });
         });
     });
 }));
@@ -263,9 +266,44 @@ app.post("/api/admin/line-settings/:act", auth, checkPermission('settings'), asy
 
 async function checkLineNotify(curr) { if(!lineClient) return; const t=curr+5, [a,r,s,e]=await Promise.all([redis.get('callsys:line:msg:approach'),redis.get('callsys:line:msg:arrival'),redis.smembers(`${KEYS.LINE.SUB}${t}`),redis.smembers(`${KEYS.LINE.SUB}${curr}`)]); const snd=(i,x)=>i.length&&lineClient.multicast(i,[{type:'text',text:x}]); if(s.length) await snd(s,(a||'🔔 快到了').replace('{current}',curr).replace('{target}',t).replace('{diff}',5)); if(e.length) { await snd(e,(r||'🎉 到您了').replace('{current}',curr).replace('{target}',curr).replace('{diff}',0)); const p=redis.multi().del(`${KEYS.LINE.SUB}${curr}`).srem(KEYS.LINE.ACTIVE,curr); e.forEach(u=>p.del(`${KEYS.LINE.USER}${u}`)); await p.exec(); } }
 if(lineClient) app.post('/callback', line.middleware({channelAccessToken:LINE_ACCESS_TOKEN,channelSecret:LINE_CHANNEL_SECRET}), (req,res)=>Promise.all(req.body.events.map(handleLine)).then(r=>res.json(r)).catch(e=>res.status(500).end()));
-async function handleLine(e) { if(e.type!=='message'||e.message.type!=='text')return; const t=e.message.text.trim(),u=e.source.userId,r=e.replyToken,c=`${KEYS.LINE.CTX}${u}`,rp=x=>lineClient.replyMessage(r,{type:'text',text:x}); if(t==='後台登入')return rp((await redis.get(`${KEYS.LINE.ADMIN}${u}`))?`🔗 ${process.env.RENDER_EXTERNAL_URL}/admin.html`:(await redis.set(c,'WAIT_PWD','EX',120),"請輸入密碼")); if((await redis.get(c))==='WAIT_PWD'&&t===(await redis.get(KEYS.LINE.PWD)||`unlock${ADMIN_TOKEN}`)) { await redis.set(`${KEYS.LINE.ADMIN}${u}`,"1","EX",600); await redis.del(c); return rp("🔓 驗證成功"); } if(['?','status'].includes(t)){ const [n,i,un]=await Promise.all([redis.get(KEYS.CURRENT),redis.get(KEYS.ISSUED),redis.get(`${KEYS.LINE.USER}${u}`)]); return rp(`叫號:${n||0}\n發號:${i||0}${un?`\n您的:${un}`:''}`); } if(['cancel'].includes(t)){ const n=await redis.get(`${KEYS.LINE.USER}${u}`); if(n){await redis.multi().del(`${KEYS.LINE.USER}${u}`).srem(`${KEYS.LINE.SUB}${n}`,u).exec(); return rp("已取消");} return rp("無設定"); } if(/^\d+$/.test(t)){ const n=parseInt(t),curr=parseInt(await redis.get(KEYS.CURRENT))||0; if(n<=curr)return rp("已過號"); await redis.multi().set(`${KEYS.LINE.USER}${u}`,n,'EX',43200).sadd(`${KEYS.LINE.SUB}${n}`,u).expire(`${KEYS.LINE.SUB}${n}`,43200).sadd(KEYS.LINE.ACTIVE,n).exec(); return rp(`設定成功: ${n}號`); } }
 
-cron.schedule('0 4 * * *', () => performReset('系統自動'), { timezone: "Asia/Taipei" });
+// [修改] LINE Bot 處理邏輯
+async function handleLine(e) { 
+    if(e.type!=='message'||e.message.type!=='text')return; 
+    const t=e.message.text.trim().toLowerCase(),u=e.source.userId,r=e.replyToken,c=`${KEYS.LINE.CTX}${u}`,rp=x=>lineClient.replyMessage(r,{type:'text',text:x}); 
+    
+    // 後台登入
+    if(t==='後台登入')return rp((await redis.get(`${KEYS.LINE.ADMIN}${u}`))?`🔗 ${process.env.RENDER_EXTERNAL_URL}/admin.html`:(await redis.set(c,'WAIT_PWD','EX',120),"請輸入密碼")); 
+    if((await redis.get(c))==='WAIT_PWD'&&t===(await redis.get(KEYS.LINE.PWD)||`unlock${ADMIN_TOKEN}`)) { await redis.set(`${KEYS.LINE.ADMIN}${u}`,"1","EX",600); await redis.del(c); return rp("🔓 驗證成功"); } 
+    
+    // 查詢功能
+    if(['?','status'].includes(t)){ const [n,i,un]=await Promise.all([redis.get(KEYS.CURRENT),redis.get(KEYS.ISSUED),redis.get(`${KEYS.LINE.USER}${u}`)]); return rp(`叫號:${n||0}\n發號:${i||0}${un?`\n您的:${un}`:''}`); } 
+    
+    // [新增] 查詢等待組數
+    if(['wait', '等待', '前面'].includes(t)) {
+        const myNum = await redis.get(`${KEYS.LINE.USER}${u}`);
+        if (!myNum) return rp("您尚未取號/輸入號碼");
+        const curr = parseInt(await redis.get(KEYS.CURRENT)) || 0;
+        const diff = parseInt(myNum) - curr;
+        if (diff < 0) return rp("您的號碼已過");
+        if (diff === 0) return rp("🎉 輪到您了！");
+        return rp(`您的號碼: ${myNum}\n目前叫號: ${curr}\n⏳ 前方還有: ${diff} 組`);
+    }
+
+    if(['cancel'].includes(t)){ const n=await redis.get(`${KEYS.LINE.USER}${u}`); if(n){await redis.multi().del(`${KEYS.LINE.USER}${u}`).srem(`${KEYS.LINE.SUB}${n}`,u).exec(); return rp("已取消");} return rp("無設定"); } 
+    if(/^\d+$/.test(t)){ const n=parseInt(t),curr=parseInt(await redis.get(KEYS.CURRENT))||0; if(n<=curr)return rp("已過號"); await redis.multi().set(`${KEYS.LINE.USER}${u}`,n,'EX',43200).sadd(`${KEYS.LINE.SUB}${n}`,u).expire(`${KEYS.LINE.SUB}${n}`,43200).sadd(KEYS.LINE.ACTIVE,n).exec(); return rp(`設定成功: ${n}號`); } 
+}
+
+// [修改] 每天凌晨 4 點重置並清理舊資料
+cron.schedule('0 4 * * *', () => { 
+    performReset('系統自動');
+    // 清理 30 天前的歷史記錄
+    const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+    db.run("DELETE FROM history WHERE timestamp < ?", [thirtyDaysAgo], (err) => {
+        if(!err) console.log("🧹 Auto-cleaned old history data");
+    });
+}, { timezone: "Asia/Taipei" });
+
 io.on("connection", async s => {
     if(s.handshake.auth.token) { try { const u=JSON.parse(await redis.get(`${KEYS.SESSION}${s.handshake.auth.token}`)); if(u) { s.join("admin"); broadcastOnlineAdmins(); s.emit("initAdminLogs", await redis.lrange(KEYS.LOGS,0,99)); } } catch(e){} }
     s.join('public');
@@ -275,4 +313,4 @@ io.on("connection", async s => {
     s.on("disconnect", () => { setTimeout(broadcastOnlineAdmins, 1000); });
 });
 
-server.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server v53.0 running on ${PORT}`));
+server.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server v54.0 running on ${PORT}`));
