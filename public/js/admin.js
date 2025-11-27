@@ -1,5 +1,5 @@
 /* ==========================================
- * 後台邏輯 (admin.js) - v83.0 Permission & Layout
+ * 後台邏輯 (admin.js) - v84.0 Fixed & Full Features
  * ========================================== */
 const $ = i => document.getElementById(i);
 const $$ = s => document.querySelectorAll(s);
@@ -11,7 +11,7 @@ const i18n = {
         expired:"Session 過期", login_fail:"登入失敗", confirm:"⚠️ 確認", recall:"↩️ 重呼", 
         edit:"✎", del:"✕", save:"✓", cancel:"✕",
         login_title: "請登入管理系統", ph_account: "帳號", ph_password: "密碼", login_btn: "登入",
-        admin_panel: "管理後台", nav_live: "現場控台", nav_stats: "數據報表", 
+        admin_panel: "管理後台", nav_live: "現場控台", nav_stats: "數據報表", nav_booking: "預約管理",
         nav_settings: "系統設定", nav_line: "LINE設定", logout: "登出",
         dash_curr: "目前叫號", dash_issued: "已發號至", dash_wait: "等待組數",
         card_call: "指揮中心", btn_next: "下一號 ▶", btn_prev: "◀ 上一號", btn_pass: "過號", 
@@ -27,14 +27,15 @@ const i18n = {
         card_online: "在線管理", card_links: "連結管理", ph_link_name: "名稱", btn_clear_links: "清空連結",
         card_users: "帳號管理", lbl_add_user: "新增帳號", ph_nick: "暱稱",
         btn_save: "儲存", btn_restore: "恢復預設值",
-        modal_edit: "編輯數據", btn_done: "完成"
+        modal_edit: "編輯數據", btn_done: "完成",
+        card_booking: "預約管理", lbl_add_appt: "新增預約"
     },
     "en": { 
         status_conn:"✅ Connected", status_dis:"⚠️ Disconnected...", saved:"✅ Saved", denied:"❌ Denied", 
         expired:"Session Expired", login_fail:"Login Failed", confirm:"⚠️ Confirm", recall:"↩️ Recall", 
         edit:"Edit", del:"Del", save:"Save", cancel:"Cancel",
         login_title: "Login to Admin Panel", ph_account: "Username", ph_password: "Password", login_btn: "Login",
-        admin_panel: "Admin Panel", nav_live: "Live Console", nav_stats: "Statistics", 
+        admin_panel: "Admin Panel", nav_live: "Live Console", nav_stats: "Statistics", nav_booking: "Booking",
         nav_settings: "Settings", nav_line: "Line Config", logout: "Logout",
         dash_curr: "Current Serving", dash_issued: "Last Issued", dash_wait: "Waiting",
         card_call: "Command Center", btn_next: "Next ▶", btn_prev: "◀ Prev", btn_pass: "Pass", 
@@ -50,7 +51,8 @@ const i18n = {
         card_online: "Online Users", card_links: "Links Manager", ph_link_name: "Name", btn_clear_links: "Clear Links",
         card_users: "User Manager", lbl_add_user: "Add User", ph_nick: "Nickname",
         btn_save: "Save", btn_restore: "Restore Defaults",
-        modal_edit: "Edit Data", btn_done: "Done"
+        modal_edit: "Edit Data", btn_done: "Done",
+        card_booking: "Booking Manager", lbl_add_appt: "Add Booking"
     }
 };
 
@@ -85,6 +87,7 @@ function updateLangUI() {
 
     loadUsers(); 
     loadStats(); 
+    loadAppointments(); // 新增：載入預約
     if (!cachedLineSettings) loadLineSettings(); else renderLineSettings();
     req("/api/featured/get").then(res => { if(res) socket.emit("updateFeaturedContents", res); });
 }
@@ -118,19 +121,10 @@ function checkSession() {
 function logout() { localStorage.removeItem('callsys_token'); token=""; location.reload(); }
 function showLogin() { $("login-container").style.display="block"; $("admin-panel").style.display="none"; socket.disconnect(); }
 
-// [New] 權限控管函式
 function applyRolePermissions() {
     const isAdmin = (userRole === 'ADMIN' || userRole === 'super');
-    // 定義所有需要隱藏的按鈕 ID
-    const resetButtons = [
-        'resetNumber', 'resetIssued', 'resetPassed', 
-        'resetFeaturedContents', 'btn-clear-logs', 
-        'btn-clear-stats', 'btn-reset-line-msg', 'resetAll'
-    ];
-    resetButtons.forEach(id => {
-        const el = $(id);
-        if(el) el.style.display = isAdmin ? 'block' : 'none';
-    });
+    const resetButtons = ['resetNumber', 'resetIssued', 'resetPassed', 'resetFeaturedContents', 'btn-clear-logs', 'btn-clear-stats', 'btn-reset-line-msg', 'resetAll'];
+    resetButtons.forEach(id => { const el = $(id); if(el) el.style.display = isAdmin ? 'block' : 'none'; });
 }
 
 async function showPanel() {
@@ -140,10 +134,7 @@ async function showPanel() {
     ["card-user-management", "btn-export-csv", "mode-switcher-group", "unlock-pwd-group"].forEach(id => { if($(id)) $(id).style.display = isSuper ? "block" : "none"; });
     if($('button[data-target="section-line"]')) $('button[data-target="section-line"]').style.display = isSuper?"flex":"none";
     if(isSuper) { $("role-editor-container").style.display = "block"; loadRoles(); }
-    
-    // 應用權限隱藏按鈕
     applyRolePermissions();
-    
     socket.auth.token = token; socket.connect(); updateLangUI(); 
 }
 
@@ -164,33 +155,73 @@ socket.on("newAdminLog", l => renderLogs([l], false));
 socket.on("updatePublicStatus", b => { if($("public-toggle")) $("public-toggle").checked = b; });
 socket.on("updateSoundSetting", b => { if($("sound-toggle")) $("sound-toggle").checked=b; });
 socket.on("updateSystemMode", m => { currentSystemMode = m; $$('input[name="systemMode"]').forEach(r => r.checked = (r.value === m)); });
+socket.on("updateAppointments", list => renderAppointments(list)); // 新增：即時同步預約
 
-// [UI Fix] 連結列表渲染 - 加入編輯表單結構修正
+// 預約系統邏輯
+async function loadAppointments() {
+    const ul = $("appointment-list-ui"); if(!ul) return;
+    try {
+        const res = await req("/api/appointment/list");
+        renderAppointments(res.appointments);
+    } catch(e) { ul.innerHTML = `<li style="text-align:center;">Load Failed</li>`; }
+}
+
+function renderAppointments(list) {
+    const ul = $("appointment-list-ui"); if(!ul) return;
+    ul.innerHTML = "";
+    if(!list || !list.length) { ul.innerHTML = `<li style="text-align:center; padding:20px; color:var(--text-sub);">暫無預約</li>`; return; }
+    
+    list.forEach(a => {
+        const li = mk("li", "list-item");
+        const dt = new Date(a.scheduled_time);
+        const dateStr = dt.toLocaleDateString() + " " + dt.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        
+        const info = mk("div", "list-info");
+        info.innerHTML = `<span class="list-main-text" style="color:var(--primary); font-size:1.1rem;">${a.number} 號</span><span class="list-sub-text">📅 ${dateStr}</span>`;
+        
+        const actions = mk("div", "list-actions");
+        const btnDel = mk("button", "btn-secondary", T.del);
+        confirmBtn(btnDel, T.del, async () => { await req("/api/appointment/remove", {id: a.id}); }); // 移除時後端會廣播更新
+        
+        actions.appendChild(btnDel);
+        li.append(info, actions);
+        ul.appendChild(li);
+    });
+}
+
+$("btn-add-appt")?.addEventListener("click", async () => {
+    const n = $("appt-number").value;
+    const t = $("appt-time").value;
+    if(!n || !t) return toast("請輸入號碼與時間", "error");
+    
+    if(await req("/api/appointment/add", {number: parseInt(n), timeStr: t})) {
+        toast("預約已新增", "success");
+        $("appt-number").value = "";
+        // 後端會廣播 updateAppointments，所以不需要手動 reload
+    }
+});
+
+// 連結與過號列表
 socket.on("updateFeaturedContents", list => {
     const ul = $("featured-list-ui"); if(!ul) return; ul.innerHTML="";
     if(!list) return;
     list.forEach(item => {
         const li = mk("li", "list-item");
-        
         const viewInfo = mk("div", "list-info");
         viewInfo.innerHTML = `<span class="list-main-text">${item.linkText}</span><span class="list-sub-text">${item.linkUrl}</span>`;
-        
         const actions = mk("div", "list-actions");
         const btnEdit = mk("button", "btn-secondary", T.edit, { onclick:()=>{ form.style.display="flex"; viewInfo.style.display="none"; actions.style.display="none"; } });
         const btnDel = mk("button", "btn-secondary", T.del, { onclick:()=>req("/api/featured/remove", item) });
         actions.append(btnEdit, btnDel);
 
-        // Edit Mode Structure - Updated for CSS wrap
         const form = mk("div", "edit-form-wrapper", null, { style: "display:none;" });
         const i1 = mk("input", null, null, {value:item.linkText, placeholder:"Name"});
         const i2 = mk("input", null, null, {value:item.linkUrl, placeholder:"URL"});
-        
         const formActs = mk("div", "edit-form-actions");
         const btnSave = mk("button", "btn-secondary success", T.save, { onclick: async()=>{ if(await req("/api/featured/edit",{oldLinkText:item.linkText,oldLinkUrl:item.linkUrl,newLinkText:i1.value,newLinkUrl:i2.value})) toast(T.saved,"success"); }});
         const btnCancel = mk("button", "btn-secondary", T.cancel, { onclick:()=>{ form.style.display="none"; viewInfo.style.display="flex"; actions.style.display="flex"; } });
         formActs.append(btnCancel, btnSave);
         form.append(i1, i2, formActs);
-
         li.append(viewInfo, actions, form);
         ul.appendChild(li);
     });
@@ -223,45 +254,35 @@ socket.on("updateOnlineAdmins", list => {
     });
 });
 
-// [UI Fix] 帳號列表渲染 - 加入編輯表單結構修正
 async function loadUsers() {
     const ul = $("user-list-ui"); if(!ul) return; const d = await req("/api/admin/users"); if(!d || !d.users) return; ul.innerHTML="";
     const roleOpts = { 'VIEWER':'Viewer', 'OPERATOR':'Operator', 'MANAGER':'Manager', 'ADMIN':'Admin' };
     d.users.forEach(u => {
         const li = mk("li", "list-item");
-        
         const info = mk("div", "list-info");
         info.innerHTML = `<span class="list-main-text">${u.role==='ADMIN'?'👑':(u.role==='MANAGER'?'🛡️':'👤')} ${u.nickname}</span><span class="list-sub-text">${u.username} (${roleOpts[u.role]||u.role})</span>`;
-        
         const actions = mk("div", "list-actions");
-        
-        // Edit Form Structure
         const form = mk("div", "edit-form-wrapper", null, { style: "display:none;" });
         const iNick = mk("input", null, null, {value:u.nickname, placeholder:"Nickname"});
-        
         const formActs = mk("div", "edit-form-actions");
         const btnSave = mk("button", "btn-secondary success", T.save);
         btnSave.onclick = async () => { if(await req("/api/admin/set-nickname", {targetUsername:u.username, nickname:iNick.value})) { toast("Saved", "success"); loadUsers(); } };
         const btnCancel = mk("button", "btn-secondary", T.cancel, { onclick:()=>{ form.style.display="none"; info.style.display="flex"; actions.style.display="flex"; } });
         formActs.append(btnCancel, btnSave);
         form.append(iNick, formActs);
-
         if(u.username === uniqueUser || userRole === 'super') {
             const btnEdit = mk("button", "btn-secondary", T.edit, { onclick:()=>{ info.style.display="none"; actions.style.display="none"; form.style.display="flex"; } });
             actions.appendChild(btnEdit);
         }
-
         if(u.username !== 'superadmin' && userRole === 'super') {
             const roleSel = mk("select", "role-select", null, {style:"padding:2px; height:46px;"});
             Object.keys(roleOpts).forEach(k => { const o = mk("option",null,roleOpts[k]); o.value=k; if(u.role===k) o.selected=true; roleSel.appendChild(o); });
             roleSel.onchange = async () => { if(await req("/api/admin/set-role", {targetUsername:u.username, newRole:roleSel.value})) toast("Role Saved", "success"); };
             actions.appendChild(roleSel);
-            
             const btnDel = mk("button", "btn-secondary", T.del); 
             confirmBtn(btnDel, T.del, async()=>{ await req("/api/admin/del-user",{delUsername:u.username}); loadUsers(); });
             actions.appendChild(btnDel);
         }
-
         li.append(info, actions, form);
         ul.appendChild(li);
     });
@@ -404,7 +425,8 @@ document.addEventListener("DOMContentLoaded", () => {
     $$('.nav-btn').forEach(b => b.addEventListener('click', () => { 
         $$('.nav-btn').forEach(x=>x.classList.remove('active')); b.classList.add('active'); 
         $$('.section-group').forEach(s=>s.classList.remove('active')); $(b.dataset.target)?.classList.add('active'); 
-        if(b.dataset.target === 'section-stats') loadStats(); 
+        if(b.dataset.target === 'section-stats') loadStats();
+        if(b.dataset.target === 'section-booking') loadAppointments(); // 新增：切換到預約時載入
     }));
     const enter = (id, btnId) => { $(id)?.addEventListener("keyup", e => { if(e.key==="Enter") $(btnId)?.click(); }); };
     enter("username-input", "login-button"); enter("password-input", "login-button"); enter("manualNumber", "setNumber"); enter("manualIssuedNumber", "setIssuedNumber"); enter("new-passed-number", "add-passed-btn"); enter("broadcast-msg", "btn-broadcast");
