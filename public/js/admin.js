@@ -1,5 +1,5 @@
 /* ==========================================
- * 後台邏輯 (admin.js) - v60.0 Stable
+ * 後台邏輯 (admin.js) - v61.0 Stable & Fixed
  * ========================================== */
 const $ = i => document.getElementById(i);
 const $$ = s => document.querySelectorAll(s);
@@ -247,24 +247,47 @@ confirmBtn($("resetNumber"), "↺ 重置叫號", ()=>req("/api/control/set-call"
 $("sound-toggle")?.addEventListener("change", e => req("/set-sound-enabled", {enabled:e.target.checked})); $("public-toggle")?.addEventListener("change", e => req("/set-public-status", {isPublic:e.target.checked}));
 $$('input[name="systemMode"]').forEach(r => r.addEventListener("change", async (e) => { if(confirm(T.confirm + " Switch Mode?")) { const res = await req("/set-system-mode", {mode: r.value}); if(!res) { const old = document.querySelector(`input[name="systemMode"][value="${currentSystemMode}"]`); if(old) old.checked = true; } } else { const old = document.querySelector(`input[name="systemMode"][value="${currentSystemMode}"]`); if(old) old.checked = true; } }));
 
-$("admin-lang-selector")?.addEventListener("change", e => { curLang=e.target.value; localStorage.setItem('callsys_lang', curLang); updateLangUI(); });
-const modal = $("edit-stats-overlay"); let editHr=null;
-function openStatModal(h, val) { $("modal-current-count").textContent=val; editHr=h; modal.style.display="flex"; }
-$("btn-modal-close")?.addEventListener("click", ()=>modal.style.display="none");
-["btn-stats-minus", "btn-stats-plus"].forEach((id, idx) => $(id)?.addEventListener("click", async()=>{ if(editHr===null) return; const delta = idx===0 ? -1 : 1; await req("/api/admin/stats/adjust", {hour:editHr, delta}); const n = parseInt($("modal-current-count").textContent)+delta; $("modal-current-count").textContent = n<0?0:n; loadStats(); }));
-$("btn-export-csv")?.addEventListener("click", async()=>{ const d=await req("/api/admin/export-csv"); if(d?.csvData) { const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob(["\uFEFF"+d.csvData],{type:'text/csv'})); a.download=d.fileName; a.click(); toast("✅ Downloaded","success"); }});
-$("btn-save-unlock-pwd")?.addEventListener("click", async()=>{ if(await req("/api/admin/line-settings/set-unlock-pass", {password:$("line-unlock-pwd").value})) toast("Saved","success"); });
-$("add-user-btn")?.addEventListener("click", async()=>{ const u=$("new-user-username").value, p=$("new-user-password").value, n=$("new-user-nickname").value, r=$("new-user-role")?.value; if(await req("/api/admin/add-user", {newUsername:u, newPassword:p, newNickname:n, newRole:r})) { toast("Saved","success"); $("new-user-username").value=""; $("new-user-password").value=""; $("new-user-nickname").value=""; loadUsers(); } });
-const lineSettingsConfig = { approach: { label: "快到了", hint: "{current} {target}" }, arrival: { label: "正式到號", hint: "{current} {target}" }, status: { label: "狀態回覆", hint: "{current} {issued}" }, personal: { label: "個人資訊", hint: "{target}" }, passed: { label: "過號回覆", hint: "{list}" }, set_ok: { label: "設定成功", hint: "{target}" }, cancel: { label: "取消成功", hint: "{target}" }, login_hint: { label: "登入提示", hint: "" }, err_passed: { label: "已過號錯誤", hint: "" }, err_no_sub: { label: "無設定錯誤", hint: "" }, set_hint: { label: "設定提示", hint: "" } };
-
-async function loadLineSettings() { const ul = $("line-settings-list-ui"); if (!ul) return; const data = await req("/api/admin/line-settings/get"); if(!data) return; ul.innerHTML=""; if($("line-unlock-pwd")) $("line-unlock-pwd").value = (await req("/api/admin/line-settings/get-unlock-pass"))?.password||""; Object.keys(lineSettingsConfig).forEach(key => { const config = lineSettingsConfig[key], val = data[key] || ""; const li = mk("li"); const view = mk("div", "line-setting-row"); const infoDiv = mk("div", "line-setting-info"); infoDiv.innerHTML = `<span style="font-weight:bold;">${config.label}</span><span class="line-msg-preview">${val||"(未設定)"}</span>`; const btn = mk("button","btn-secondary",T.edit||"Edit",{onclick:()=>{view.style.display="none";edit.style.display="flex"}}); view.append(infoDiv, btn); const edit = mk("div",null,null,{style:"display:none;flex-direction:column;gap:5px;width:100%;"}); const ta = mk("textarea",null,null,{value:val,rows:3}); const save = mk("button","btn-secondary success",T.save||"Save",{onclick:async()=>{if(await req("/api/admin/line-settings/save",{[key]:ta.value})) loadLineSettings();}}); const cancel = mk("button","btn-secondary",T.cancel||"X",{onclick:()=>{edit.style.display="none";view.style.display="flex";ta.value=val;}}); const row = mk("div",null,null,{style:"display:flex;gap:5px;justify-content:flex-end;"}); row.append(cancel,save); edit.append(mk("div",null,config.hint,{style:"font-size:0.8rem;color:var(--text-sub)"}),ta,row); li.append(view,edit); ul.appendChild(li); }); }
-
+// Initialize
 document.addEventListener("DOMContentLoaded", () => {
-    $("admin-lang-selector").value = curLang; checkSession(); applyAdminTheme();
-    $$('.nav-btn').forEach(b => b.addEventListener('click', () => { $$('.nav-btn').forEach(x=>x.classList.remove('active')); b.classList.add('active'); $$('.section-group').forEach(s=>s.classList.remove('active')); $(b.dataset.target)?.classList.add('active'); if(b.dataset.target === 'section-stats') loadStats(); }));
+    // 1. Init Language
+    $("admin-lang-selector").value = curLang; 
+    if($("admin-lang-selector-mobile")) $("admin-lang-selector-mobile").value = curLang;
+    
+    // 2. Init Session & Theme
+    checkSession(); 
+    applyAdminTheme();
+
+    // 3. Navigation
+    $$('.nav-btn').forEach(b => b.addEventListener('click', () => { 
+        $$('.nav-btn').forEach(x=>x.classList.remove('active')); 
+        b.classList.add('active'); 
+        $$('.section-group').forEach(s=>s.classList.remove('active')); 
+        $(b.dataset.target)?.classList.add('active'); 
+        if(b.dataset.target === 'section-stats') loadStats(); 
+    }));
+
+    // 4. Enter Key Bindings
     const enter = (id, btnId) => { $(id)?.addEventListener("keyup", e => { if(e.key==="Enter") $(btnId)?.click(); }); };
-    enter("username-input", "login-button"); enter("password-input", "login-button"); enter("manualNumber", "setNumber"); enter("manualIssuedNumber", "setIssuedNumber"); enter("new-passed-number", "add-passed-btn"); enter("broadcast-msg", "btn-broadcast");
-    if($("admin-lang-selector-mobile")) { $("admin-lang-selector-mobile").value = curLang; $("admin-lang-selector-mobile").addEventListener("change", e => { curLang = e.target.value; localStorage.setItem('callsys_lang', curLang); $("admin-lang-selector").value = curLang; updateLangUI(); }); }
+    enter("username-input", "login-button"); 
+    enter("password-input", "login-button"); 
+    enter("manualNumber", "setNumber"); 
+    enter("manualIssuedNumber", "setIssuedNumber"); 
+    enter("new-passed-number", "add-passed-btn"); 
+    enter("broadcast-msg", "btn-broadcast");
+
+    // 5. Unified Language Switch Logic
+    const handleLangChange = (e) => {
+        curLang = e.target.value; 
+        localStorage.setItem('callsys_lang', curLang);
+        if($("admin-lang-selector")) $("admin-lang-selector").value = curLang;
+        if($("admin-lang-selector-mobile")) $("admin-lang-selector-mobile").value = curLang;
+        updateLangUI(); 
+    };
+
+    $("admin-lang-selector")?.addEventListener("change", handleLangChange);
+    if($("admin-lang-selector-mobile")) $("admin-lang-selector-mobile").addEventListener("change", handleLangChange);
+
+    // 6. Other Actions
     $("btn-logout-mobile")?.addEventListener("click", logout);
     $("admin-theme-toggle")?.addEventListener("click", () => { isDark = !isDark; applyAdminTheme(); });
     $("admin-theme-toggle-mobile")?.addEventListener("click", () => { isDark = !isDark; applyAdminTheme(); });
