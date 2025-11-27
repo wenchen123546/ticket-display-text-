@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 <title>管理後台</title>
 <script src="/socket.io/socket.io.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
@@ -115,9 +115,11 @@
                 <div class="card-wrapper" id="card-editor">
                     <div class="admin-card">
                         <h3><span class="card-icon">📝</span> <span data-i18n="card_passed">過號名單</span></h3>
+                        
                         <div class="list-container">
                             <ul id="passed-list-ui" class="scroll-list"></ul>
                         </div>
+                        
                         <div class="add-section">
                             <label class="add-label">手動加入過號</label>
                             <div class="add-row">
@@ -125,6 +127,7 @@
                                 <button id="add-passed-btn" class="btn-add">+</button>
                             </div>
                         </div>
+                        
                         <button id="resetPassed" class="btn-reset-single" data-i18n="btn_clear_passed">清空過號</button>
                     </div>
                 </div>
@@ -220,7 +223,7 @@
                         </div>
                         <div class="add-section">
                             <label class="add-label">新增連結</label>
-                            <div class="add-row" style="flex-wrap:wrap;">
+                            <div class="add-row">
                                 <input type="text" id="new-link-text" data-i18n-ph="ph_link_name" placeholder="名稱 (如: 菜單)" style="flex:1;">
                                 <div style="display:flex; gap:8px; width:100%;">
                                     <input type="text" id="new-link-url" placeholder="URL (https://...)" style="flex:1;">
@@ -240,7 +243,7 @@
                         </div>
                         <div class="add-section">
                             <label class="add-label" data-i18n="lbl_add_user">新增帳號</label>
-                            <div class="add-row" style="flex-wrap:wrap;">
+                            <div class="add-row">
                                 <div style="display:flex; gap:8px; width:100%;">
                                     <input type="text" id="new-user-username" data-i18n-ph="ph_account" placeholder="帳號">
                                     <input type="text" id="new-user-nickname" data-i18n-ph="ph_nick" placeholder="暱稱">
