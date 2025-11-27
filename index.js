@@ -1,5 +1,5 @@
 /* ==========================================
- * 伺服器 (index.js) - v56.0 Dynamic Roles
+ * 伺服器 (index.js) - v56.2 Broadcast Fix
  * ========================================== */
 require('dotenv').config();
 const { Server } = require("http");
@@ -21,12 +21,12 @@ if (!ADMIN_TOKEN || !REDIS_URL) process.exit(1);
 
 const BUSINESS_HOURS = { start: 8, end: 22, enabled: false };
 
-// [修改] 定義預設權限，但不寫死，僅作為初始化使用
+// 預設權限設定 (若 Redis 無設定時使用)
 const DEFAULT_ROLES = {
     VIEWER:   { level: 0, can: [] },
     OPERATOR: { level: 1, can: ['call', 'pass', 'recall', 'issue'] },
     MANAGER:  { level: 2, can: ['call', 'pass', 'recall', 'issue', 'settings', 'appointment'] },
-    ADMIN:    { level: 9, can: ['*'] } // Admin 擁有所有權限
+    ADMIN:    { level: 9, can: ['*'] }
 };
 
 const app = express();
@@ -51,10 +51,10 @@ const KEYS = {
     LOGS: 'callsys:admin-log', USERS: 'callsys:users', NICKS: 'callsys:nicknames', USER_ROLES: 'callsys:user_roles',
     SESSION: 'callsys:session:', HISTORY: 'callsys:stats:history', HOURLY: 'callsys:stats:hourly:',
     LINE: { SUB: 'callsys:line:notify:', USER: 'callsys:line:user:', PWD: 'callsys:line:unlock_pwd', ADMIN: 'callsys:line:admin_session:', CTX: 'callsys:line:context:', ACTIVE: 'callsys:line:active_subs_set' },
-    ROLES_CONFIG: 'callsys:config:roles' // [新增] 權限設定 Key
+    ROLES_CONFIG: 'callsys:config:roles'
 };
 
-// [新增] 初始化權限設定到 Redis
+// 初始化權限設定
 async function initRoles() {
     const exists = await redis.exists(KEYS.ROLES_CONFIG);
     if (!exists) {
@@ -168,23 +168,16 @@ const auth = async(req, res, next) => {
     } catch(e) { res.status(403).json({error:"Invalid"}); }
 };
 
-// [修改] 權限檢查：改為從 Redis 讀取當前設定
+// 權限檢查：從 Redis 讀取
 const checkPermission = (act) => async (req, res, next) => {
     try {
         const roleKey = req.user.role === 'super' ? 'ADMIN' : (req.user.userRole || 'OPERATOR');
-        // 從 Redis 獲取最新權限表
         const rolesConfigStr = await redis.get(KEYS.ROLES_CONFIG);
         const rolesConfig = rolesConfigStr ? JSON.parse(rolesConfigStr) : DEFAULT_ROLES;
-        
         const role = rolesConfig[roleKey] || rolesConfig.OPERATOR;
-        
-        // Admin 或 擁有權限 或 擁有萬用字元 '*'
         if(role.level >= 9 || role.can.includes(act) || role.can.includes('*')) return next();
-        
         res.status(403).json({ error: "權限不足" });
-    } catch(e) {
-        res.status(500).json({ error: "權限驗證錯誤" });
-    }
+    } catch(e) { res.status(500).json({ error: "權限驗證錯誤" }); }
 };
 
 // Routes
@@ -245,13 +238,12 @@ app.post("/api/admin/del-user", auth, checkPermission('settings'), asyncHandler(
     await redis.hdel(KEYS.USERS, r.body.delUsername); await redis.hdel(KEYS.NICKS, r.body.delUsername); await redis.hdel(KEYS.USER_ROLES, r.body.delUsername);
 }));
 
-// [修正] 修復 req 變數錯誤，正確使用 r.user.userRole
 app.post("/api/admin/set-nickname", auth, asyncHandler(async r=>{ 
     if(r.body.targetUsername !== r.user.username && r.user.userRole !== 'ADMIN') throw new Error("權限不足");
     await redis.hset(KEYS.NICKS, r.body.targetUsername, r.body.nickname);
 }));
 
-// [新增] 權限管理 API
+// 權限管理 API
 app.post("/api/admin/roles/get", auth, checkPermission('settings'), asyncHandler(async r => {
     const roles = await redis.get(KEYS.ROLES_CONFIG);
     return roles ? JSON.parse(roles) : DEFAULT_ROLES;
@@ -260,7 +252,6 @@ app.post("/api/admin/roles/get", auth, checkPermission('settings'), asyncHandler
 app.post("/api/admin/roles/update", auth, checkPermission('settings'), asyncHandler(async r => {
     if(r.user.role !== 'super') throw new Error("僅超級管理員可修改權限結構");
     const newConfig = r.body.rolesConfig;
-    // 簡單驗證：確保 ADMIN 至少有 '*'
     if (!newConfig.ADMIN || !newConfig.ADMIN.can.includes('*')) {
         newConfig.ADMIN = { level: 9, can: ['*'] };
     }
@@ -293,7 +284,8 @@ app.post("/api/admin/stats/adjust", auth, checkPermission('settings'), asyncHand
 app.post("/api/admin/stats/clear", auth, checkPermission('settings'), asyncHandler(async r=>{ await redis.del(`${KEYS.HOURLY}${getTWTime().dateStr}`); addLog(r.user.nickname,"⚠️ 清空統計"); }));
 app.post("/set-sound-enabled", auth, checkPermission('settings'), asyncHandler(async r=>{ await redis.set(KEYS.SOUND, r.body.enabled?"1":"0"); io.emit("updateSoundSetting", r.body.enabled); }));
 app.post("/set-public-status", auth, checkPermission('settings'), asyncHandler(async r=>{ await redis.set(KEYS.PUBLIC, r.body.isPublic?"1":"0"); io.emit("updatePublicStatus", r.body.isPublic); }));
-app.post("/api/admin/broadcast", auth, checkPermission('call'), asyncHandler(async r=>{ io.emit("adminBroadcast", sanitize(r.body.message).substr(0,50)); addLog(r.user.nickname,`📢 ${r.body.message}`); }));
+// [修正] 廣播字數限制放寬至 200 字
+app.post("/api/admin/broadcast", auth, checkPermission('call'), asyncHandler(async r=>{ io.emit("adminBroadcast", sanitize(r.body.message).substr(0,200)); addLog(r.user.nickname,`📢 ${r.body.message}`); }));
 app.post("/api/logs/clear", auth, checkPermission('settings'), asyncHandler(async r=>{ await redis.del(KEYS.LOGS); io.to("admin").emit("initAdminLogs",[]); }));
 app.post("/set-system-mode", auth, checkPermission('settings'), asyncHandler(async r=>{ await redis.set(KEYS.MODE, r.body.mode); io.emit("updateSystemMode", r.body.mode); }));
 app.post("/reset", auth, checkPermission('settings'), asyncHandler(async r=>{ await performReset(r.user.nickname); }));
@@ -348,4 +340,4 @@ io.on("connection", async s => {
     s.on("disconnect", () => { setTimeout(broadcastOnlineAdmins, 1000); });
 });
 
-server.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server v56.0 running on ${PORT}`));
+server.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server v56.2 running on ${PORT}`));
