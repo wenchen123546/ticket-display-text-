@@ -1,5 +1,5 @@
 /* ==========================================
- * 後台樣式 (admin.css) - v70.0 UI Polish
+ * 後台樣式 (admin.css) - v71.0 Scroll & Wrap Fix
  * ========================================== */
 :root {
     --bg-body: #f8fafc; --bg-surface: #ffffff; --bg-sidebar: #ffffff;
@@ -99,7 +99,7 @@ body.dark-mode .btn-secondary.success { background: rgba(16, 185, 129, 0.2); col
 .btn-reset-single:hover { border-style: solid; color: var(--danger); border-color: var(--danger); }
 
 /* =========================================
-   [UI 重構] 列表與輸入區域美化
+   [FIXED] 列表滾動與防止遮擋修復
    ========================================= */
 
 /* 列表容器 */
@@ -107,21 +107,43 @@ body.dark-mode .btn-secondary.success { background: rgba(16, 185, 129, 0.2); col
     flex: 1; display: flex; flex-direction: column; overflow: hidden; min-height: 0;
     margin-bottom: 12px; border: 1px solid var(--border-color); border-radius: var(--radius-md);
 }
+
+/* [修復 1] 強制最大高度 + 滾動：解決無限拉長問題 */
 .scroll-list {
-    flex: 1; overflow-y: auto; list-style: none; margin: 0; padding: 0;
+    max-height: 320px; /* 固定高度，超過出 scrollbar */
+    overflow-y: auto; 
+    list-style: none; margin: 0; padding: 0;
     background: var(--bg-body);
 }
 
 /* 列表項目 (通用) */
+/* [修復 2] Flex-wrap 與對齊：解決按鈕遮擋內容 */
 .list-item {
     padding: 12px; border-bottom: 1px solid var(--border-color); background: var(--bg-surface);
-    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    display: flex; 
+    flex-wrap: wrap; /* 關鍵：允許換行 */
+    align-items: center; 
+    justify-content: space-between; 
+    gap: 10px;
 }
 .list-item:last-child { border-bottom: none; }
-.list-info { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+
+/* 列表資訊欄位 */
+.list-info { 
+    display: flex; flex-direction: column; 
+    flex: 1; min-width: 0; 
+    padding-right: 10px; /* 預留空間給按鈕，避免貼太近 */
+    word-break: break-all; /* 強制長網址換行 */
+}
 .list-main-text { font-weight: 600; font-size: 0.95rem; color: var(--text-main); }
 .list-sub-text { font-size: 0.8rem; color: var(--text-sub); margin-top: 2px; }
-.list-actions { display: flex; gap: 6px; }
+
+/* 列表操作按鈕 */
+.list-actions { 
+    display: flex; gap: 6px; 
+    flex-shrink: 0; /* 防止按鈕被壓縮 */
+    margin-left: auto; /* 若換行，自動靠右對齊 */
+}
 
 /* 編輯區域 (Add New Area) */
 .add-section {
@@ -132,7 +154,7 @@ body.dark-mode .btn-secondary.success { background: rgba(16, 185, 129, 0.2); col
 .add-label { font-size: 0.8rem; font-weight: 700; color: var(--text-sub); margin-bottom: 4px; display: block; }
 .add-row { display: flex; gap: 8px; width: 100%; }
 
-/* Log List Fix */
+/* Log List Fix - 對齊 320px 高度 */
 .log-list { 
     height: 320px; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; 
     overflow-y: auto; padding: 0; margin: 0; list-style: none;
@@ -154,8 +176,8 @@ body.dark-mode .btn-secondary.success { background: rgba(16, 185, 129, 0.2); col
 .chart-val { font-size: 10px; color: var(--text-main); margin-bottom: 2px; font-weight: bold; }
 
 /* LINE Settings UI */
-.line-setting-row { display: flex; justify-content: space-between; align-items: center; width: 100%; }
-.line-setting-info { display: flex; flex-direction: column; gap: 4px; flex: 1; padding-right: 10px; }
+.line-setting-row { display: flex; justify-content: space-between; align-items: center; width: 100%; flex-wrap: wrap; gap: 8px; }
+.line-setting-info { display: flex; flex-direction: column; gap: 4px; flex: 1; padding-right: 10px; min-width: 200px; }
 .line-setting-label { font-weight: 700; color: var(--text-main); font-size: 0.95rem; }
 .line-setting-preview { 
     background: var(--bg-body); border: 1px solid var(--border-color); 
