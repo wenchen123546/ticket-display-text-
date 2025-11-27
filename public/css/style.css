@@ -1,22 +1,44 @@
 /* ==========================================
- * Theme: Premium Glass v58.0 (Dark Mode Toggle)
+ * Theme: Premium Glass v58.1 (Dark Mode High Contrast)
  * ========================================== */
 :root {
-    /* 預設為淺色模式變數 */
-    --primary: #6366f1; --primary-dark: #4f46e5; --primary-soft: #e0e7ff;
-    --text-main: #1e293b; --text-sub: #64748b; --text-light: #94a3b8;
-    --bg-body: #f8fafc; --surface: rgba(255, 255, 255, 0.85); --border: rgba(255, 255, 255, 0.6);
-    --accent-red: #f43f5e; --accent-bg-red: #fff1f2;
-    --radius-lg: 24px; --radius-md: 16px;
+    /* --- 淺色模式變數 (Light Mode) --- */
+    --primary: #6366f1; 
+    --primary-dark: #4f46e5; 
+    --primary-soft: #e0e7ff;
+    --text-main: #1e293b; 
+    --text-sub: #64748b; 
+    --text-light: #94a3b8;
+    --bg-body: #f8fafc; 
+    --surface: rgba(255, 255, 255, 0.85); 
+    --border: rgba(255, 255, 255, 0.6);
+    --accent-red: #f43f5e; 
+    --accent-bg-red: #fff1f2;
+    --radius-lg: 24px; 
+    --radius-md: 16px;
     --shadow-card: 0 10px 40px -10px rgba(99, 102, 241, 0.15);
     --shadow-float: 0 20px 50px -10px rgba(30, 41, 59, 0.15);
+    
+    /* 漸層文字預設 (深色字) */
+    --num-gradient-start: #1e293b;
+    --num-gradient-end: #6366f1;
 }
 
-/* 深色模式變數，透過 body.dark-mode 觸發 */
+/* --- 深色模式變數 (Dark Mode) --- */
 body.dark-mode {
-    --bg-body: #0f172a; --surface: rgba(30, 41, 59, 0.85); --text-main: #f1f5f9; --text-sub: #94a3b8;
-    --border: rgba(255, 255, 255, 0.1); --shadow-card: 0 10px 40px -10px rgba(0, 0, 0, 0.5);
+    --bg-body: #0f172a; 
+    --surface: rgba(30, 41, 59, 0.75); /* 稍微降低透明度，讓背景雜訊不明顯 */
+    --text-main: #f1f5f9; /* 極亮白 */
+    --text-sub: #cbd5e1;  /* 亮灰，提高對比 */
+    --text-light: #94a3b8;
+    --border: rgba(255, 255, 255, 0.15); /* 加強邊框可見度 */
+    --shadow-card: 0 10px 40px -10px rgba(0, 0, 0, 0.6);
     --primary-soft: #1e293b;
+    --accent-bg-red: rgba(244, 63, 94, 0.15); /* 紅色標籤改為深色底 */
+    
+    /* 漸層文字調整 (淺色字) */
+    --num-gradient-start: #ffffff;
+    --num-gradient-end: #818cf8;
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -27,26 +49,37 @@ body {
     background: var(--bg-body); color: var(--text-main); 
     display: flex; justify-content: center; 
     overflow-y: auto; overflow-x: hidden;
-    transition: background 0.3s, color 0.3s; /* 平滑切換效果 */
+    transition: background 0.3s ease, color 0.3s ease;
 }
 
-/* 深色模式下的元件微調 */
-body.dark-mode .control-section { background: #1e293b; }
-body.dark-mode .badge { background: #334155; color: #cbd5e1; }
-body.dark-mode .btn-util { background: #334155; color: #cbd5e1; }
-body.dark-mode .btn-util:hover { background: #475569; }
-body.dark-mode .fancy-input { background: #1e293b; border-color: #334155; color: white; }
-body.dark-mode .fancy-input:focus { background: #0f172a; }
-body.dark-mode .link-chip { background: #1e293b; border-color: #334155; color: #e2e8f0; }
+/* 深色模式下的元件特定調整 */
+body.dark-mode .control-section { background: #172033; border-top: 1px solid var(--border); }
+body.dark-mode .hero-section { background: #172033; }
+body.dark-mode .badge { background: #334155; color: #e2e8f0; }
+body.dark-mode .func-desc { color: #94a3b8; }
+body.dark-mode .hero-label, body.dark-mode .links-label { color: #94a3b8; }
+
+/* 按鈕與輸入框在深色模式的優化 */
+body.dark-mode .btn-util { background: #1e293b; color: #e2e8f0; border: 1px solid #334155; }
+body.dark-mode .btn-util:hover { background: #334155; border-color: #475569; }
+body.dark-mode .fancy-input { background: #0f172a; border-color: #334155; color: white; }
+body.dark-mode .fancy-input:focus { border-color: var(--primary); background: #1e293b; }
+body.dark-mode .fancy-input::placeholder { color: #64748b; }
+
+/* 標籤與連結在深色模式的優化 */
+body.dark-mode .link-chip { background: #1e293b; border-color: #334155; color: #e2e8f0; box-shadow: none; }
+body.dark-mode .link-chip:hover { background: #334155; border-color: var(--primary); color: white; }
 body.dark-mode .list-header { border-bottom-color: #334155; }
-body.dark-mode .hero-section { background: #1e293b; }
+body.dark-mode .tag-list li { border-color: rgba(244, 63, 94, 0.4); color: #fb7185; } /* 讓過號紅色更亮 */
 
 .bg-decoration { position: fixed; inset: 0; z-index: -1; pointer-events: none; }
 .orb { position: absolute; border-radius: 50%; filter: blur(100px); opacity: 0.5; animation: float 15s infinite ease-in-out; }
 .orb-1 { width: 70vw; height: 70vw; background: radial-gradient(circle, #c7d2fe 0%, transparent 70%); top: -10%; left: -10%; }
 .orb-2 { width: 60vw; height: 60vw; background: radial-gradient(circle, #e2e8f0 0%, transparent 70%); bottom: -10%; right: -10%; animation-delay: -5s; }
-@keyframes float { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(20px, -20px); } }
+/* 深色模式下降低 Orb 亮度，避免背景過亮干擾 */
+body.dark-mode .orb { opacity: 0.25; filter: blur(120px); }
 
+@keyframes float { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(20px, -20px); } }
 @keyframes pop-in { 0% { transform: scale(0.9); opacity: 0.7; } 50% { transform: scale(1.05); } 100% { transform: scale(1); opacity: 1; } }
 .number-change-anim { animation: pop-in 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
 
@@ -56,20 +89,37 @@ body.dark-mode .hero-section { background: #1e293b; }
     display: flex; flex-direction: column; gap: 16px; 
 }
 
-.glass { background: var(--surface); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-card); transition: background 0.3s; }
+.glass { 
+    background: var(--surface); 
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); 
+    border: 1px solid var(--border); 
+    border-radius: var(--radius-lg); 
+    box-shadow: var(--shadow-card); 
+    transition: background 0.3s, border-color 0.3s; 
+}
 
 .app-header { display: flex; justify-content: space-between; align-items: center; padding: 0 4px; flex-shrink: 0; height: 40px; margin-bottom: 5px; }
 .status-indicator { font-size: 0.75rem; font-weight: 600; color: var(--text-sub); display: flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.5); padding: 6px 12px; border-radius: 20px; }
-.dot { width: 8px; height: 8px; background: #10b981; border-radius: 50%; box-shadow: 0 0 8px #10b981; }
-/* 新增按鈕樣式 */
-.btn-icon { background: rgba(255,255,255,0.5); border: 1px solid rgba(255,255,255,0.8); border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 1.1rem; }
-.lang-switch { background: rgba(255,255,255,0.5); border: 1px solid rgba(255,255,255,0.8); border-radius: 20px; font-size: 0.8rem; color: var(--text-main); padding: 6px 12px; outline: none; }
+body.dark-mode .status-indicator { background: rgba(0,0,0,0.3); color: #cbd5e1; } /* Header 狀態標籤優化 */
 
-.hero-section { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 25px 20px; position: relative; text-align: center; margin-bottom: 10px; transition: background 0.3s;}
+.dot { width: 8px; height: 8px; background: #10b981; border-radius: 50%; box-shadow: 0 0 8px #10b981; }
+
+.btn-icon { background: rgba(255,255,255,0.5); border: 1px solid rgba(255,255,255,0.8); border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 1.1rem; transition: 0.2s; }
+.lang-switch { background: rgba(255,255,255,0.5); border: 1px solid rgba(255,255,255,0.8); border-radius: 20px; font-size: 0.8rem; color: var(--text-main); padding: 6px 12px; outline: none; }
+/* 深色模式下的 Header 按鈕 */
+body.dark-mode .btn-icon, body.dark-mode .lang-switch { background: rgba(30, 41, 59, 0.8); border-color: rgba(255,255,255,0.2); color: #e2e8f0; }
+
+.hero-section { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 25px 20px; position: relative; text-align: center; margin-bottom: 10px; transition: background 0.3s; }
 .hero-top-info { width: 100%; display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
 .hero-label { font-size: 0.85rem; font-weight: 700; color: var(--text-light); letter-spacing: 1px; text-transform: uppercase; }
 .stat-pill { font-size: 0.85rem; font-weight: 600; color: var(--text-sub); background: var(--primary-soft); padding: 4px 10px; border-radius: 8px; }
-#number { font-size: clamp(6rem, 15vh, 9rem); font-weight: 800; line-height: 1; margin: 10px 0; background: linear-gradient(180deg, var(--text-main) 0%, var(--primary) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: -2px; filter: drop-shadow(0 10px 20px rgba(99, 102, 241, 0.2)); }
+
+#number { 
+    font-size: clamp(6rem, 15vh, 9rem); font-weight: 800; line-height: 1; margin: 10px 0; 
+    background: linear-gradient(180deg, var(--num-gradient-start) 0%, var(--num-gradient-end) 100%); 
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; 
+    letter-spacing: -2px; filter: drop-shadow(0 10px 20px rgba(99, 102, 241, 0.2)); 
+}
 
 .side-panel { flex: 1; display: flex; flex-direction: column; gap: 16px; width: 100%; }
 .list-section { flex: 0 0 auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }
@@ -77,35 +127,72 @@ body.dark-mode .hero-section { background: #1e293b; }
 .list-title { font-size: 0.85rem; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 6px; }
 .badge { background: #f1f5f9; color: var(--text-sub); font-size: 0.75rem; padding: 2px 8px; border-radius: 10px; }
 .scroll-view { overflow-y: auto; -webkit-overflow-scrolling: touch; max-height: 100px; }
+
 .tag-list { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 0; margin: 0; list-style: none; align-items: center; }
-.tag-list li { display: inline-flex; width: auto; flex: 0 0 auto; font-size: 0.85rem; font-weight: 700; color: var(--accent-red); background: var(--accent-bg-red); padding: 4px 10px; border-radius: 20px; border: 1px solid rgba(244, 63, 94, 0.2); box-shadow: 0 1px 1px rgba(0,0,0,0.02); }
+.tag-list li { 
+    display: inline-flex; width: auto; flex: 0 0 auto; font-size: 0.85rem; font-weight: 700; 
+    color: var(--accent-red); background: var(--accent-bg-red); 
+    padding: 4px 10px; border-radius: 20px; border: 1px solid rgba(244, 63, 94, 0.2); 
+    box-shadow: 0 1px 1px rgba(0,0,0,0.02); 
+}
 .empty-state { color: var(--text-light); font-size: 0.8rem; text-align: center; width: 100%; }
 
 .control-section { flex: 0 0 auto; padding: 20px; background: #ffffff; margin-bottom: 20px; transition: background 0.3s; }
 .action-header { text-align: center; margin-bottom: 16px; }
 .action-header h3 { font-size: 1.1rem; margin: 0; color: var(--text-main); }
 .func-desc { font-size: 0.8rem; color: var(--text-sub); margin-top: 2px; }
-.btn-main { width: 100%; height: 54px; border: none; border-radius: var(--radius-md); background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); color: white; font-size: 1.1rem; font-weight: 700; cursor: pointer; box-shadow: 0 8px 20px -6px rgba(99, 102, 241, 0.5); transition: transform 0.1s; display: flex; align-items: center; justify-content: center; gap: 8px; }
+
+.btn-main { 
+    width: 100%; height: 54px; border: none; border-radius: var(--radius-md); 
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); 
+    color: white; font-size: 1.1rem; font-weight: 700; cursor: pointer; 
+    box-shadow: 0 8px 20px -6px rgba(99, 102, 241, 0.5); transition: transform 0.1s; 
+    display: flex; align-items: center; justify-content: center; gap: 8px; 
+}
 .btn-main:active { transform: scale(0.98); }
+
 .input-wrapper { display: flex; gap: 10px; margin-top: 10px; }
-.fancy-input { flex: 1; height: 48px; border: 2px solid #e2e8f0; border-radius: 12px; text-align: center; font-size: 1.1rem; background: #f8fafc; outline: none; color: var(--text-main); transition: 0.2s; }
+.fancy-input { 
+    flex: 1; height: 48px; border: 2px solid #e2e8f0; border-radius: 12px; 
+    text-align: center; font-size: 1.1rem; background: #f8fafc; outline: none; 
+    color: var(--text-main); transition: 0.2s; 
+}
 .fancy-input:focus { border-color: var(--primary); background: #fff; }
 .btn-track { height: 48px; padding: 0 20px; border: none; border-radius: 12px; background: var(--text-main); color: white; font-weight: 700; cursor: pointer; }
+/* 深色模式下的追蹤按鈕，改為白色字與較亮的背景 */
+body.dark-mode .btn-track { background: #e2e8f0; color: #0f172a; }
 
 .footer-tools { margin-top: 16px; padding-top: 16px; border-top: 1px dashed #cbd5e1; display: flex; flex-direction: column; gap: 12px; }
 .links-wrapper { display: block; width: 100%; }
 .links-label { font-size: 0.75rem; color: var(--text-sub); font-weight: 700; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+
 #featured-container { display: flex; flex-wrap: wrap; gap: 8px; }
-.link-chip { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; font-size: 0.85rem; font-weight: 600; color: var(--primary-dark); background: linear-gradient(to bottom right, #f8fafc, #f1f5f9); border: 1px solid #e2e8f0; padding: 8px 14px; border-radius: 12px; transition: all 0.2s ease; box-shadow: 0 2px 4px rgba(0,0,0,0.03); }
+.link-chip { 
+    display: inline-flex; align-items: center; justify-content: center; text-decoration: none; 
+    font-size: 0.85rem; font-weight: 600; color: var(--primary-dark); 
+    background: linear-gradient(to bottom right, #f8fafc, #f1f5f9); 
+    border: 1px solid #e2e8f0; padding: 8px 14px; border-radius: 12px; 
+    transition: all 0.2s ease; box-shadow: 0 2px 4px rgba(0,0,0,0.03); 
+}
 .link-chip:hover { background: #fff; border-color: var(--primary); transform: translateY(-2px); box-shadow: 0 4px 10px rgba(99, 102, 241, 0.15); color: var(--primary); }
+
 .util-btns { display: flex; gap: 8px; width: 100%; margin-top: 4px; }
-.btn-util { flex: 1; height: 40px; background: #f1f5f9; border: none; border-radius: 10px; color: var(--text-sub); font-size: 0.8rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; transition: 0.2s; }
+.btn-util { 
+    flex: 1; height: 40px; background: #f1f5f9; border: none; border-radius: 10px; 
+    color: var(--text-sub); font-size: 0.8rem; font-weight: 600; cursor: pointer; 
+    display: flex; align-items: center; justify-content: center; gap: 6px; transition: 0.2s; 
+}
 .btn-util:hover { background: #e2e8f0; color: var(--text-main); }
 .btn-util.is-active { background: #fff1f2; color: var(--accent-red); border: 1px solid #fecdd3; }
+body.dark-mode .btn-util.is-active { background: rgba(244, 63, 94, 0.2); color: #fda4af; border-color: #be123c; }
 
 .my-ticket-card { background: var(--text-main); color: white; padding: 20px; border-radius: 16px; box-shadow: var(--shadow-float); }
+body.dark-mode .my-ticket-card { background: #3b82f6; } /* 深色模式下，票卡改為亮藍色，避免與黑色背景融合 */
+
 .ticket-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
 .my-num { font-size: 3.5rem; font-weight: 800; color: var(--primary); }
+body.dark-mode .my-num { color: white; }
+
 .btn-close { background: rgba(255,255,255,0.2); border:none; color:white; width:24px; height:24px; border-radius:50%; cursor:pointer; }
 #status-bar { position: fixed; top: 0; width: 100%; background: var(--danger); color: white; text-align: center; padding: 6px; transform: translateY(-100%); transition: 0.3s; z-index: 9999; }
 #status-bar.visible { transform: translateY(0); }
@@ -119,6 +206,7 @@ body.dark-mode .hero-section { background: #1e293b; }
     body { align-items: center; overflow: hidden; }
     .app-header { position: absolute; top: 30px; right: 30px; width: auto; } .status-indicator { display: none; }
     .hero-section { padding: 60px; align-items: center; background: white; box-shadow: var(--shadow-float); height: 100%; margin: 0; }
+    body.dark-mode .hero-section { background: #1e293b; } /* 桌面版 Hero 區塊背景 */
     #number { font-size: 16rem; margin: 0; } .hero-label { font-size: 1.5rem; } .s-value { font-size: 2.5rem; }
     .side-panel { justify-content: center; height: 100%; }
     .list-section { max-height: none; flex: 1; align-items: flex-start; }
