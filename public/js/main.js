@@ -1,5 +1,5 @@
 /* ==========================================
- * 前端邏輯 (main.js) - v59.1 Stable
+ * 前台邏輯 (main.js) - v60.0 Fixed
  * ========================================== */
 const $ = i => document.getElementById(i);
 const on = (el, evt, fn) => el?.addEventListener(evt, fn);
@@ -33,24 +33,29 @@ const toggleWakeLock = async (active) => {
         try {
             if (active && !wakeLock) {
                 wakeLock = await navigator.wakeLock.request('screen');
-                wakeLock.addEventListener('release', () => { wakeLock = null; });
             } else if (!active && wakeLock) {
                 await wakeLock.release();
                 wakeLock = null;
             }
-        } catch (err) { console.error("Wake Lock error:", err); }
+        } catch (err) { /* Ignore benign wake lock errors (e.g. tab hidden) */ }
     }
 };
-document.addEventListener('visibilitychange', () => { if (wakeLock !== null && document.visibilityState === 'visible') toggleWakeLock(true); });
+document.addEventListener('visibilitychange', () => { 
+    if (document.visibilityState === 'visible' && myTicket) toggleWakeLock(true);
+    else toggleWakeLock(false);
+});
 
 const unlockAudio = () => {
     if (!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
     if (audioCtx.state === 'suspended') {
-        const buffer = audioCtx.createBuffer(1, 1, 22050);
-        const source = audioCtx.createBufferSource();
-        source.buffer = buffer; source.connect(audioCtx.destination); source.start(0);
-        audioCtx.resume().then(() => updateMuteUI(false));
+        audioCtx.resume().then(() => {
+            const buffer = audioCtx.createBuffer(1, 1, 22050);
+            const source = audioCtx.createBufferSource();
+            source.buffer = buffer; source.connect(audioCtx.destination); source.start(0);
+            updateMuteUI(false);
+        });
     }
+    // Pre-load voices
     if ('speechSynthesis' in window) window.speechSynthesis.getVoices();
 };
 
@@ -58,7 +63,7 @@ const speak = (txt) => {
     if(!localMute && sndEnabled && 'speechSynthesis' in window) {
         window.speechSynthesis.cancel(); 
         const u = new SpeechSynthesisUtterance(txt); 
-        u.lang = 'zh-TW'; u.rate = 0.9; 
+        u.lang = 'zh-TW'; u.rate = 1.0; 
         const voices = window.speechSynthesis.getVoices();
         const zhVoice = voices.find(v => v.lang.includes('zh') || v.lang.includes('TW'));
         if (zhVoice) u.voice = zhVoice;
@@ -69,8 +74,8 @@ const playDing = () => { if($("notify-sound") && !localMute) $("notify-sound").p
 
 // --- UI Logic ---
 function applyTheme() {
-    if (isDarkMode) { document.body.classList.add('dark-mode'); $('theme-toggle').textContent = '☀️'; } 
-    else { document.body.classList.remove('dark-mode'); $('theme-toggle').textContent = '🌙'; }
+    if (isDarkMode) { document.body.classList.add('dark-mode'); if($('theme-toggle')) $('theme-toggle').textContent = '☀️'; } 
+    else { document.body.classList.remove('dark-mode'); if($('theme-toggle')) $('theme-toggle').textContent = '🌙'; }
     localStorage.setItem('callsys_theme', isDarkMode ? 'dark' : 'light');
 }
 
@@ -83,7 +88,6 @@ function applyText() {
         };
         if(map[k] && T[map[k]]) e.textContent = T[map[k]];
     });
-    // Special handling for dynamic placeholders/text
     if($("manual-ticket-input")) $("manual-ticket-input").placeholder = T.man_p;
     if($("hero-waiting-count") && $("hero-waiting-count").previousElementSibling) $("hero-waiting-count").previousElementSibling.textContent = T.wait_count;
     if($("ticket-waiting-count") && $("ticket-waiting-count").previousElementSibling) $("ticket-waiting-count").previousElementSibling.textContent = T.ahead;
@@ -156,11 +160,11 @@ socket.on("updatePublicStatus", b => { document.body.classList.toggle("is-closed
 socket.on("updateSystemMode", m => { sysMode = m; renderMode(); });
 socket.on("updatePassed", list => {
     const ul = $("passedList"), mt = $("passed-empty-msg");
-    $("passed-count").textContent = list?list.length:0;
+    if($("passed-count")) $("passed-count").textContent = list?list.length:0;
     if(!list || !list.length) { show(ul, false); show(mt, true); }
     else { show(ul, true); show(mt, false); ul.innerHTML = list.map(n=>`<li>${n}</li>`).join(""); }
 });
-socket.on("updateFeaturedContents", list => { $("featured-container").innerHTML = list.map(c=>`<a class="link-chip" href="${c.linkUrl}" target="_blank">${c.linkText}</a>`).join(""); });
+socket.on("updateFeaturedContents", list => { if($("featured-container")) $("featured-container").innerHTML = list.map(c=>`<a class="link-chip" href="${c.linkUrl}" target="_blank">${c.linkText}</a>`).join(""); });
 socket.on("updateTimestamp", ts => { lastUpd = new Date(ts); updTime(); });
 const updTime = () => { if(lastUpd) { const m = Math.floor((new Date()-lastUpd)/60000); $("last-updated").textContent = m<1?T.just:T.ago.replace("%s",m); }};
 setInterval(updTime, 10000);
@@ -182,14 +186,17 @@ on($("btn-track-ticket"), "click", () => {
     myTicket = parseInt(v); localStorage.setItem('callsys_ticket', myTicket); $("manual-ticket-input").value = ""; renderMode();
 });
 on($("btn-cancel-ticket"), "click", () => { if(confirm(T.cancel)) { localStorage.removeItem('callsys_ticket'); myTicket=null; renderMode(); }});
-on($("sound-prompt"), "click", () => { unlockAudio(); if(audioCtx?.state==='running') updateMuteUI(!localMute); else playDing(); });
+on($("sound-prompt"), "click", () => { unlockAudio(); updateMuteUI(!localMute); });
 on($("copy-link-prompt"), "click", () => { navigator.clipboard?.writeText(location.href).then(()=>feedback($("copy-link-prompt"), 'copied')); });
 on($("language-selector"), "change", e => { lang = e.target.value; localStorage.setItem('callsys_lang', lang); T = i18n[lang]; applyText(); renderMode(); updateMuteUI(localMute); updTime(); });
 on($("theme-toggle"), "click", () => { isDarkMode = !isDarkMode; applyTheme(); });
 
 // Init
 document.addEventListener("DOMContentLoaded", () => {
-    $("language-selector").value = lang; applyTheme(); applyText(); renderMode(); socket.connect();
-    document.body.addEventListener('click', unlockAudio);
+    if($("language-selector")) $("language-selector").value = lang; 
+    applyTheme(); applyText(); renderMode(); socket.connect();
+    // One-time interaction listener to unlock audio
+    const unlock = () => { unlockAudio(); document.body.removeEventListener('click', unlock); };
+    document.body.addEventListener('click', unlock);
     if($("qr-code-placeholder")) try{ new QRCode($("qr-code-placeholder"), {text:location.href, width:120, height:120}); }catch(e){}
 });
