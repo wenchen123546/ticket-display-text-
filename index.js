@@ -1,5 +1,5 @@
 /* ==========================================
- * 伺服器 (index.js) - v75.0 Env Reverted & Fixed
+ * 伺服器 (index.js) - v76.0 Bug Fixes (Stats, Users, Line, Passed)
  * ========================================== */
 require('dotenv').config();
 const { Server } = require("http"), express = require("express"), socketio = require("socket.io");
@@ -7,7 +7,7 @@ const Redis = require("ioredis"), helmet = require('helmet'), rateLimit = requir
 const { v4: uuidv4 } = require('uuid'), bcrypt = require('bcrypt'), line = require('@line/bot-sdk');
 const cron = require('node-cron'), fs = require("fs"), path = require("path"), sqlite3 = require('sqlite3').verbose();
 
-// --- Env Variables (Reverted to original names) ---
+// --- Env Variables ---
 const { PORT = 3000, UPSTASH_REDIS_URL: REDIS_URL, ADMIN_TOKEN, LINE_ACCESS_TOKEN, LINE_CHANNEL_SECRET } = process.env;
 if (!ADMIN_TOKEN || !REDIS_URL) process.exit(1);
 
@@ -27,11 +27,10 @@ const app = express(); app.disable('x-powered-by');
 const server = Server(app), io = socketio(server, { cors: { origin: "*" }, pingTimeout: 60000 });
 const redis = new Redis(REDIS_URL, { tls: { rejectUnauthorized: false }, retryStrategy: t => Math.min(t * 50, 2000) });
 
-// Line Client Init Helper
+// Line Client Init
 let lineClient = null;
 const initLine = async () => {
     const [dbToken, dbSecret] = await redis.mget(KEYS.LINE.CFG_TOKEN, KEYS.LINE.CFG_SECRET);
-    // 使用 Redis 設定優先，若無則回退使用環境變數
     const token = dbToken || LINE_ACCESS_TOKEN;
     const secret = dbSecret || LINE_CHANNEL_SECRET;
     if (token && secret) {
@@ -162,9 +161,29 @@ app.post("/api/control/recall-passed", auth, perm('recall'), H(async req => {
     await redis.zrem(KEYS.PASSED, req.body.number); await redis.set(KEYS.CURRENT, req.body.number);
     addLog(req.user.nickname, `↩️ 重呼 ${req.body.number}`); await broadcastQueue(); io.emit("updatePassed", (await redis.zrange(KEYS.PASSED,0,-1)).map(Number));
 }));
+// [Fix: Passed List Input] Added missing endpoint
+app.post("/api/passed/add", auth, perm('pass'), H(async r => {
+    const n = parseInt(r.body.number);
+    if(n > 0) {
+        await redis.zadd(KEYS.PASSED, n, n);
+        io.emit("updatePassed", (await redis.zrange(KEYS.PASSED,0,-1)).map(Number));
+        addLog(r.user.nickname, `➕ 手動過號 ${n}`);
+    }
+}));
 
 // Admin & Settings (User)
-app.post("/api/admin/users", auth, H(async r => ({ users: [{username:'superadmin',nickname:await redis.hget(KEYS.NICKS,'superadmin')||'Super',role:'ADMIN'}, ...(await redis.hkeys(KEYS.USERS)).map(x=>({username:x, nickname:null, role:null}))].map(async u=>{ if(u.username!=='superadmin'){u.nickname=await redis.hget(KEYS.NICKS,u.username)||u.username; u.role=await redis.hget(KEYS.USER_ROLES,u.username)||'OPERATOR';} return u; }) })));
+// [Fix: User Name Display] Added Promise.all to resolve user details correctly
+app.post("/api/admin/users", auth, H(async r => {
+    const rawUsers = [{username:'superadmin',nickname:await redis.hget(KEYS.NICKS,'superadmin')||'Super',role:'ADMIN'}, ...(await redis.hkeys(KEYS.USERS)).map(x=>({username:x, nickname:null, role:null}))];
+    const resolvedUsers = await Promise.all(rawUsers.map(async u=>{ 
+        if(u.username!=='superadmin'){
+            u.nickname=await redis.hget(KEYS.NICKS,u.username)||u.username; 
+            u.role=await redis.hget(KEYS.USER_ROLES,u.username)||'OPERATOR';
+        } 
+        return u; 
+    }));
+    return { users: resolvedUsers };
+}));
 app.post("/api/admin/add-user", auth, perm('settings'), H(async r=>{ if(await redis.hexists(KEYS.USERS, r.body.newUsername)) throw new Error("已存在"); await redis.hset(KEYS.USERS, r.body.newUsername, await bcrypt.hash(r.body.newPassword,10)); await redis.hset(KEYS.NICKS, r.body.newUsername, r.body.newNickname); await redis.hset(KEYS.USER_ROLES, r.body.newUsername, r.body.newRole||'OPERATOR'); }));
 app.post("/api/admin/del-user", auth, perm('settings'), H(async r=>{ if(r.body.delUsername==='superadmin') throw new Error("不可刪除"); await redis.hdel(KEYS.USERS, r.body.delUsername); await redis.hdel(KEYS.NICKS, r.body.delUsername); await redis.hdel(KEYS.USER_ROLES, r.body.delUsername); }));
 app.post("/api/admin/set-nickname", auth, H(async r => { if(r.user.role!=='super' && r.user.username!==r.body.targetUsername) throw new Error("權限不足"); await redis.hset(KEYS.NICKS, r.body.targetUsername, r.body.nickname); }));
@@ -173,10 +192,18 @@ app.post("/api/admin/roles/get", auth, H(async r => JSON.parse(await redis.get(K
 app.post("/api/admin/roles/update", auth, perm('settings'), H(async r => { if(r.user.role!=='super') throw new Error("僅超級管理員"); await redis.set(KEYS.ROLES, JSON.stringify(r.body.rolesConfig)); addLog(r.user.nickname, "🔧 修改權限"); }));
 
 // Admin & Settings (Features)
+// [Fix: Traffic Analysis] Improved counting logic to handle missing data gracefully
 app.post("/api/admin/stats", auth, H(async req => {
     const {dateStr, hour} = getTWTime(), hData = await redis.hgetall(`${KEYS.HOURLY}${dateStr}`), counts = new Array(24).fill(0);
-    let total=0; if(hData) for(const [h,c] of Object.entries(hData)) { counts[parseInt(h)]=(parseInt(c)||0); total+=(parseInt(c)||0); }
-    return { history: await all("SELECT * FROM history ORDER BY id DESC LIMIT 50"), hourlyCounts: counts, todayCount: total, serverHour: hour };
+    let total=0; 
+    if(hData) {
+        for(const [h,c] of Object.entries(hData)) { 
+            const val = parseInt(c) || 0;
+            if(!isNaN(parseInt(h))) counts[parseInt(h)] = val;
+            total += val;
+        }
+    }
+    return { history: await all("SELECT * FROM history ORDER BY id DESC LIMIT 50"), hourlyCounts: counts, todayCount: Math.max(0, total), serverHour: hour };
 }));
 app.post("/api/admin/stats/clear", auth, perm('settings'), H(async r => { const {dateStr} = getTWTime(); await redis.del(`${KEYS.HOURLY}${dateStr}`); await run("DELETE FROM history WHERE date_str=?", [dateStr]); addLog(r.user.nickname, "🗑️ 清空今日統計"); }));
 app.post("/api/admin/stats/adjust", auth, perm('settings'), H(async r => { const {dateStr} = getTWTime(); await redis.hincrby(`${KEYS.HOURLY}${dateStr}`, r.body.hour, r.body.delta); }));
@@ -204,10 +231,10 @@ app.post("/set-system-mode", auth, perm('settings'), H(async r=>{ await redis.se
 app.post("/reset", auth, perm('settings'), H(async r => resetSys(r.user.nickname)));
 app.post("/api/admin/broadcast", auth, H(async r => { io.emit("adminBroadcast", r.body.message); addLog(r.user.nickname, `📢 廣播: ${r.body.message}`); }));
 
-// Line Settings API (Bridge Redis <-> Logic)
+// [Fix: LINE Settings] Logic to correctly return Env Vars if Redis is empty
 app.post("/api/admin/line-settings/get", auth, perm('settings'), H(async r => ({ 
-    "LINE Access Token": await redis.get(KEYS.LINE.CFG_TOKEN) || (LINE_ACCESS_TOKEN?"(Using Env Var)":""),
-    "LINE Channel Secret": await redis.get(KEYS.LINE.CFG_SECRET) || (LINE_CHANNEL_SECRET?"(Using Env Var)":"")
+    "LINE Access Token": await redis.get(KEYS.LINE.CFG_TOKEN) || (LINE_ACCESS_TOKEN ? "(Using Env Var)" : ""),
+    "LINE Channel Secret": await redis.get(KEYS.LINE.CFG_SECRET) || (LINE_CHANNEL_SECRET ? "(Using Env Var)" : "")
 })));
 app.post("/api/admin/line-settings/save", auth, perm('settings'), H(async r => {
     if(r.body["LINE Access Token"]) await redis.set(KEYS.LINE.CFG_TOKEN, r.body["LINE Access Token"]);
@@ -226,8 +253,6 @@ async function checkLine(curr) {
     if(sub5.length) send(sub5, (appr||'🔔 快到了').replace('{current}',curr).replace('{target}',t).replace('{diff}',5));
     if(sub0.length) { send(sub0, (arr||'🎉 到您了').replace('{current}',curr)); const p=redis.multi().del(`${KEYS.LINE.SUB}${curr}`).srem(KEYS.LINE.ACTIVE,curr); sub0.forEach(u=>p.del(`${KEYS.LINE.USER}${u}`)); await p.exec(); }
 }
-
-// [Fixed] Reverted to use LINE_ACCESS_TOKEN directly
 if(LINE_ACCESS_TOKEN) {
     app.post('/callback', (req, res, next) => {
         if (!lineClient) return res.status(500).end();
@@ -254,4 +279,4 @@ io.on("connection", async s => {
     s.emit("updateSoundSetting",snd==="1"); s.emit("updatePublicStatus",pub!=="0"); s.emit("updateSystemMode",m||'ticketing'); s.emit("updateWaitTime",await calcWaitTime());
 });
 
-server.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server v75.0 running on ${PORT}`));
+server.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server v76.0 running on ${PORT}`));
