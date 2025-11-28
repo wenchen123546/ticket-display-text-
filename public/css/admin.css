@@ -1,5 +1,5 @@
 /* ==========================================
- * 後台樣式 (admin.css) - v14.0 Modern UI Polish
+ * 後台樣式 (admin.css) - v15.0 Fixed Heights
  * ========================================== */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap');
 
@@ -271,9 +271,16 @@ button:active { transform: scale(0.97); } /* 點擊微縮效果 */
 .list-container { 
     flex: 1; border: 1px solid var(--border-color); border-radius: var(--card-radius); 
     overflow: hidden; background: var(--bg-body); 
-    display: flex; flex-direction: column; min-height: 200px; 
+    display: flex; flex-direction: column; 
+    min-height: 200px;
+    /* [Fix] 限制最大高度，防止卡片無限延伸 */
+    max-height: 350px; 
 }
-.scroll-list { flex: 1; overflow-y: auto; margin: 0; padding: 0; list-style: none; }
+.scroll-list { 
+    flex: 1; overflow-y: auto; margin: 0; padding: 0; list-style: none; 
+    /* [Fix] 確保在極端狀況下也有捲軸 */
+    min-height: 0; 
+}
 
 .list-item { 
     display: flex; justify-content: space-between; align-items: center; 
