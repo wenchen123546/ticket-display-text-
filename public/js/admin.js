@@ -1,5 +1,5 @@
 /* ==========================================
- * 後台邏輯 (admin.js) - v98.0 Layout & Stats Fix
+ * 後台邏輯 (admin.js) - v99.0 Calibrate & Compact
  * ========================================== */
 const $ = i => document.getElementById(i), $$ = s => document.querySelectorAll(s);
 const mk = (t, c, txt, ev={}, ch=[]) => { 
@@ -24,7 +24,7 @@ const i18n = {
         card_issue: "發號管理", btn_recall: "➖ 收回", btn_issue: "發號 ➕", 
         lbl_fix_issue: "修正發號數", btn_fix: "修正", btn_reset_issue: "↺ 重置發號",
         card_passed: "過號名單", btn_clear_passed: "清空過號",
-        card_stats: "流量分析", lbl_today: "今日人次", btn_refresh: "重整", btn_clear_stats: "🗑️ 清空統計",
+        card_stats: "流量分析", lbl_today: "今日人次", btn_refresh: "重整", btn_calibrate: "校正", btn_clear_stats: "🗑️ 清空統計",
         card_logs: "操作日誌", btn_clear_logs: "清除日誌",
         card_sys: "系統", lbl_public: "開放前台", lbl_sound: "提示音效", 
         lbl_tts: "TTS 語音廣播", btn_play: "播放", 
@@ -49,7 +49,7 @@ const i18n = {
         card_issue: "Ticketing", btn_recall: "➖ Recall", btn_issue: "Issue ➕", 
         lbl_fix_issue: "Fix Issued #", btn_fix: "Fix", btn_reset_issue: "↺ Reset Issue",
         card_passed: "Passed List", btn_clear_passed: "Clear Passed",
-        card_stats: "Analytics", lbl_today: "Today's Count", btn_refresh: "Refresh", btn_clear_stats: "🗑️ Clear Stats",
+        card_stats: "Analytics", lbl_today: "Today's Count", btn_refresh: "Refresh", btn_calibrate: "Calibrate", btn_clear_stats: "🗑️ Clear Stats",
         card_logs: "Action Logs", btn_clear_logs: "Clear Logs",
         card_sys: "System", lbl_public: "Public Access", lbl_sound: "Sound FX", 
         lbl_tts: "TTS Broadcast", btn_play: "Play", 
@@ -144,7 +144,7 @@ socket.on("updatePassed", l => renderList("passed-list-ui", l, n => {
         mk("button", "btn-secondary", T.recall, {onclick:()=>{ if(confirm(`Recall ${n}?`)) req("/api/control/recall-passed",{number:n}); }}),
         (b => { confirmBtn(b, T.del, ()=>req("/api/passed/remove",{number:n})); return b; })(mk("button", "btn-secondary", T.del))
     ]);
-    return mk("li", "list-item", null, {}, [mk("span","list-main-text",`${n} 號`,{style:"font-size:1.2rem;color:var(--primary);"}), acts]);
+    return mk("li", "list-item", null, {}, [mk("span","list-main-text",`${n} 號`,{style:"font-size:1rem;color:var(--primary);"}), acts]);
 }, T.wait));
 socket.on("updateFeaturedContents", l => renderList("featured-list-ui", l, item => {
     const view = mk("div", "list-info", null, {}, [mk("span","list-main-text",item.linkText), mk("span","list-sub-text",item.linkUrl)]);
@@ -169,7 +169,7 @@ function renderAppointments(list) {
         const dt = new Date(a.scheduled_time), dateStr = dt.toLocaleDateString()+" "+dt.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
         const btnDel = mk("button", "btn-secondary", T.del); confirmBtn(btnDel, T.del, async()=>await req("/api/appointment/remove",{id:a.id}));
         return mk("li", "list-item", null, {}, [
-            mk("div", "list-info", null, {}, [mk("span","list-main-text",`${a.number} 號`,{style:"color:var(--primary);font-size:1.1rem;"}), mk("span","list-sub-text",`📅 ${dateStr}`)]),
+            mk("div", "list-info", null, {}, [mk("span","list-main-text",`${a.number} 號`,{style:"color:var(--primary);font-size:1rem;"}), mk("span","list-sub-text",`📅 ${dateStr}`)]),
             mk("div", "list-actions", null, {}, [btnDel])
         ]);
     }, "暫無預約");
@@ -298,7 +298,6 @@ bind("btn-logout", logout); bind("btn-logout-mobile", logout);
         if(id === 'btn-clear-stats') { 
             $("stats-today-count").textContent="0"; 
             const chart = $("hourly-chart"); chart.innerHTML="";
-            // [Fix] Rebuild empty chart structure immediately to avoid layout jump
             for(let i=0; i<24; i++) {
                 chart.appendChild(mk("div", `chart-col ${i===new Date().getHours()?'current':''}`, null, {}, [
                     mk("div","chart-val","0"),
@@ -312,6 +311,15 @@ bind("btn-logout", logout); bind("btn-logout-mobile", logout);
     });
 });
 
+bind("btn-refresh-stats", loadStats);
+// [New] Calibrate Button Action
+bind("btn-calibrate-stats", async () => {
+    if(confirm(T.confirm + " Recalculate stats?")) {
+        const r = await req("/api/admin/stats/calibrate");
+        if(r && r.success) { toast(`校正完成 (Diff: ${r.diff})`, "success"); loadStats(); }
+    }
+});
+
 let editHr=null; const modal=$("edit-stats-overlay");
 bind("btn-modal-close", ()=>modal.style.display="none");
 window.openStatModal = (h,v) => { $("modal-current-count").textContent=v; editHr=h; modal.style.display="flex"; };
@@ -321,7 +329,7 @@ document.addEventListener("DOMContentLoaded", () => {
     checkSession(); applyTheme();
     if($("admin-lang-selector")) $("admin-lang-selector").value = curLang;
     if($("appt-time")) flatpickr("#appt-time", { enableTime:true, dateFormat:"Y-m-d H:i", time_24hr:true, locale:"zh_tw", minDate:"today", disableMobile:"true" });
-    bind("btn-refresh-stats", loadStats);
+    
     $$('.nav-btn').forEach(b => b.onclick = () => {
         $$('.nav-btn').forEach(x=>x.classList.remove('active')); b.classList.add('active');
         $$('.section-group').forEach(s=>s.classList.remove('active')); $(b.dataset.target)?.classList.add('active');
