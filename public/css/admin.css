@@ -1,5 +1,5 @@
 /* ==========================================
- * 後台樣式 (admin.css) - v2.1 Fixed
+ * 後台樣式 (admin.css) - v2.2 Chart Fixed
  * ========================================== */
 :root {
     /* [Light Mode] */
@@ -141,11 +141,37 @@ input:focus, textarea:focus, select:focus { border-color: var(--primary); box-sh
 .role-table tr:nth-child(even) td:first-child { background: var(--bg-body); }
 .role-chk { width: 16px; height: 16px; margin: 0 auto; display: block; accent-color: var(--primary); }
 
-/* Stats Chart */
-.chart-container { height: 160px; min-height: 160px; gap: 2px; padding: 10px 0 0; }
-.chart-bar { border-radius: 2px; min-height: 2px; }
+/* Stats Chart (Fixed) */
+.chart-container { 
+    display: flex;             /* [Fixed] Added flex display */
+    align-items: flex-end;     /* [Fixed] Align bars to bottom */
+    height: 160px; 
+    min-height: 160px; 
+    gap: 2px; 
+    padding: 10px 0 0; 
+}
+.chart-col {
+    flex: 1;                   /* [Fixed] Added column layout */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    height: 100%;
+    cursor: pointer;
+    min-width: 0;
+}
+.chart-col:hover { background: rgba(0,0,0,0.03); border-radius: 4px; }
+.chart-col.current .chart-label { font-weight: bold; color: var(--primary); }
+
+.chart-bar { 
+    width: 100%;
+    border-radius: 2px; 
+    min-height: 2px; 
+    background: var(--primary); /* [Fixed] Added default color */
+    transition: height 0.3s ease;
+}
 .chart-val { font-size: 0.65rem; margin-bottom: 2px; }
-.chart-label { font-size: 0.6rem; margin-top: 2px; }
+.chart-label { font-size: 0.6rem; margin-top: 2px; color: var(--text-sub); }
 
 /* Settings */
 .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
