@@ -1,5 +1,5 @@
 /* ==========================================
- * 後台邏輯 (admin.js) - v103.0 Stable
+ * 後台邏輯 (admin.js) - v104.0 Auto UI Upgrade
  * ========================================== */
 const $ = i => document.getElementById(i), $$ = s => document.querySelectorAll(s);
 const mk = (t, c, txt, ev={}, ch=[]) => { 
@@ -124,7 +124,51 @@ const showPanel = () => {
     socket.auth.token = token; socket.connect(); 
     updateLangUI();
     if(isSuper) { loadRoles(); loadUsers(); } 
+    upgradeSystemModeUI(); // [New] Trigger UI Upgrade
 };
+
+// [New] Helper to upgrade Radio Buttons to Segmented Control
+function upgradeSystemModeUI() {
+    const container = document.querySelector('#card-sys .control-group:nth-of-type(3)'); // Targeting the Mode container
+    if (!container || container.querySelector('.segmented-control')) return;
+
+    const radios = container.querySelectorAll('input[type="radio"]');
+    if (radios.length < 2) return;
+
+    const wrapper = mk('div', 'segmented-control');
+    radios.forEach(radio => {
+        // Extract text node next to radio
+        const textNode = radio.nextSibling;
+        const labelText = textNode && textNode.nodeType === 3 ? textNode.textContent.trim() : radio.value;
+        if(textNode) textNode.remove(); // Remove old text
+
+        const label = mk('div', 'segmented-option', labelText);
+        label.onclick = () => {
+            radio.checked = true;
+            radio.dispatchEvent(new Event('change'));
+            updateSegmentedVisuals(wrapper);
+        };
+        wrapper.appendChild(label);
+        // Move radio into wrapper but keep it hidden
+        wrapper.appendChild(radio);
+    });
+    
+    // Replace old content
+    // Find the title label "取號模式" usually
+    const title = container.querySelector('label');
+    container.innerHTML = '';
+    if(title) container.appendChild(title);
+    container.appendChild(wrapper);
+    updateSegmentedVisuals(wrapper);
+}
+
+function updateSegmentedVisuals(wrapper) {
+    const radios = wrapper.querySelectorAll('input[type="radio"]');
+    const labels = wrapper.querySelectorAll('.segmented-option');
+    radios.forEach((r, i) => {
+        if(labels[i]) labels[i].classList.toggle('active', r.checked);
+    });
+}
 
 // --- Socket Events ---
 socket.on("connect", () => { $("status-bar").classList.remove("visible"); toast(`${T.status_conn} (${username})`, "success"); });
@@ -135,7 +179,11 @@ socket.on("initAdminLogs", l => renderLogs(l, true));
 socket.on("newAdminLog", l => renderLogs([l], false));
 socket.on("updatePublicStatus", b => $("public-toggle").checked = b);
 socket.on("updateSoundSetting", b => $("sound-toggle").checked = b);
-socket.on("updateSystemMode", m => $$('input[name="systemMode"]').forEach(r => r.checked = (r.value === m)));
+socket.on("updateSystemMode", m => {
+    $$('input[name="systemMode"]').forEach(r => r.checked = (r.value === m));
+    const wrapper = document.querySelector('.segmented-control');
+    if(wrapper) updateSegmentedVisuals(wrapper);
+});
 socket.on("updateAppointments", l => renderAppointments(l));
 socket.on("updateOnlineAdmins", l => renderList("online-users-list", (l||[]).sort((a,b)=>(a.role==='super'?-1:1)), u => mk("li","list-item",null,{},[mk("span","list-main-text",`🟢 ${u.nickname}`), mk("span","list-sub-text",u.username)]), "Wait..."));
 socket.on("updatePassed", l => renderList("passed-list-ui", l, n => {
