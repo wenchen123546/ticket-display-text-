@@ -122,7 +122,7 @@ const showPanel = () => {
     if(lineBtn) lineBtn.style.display = isSuper ? "flex" : "none";
     if(!isSuper && $("section-booking")) $("section-booking").style.display = "none";
     
-    // [Modified] Updated list to include the separate card-role-management instead of role-editor-container
+    // [Updated] Toggle role management card instead of embedded container
     ["card-user-management", "card-role-management", "btn-export-csv", "mode-switcher-group", "unlock-pwd-group"].forEach(id => setBlock(id, isSuper));
     
     ['resetNumber','resetIssued','resetPassed','resetFeaturedContents','btn-clear-logs','btn-clear-stats','btn-reset-line-msg','resetAll'].forEach(id => setBlock(id, isSuper));
@@ -132,47 +132,29 @@ const showPanel = () => {
     upgradeSystemModeUI();
 };
 
-// [New] Helper to upgrade Radio Buttons to Segmented Control
+// [Helper] Upgrade Radio Buttons to Segmented Control
 function upgradeSystemModeUI() {
-    const container = document.querySelector('#card-sys .control-group:nth-of-type(3)'); // Targeting the Mode container
+    const container = document.querySelector('#card-sys .control-group:nth-of-type(3)');
     if (!container || container.querySelector('.segmented-control')) return;
-
     const radios = container.querySelectorAll('input[type="radio"]');
     if (radios.length < 2) return;
-
     const wrapper = mk('div', 'segmented-control');
     radios.forEach(radio => {
-        // Extract text node next to radio
         const textNode = radio.nextSibling;
         const labelText = textNode && textNode.nodeType === 3 ? textNode.textContent.trim() : radio.value;
-        if(textNode) textNode.remove(); // Remove old text
-
+        if(textNode) textNode.remove();
         const label = mk('div', 'segmented-option', labelText);
-        label.onclick = () => {
-            radio.checked = true;
-            radio.dispatchEvent(new Event('change'));
-            updateSegmentedVisuals(wrapper);
-        };
-        wrapper.appendChild(label);
-        // Move radio into wrapper but keep it hidden
-        wrapper.appendChild(radio);
+        label.onclick = () => { radio.checked = true; radio.dispatchEvent(new Event('change')); updateSegmentedVisuals(wrapper); };
+        wrapper.appendChild(label); wrapper.appendChild(radio);
     });
-    
-    // Replace old content
-    // Find the title label "取號模式" usually
     const title = container.querySelector('label');
-    container.innerHTML = '';
-    if(title) container.appendChild(title);
-    container.appendChild(wrapper);
+    container.innerHTML = ''; if(title) container.appendChild(title); container.appendChild(wrapper);
     updateSegmentedVisuals(wrapper);
 }
-
 function updateSegmentedVisuals(wrapper) {
     const radios = wrapper.querySelectorAll('input[type="radio"]');
     const labels = wrapper.querySelectorAll('.segmented-option');
-    radios.forEach((r, i) => {
-        if(labels[i]) labels[i].classList.toggle('active', r.checked);
-    });
+    radios.forEach((r, i) => { if(labels[i]) labels[i].classList.toggle('active', r.checked); });
 }
 
 // --- Socket Events ---
@@ -184,11 +166,7 @@ socket.on("initAdminLogs", l => renderLogs(l, true));
 socket.on("newAdminLog", l => renderLogs([l], false));
 socket.on("updatePublicStatus", b => $("public-toggle").checked = b);
 socket.on("updateSoundSetting", b => $("sound-toggle").checked = b);
-socket.on("updateSystemMode", m => {
-    $$('input[name="systemMode"]').forEach(r => r.checked = (r.value === m));
-    const wrapper = document.querySelector('.segmented-control');
-    if(wrapper) updateSegmentedVisuals(wrapper);
-});
+socket.on("updateSystemMode", m => { $$('input[name="systemMode"]').forEach(r => r.checked = (r.value === m)); const w = document.querySelector('.segmented-control'); if(w) updateSegmentedVisuals(w); });
 socket.on("updateAppointments", l => renderAppointments(l));
 socket.on("updateOnlineAdmins", l => renderList("online-users-list", (l||[]).sort((a,b)=>(a.role==='super'?-1:1)), u => mk("li","list-item",null,{},[mk("span","list-main-text",`🟢 ${u.nickname}`), mk("span","list-sub-text",u.username)]), "Wait..."));
 socket.on("updatePassed", l => renderList("passed-list-ui", l, n => {
@@ -307,7 +285,7 @@ const act = (id, api, data={}) => $(id)?.addEventListener("click", async () => {
 });
 const bind = (id, fn) => $(id)?.addEventListener("click", fn);
 
-// [Fix] Add handlers for +1 and +5 in Command Center
+// Command Center +1/+5 Helpers
 async function adjustCurrent(delta) {
     const c = parseInt($("number").textContent) || 0;
     const target = c + delta;
@@ -335,7 +313,11 @@ bind("btn-save-roles", async()=>{
     if(await req("/api/admin/roles/update", {rolesConfig:c})) toast(T.saved,"success");
 });
 bind("btn-save-unlock-pwd", async()=>{ const p=$("line-unlock-pwd").value; if(await req("/api/admin/line-settings/save-pass", {password:p})) toast(T.saved,"success"); });
-bind("btn-export-csv", async()=>{ const d=await req("/api/admin/export-csv"); if(d?.csvData) { const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob(["\uFEFF"+d.csvData],{type:'text/csv'})); a.download=d.fileName; a.click(); }});
+bind("btn-export-csv", async()=>{ 
+    // [Updated] Export today by default, or could be extended to date picker
+    const d=await req("/api/admin/export-csv", { date: new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Taipei"}) }); 
+    if(d?.csvData) { const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob(["\uFEFF"+d.csvData],{type:'text/csv'})); a.download=d.fileName; a.click(); }
+});
 bind("add-user-btn", async()=>{ const u=$("new-user-username").value, p=$("new-user-password").value, n=$("new-user-nickname").value, r=$("new-user-role")?.value; if(await req("/api/admin/add-user", {newUsername:u, newPassword:p, newNickname:n, newRole:r})) { toast(T.saved,"success"); loadUsers(); } });
 bind("admin-theme-toggle", ()=>{ isDark = !isDark; applyTheme(); });
 bind("admin-theme-toggle-mobile", ()=>{ isDark = !isDark; applyTheme(); });
