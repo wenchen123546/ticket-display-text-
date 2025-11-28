@@ -1,5 +1,5 @@
 /* ==========================================
- * 後台樣式 (admin.css) - v87.0 Stats Layout Fix
+ * 後台樣式 (admin.css) - v88.0 Layout Fix
  * ========================================== */
 :root {
     /* [Light Mode] */
@@ -70,10 +70,8 @@ body { margin: 0; width: 100%; min-height: 100vh; font-family: 'Inter', system-u
 /* Grid Layout */
 .card-container { display: grid; gap: 24px; grid-template-columns: repeat(1, minmax(0, 1fr)); align-items: stretch; }
 @media (min-width: 768px) { .card-container { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-/* [Fix] Desktop Grid Settings */
 @media (min-width: 1200px) { 
     .card-container { grid-template-columns: repeat(3, minmax(0, 1fr)); } 
-    /* [Fix] 流量分析區塊強制 2 欄並排 */
     #section-stats .card-container { grid-template-columns: 1fr 1fr; }
 }
 .full-width-card { grid-column: 1 / -1 !important; }
@@ -143,7 +141,16 @@ body.dark-mode .btn-secondary { background: rgba(99, 102, 241, 0.15); color: #a5
 .edit-form-actions { display: flex; gap: 8px; justify-content: flex-end; flex: 1 1 100%; margin-top: 5px; }
 
 /* Log & Chart */
-.log-list { flex: 1; height: auto; min-height: 0; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; overflow-y: auto; padding: 0; margin: 0; list-style: none; background: var(--bg-body); border: 1px solid var(--border-color); border-radius: 12px; -webkit-overflow-scrolling: touch; } .log-list li { padding: 8px 12px; border-bottom: 1px solid var(--border-color); display: block; word-break: break-all; }
+.log-list { 
+    height: 320px; /* Fixed height matching chart */
+    min-height: 320px;
+    font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; 
+    overflow-y: auto; padding: 0; margin: 0; list-style: none; 
+    background: var(--bg-body); border: 1px solid var(--border-color); 
+    border-radius: 12px; -webkit-overflow-scrolling: touch; 
+} 
+.log-list li { padding: 8px 12px; border-bottom: 1px solid var(--border-color); display: block; word-break: break-all; }
+
 .chart-container { height: 320px; min-height: 320px; display: flex; align-items: flex-end; gap: 3px; padding: 12px 0; width: 100%; overflow-x: auto; border-bottom: 1px solid var(--border-color); -webkit-overflow-scrolling: touch; }
 .chart-col { flex: 1; min-width: 20px; text-align: center; display: flex; flex-direction: column; justify-content: flex-end; cursor: pointer; height: 100%; }
 .chart-bar { background: var(--primary); opacity: 0.5; width: 100%; border-radius: 3px 3px 0 0; min-height: 4px; transition: 0.3s; }
@@ -182,5 +189,3 @@ body.dark-mode .btn-secondary { background: rgba(99, 102, 241, 0.15); color: #a5
 .modal-content { background: var(--bg-surface); padding: 32px; border-radius: 24px; width: 90%; max-width: 320px; text-align: center; box-shadow: 0 25px 50px rgba(0,0,0,0.4); border: 1px solid var(--border-color); }
 .modal-actions { display: flex; justify-content: center; align-items: center; gap: 24px; margin: 24px 0; }
 .btn-circle { width: 56px; height: 56px; border-radius: 50%; font-size: 1.6rem; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow-md); transition: 0.2s; }
-
-}
