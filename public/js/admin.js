@@ -1,5 +1,5 @@
 /* ==========================================
- * 後台邏輯 (admin.js) - v16.3 Full Localization Fix
+ * 後台邏輯 (admin.js) - v17.0 Role Matrix
  * ========================================== */
 const $ = i => document.getElementById(i), $$ = s => document.querySelectorAll(s);
 const mk = (t, c, txt, ev={}, ch=[]) => { 
@@ -9,13 +9,13 @@ const mk = (t, c, txt, ev={}, ch=[]) => {
 };
 const toast = (m, t='info') => { 
     const el=$("toast-notification"); el.textContent=m; 
-    el.className = `show ${t}`; 
-    setTimeout(()=>el.className="", 3000); 
+    el.className = `show ${t}`; setTimeout(()=>el.className="", 3000); 
 };
 
-// [關鍵] 擴充翻譯字典，包含所有 JS 動態生成的文字
+// [I18N] 新增權限相關翻譯
 const i18n = {
     "zh-TW": { 
+        // ... (保留原有翻譯) ...
         status_conn:"✅ 已連線", status_dis:"⚠️ 連線中斷...", saved:"✅ 已儲存", denied:"❌ 權限不足", 
         expired:"Session 過期", login_fail:"登入失敗", confirm:"⚠️ 確認", recall:"↩️ 重呼", 
         edit:"✎ 編輯", del:"✕ 刪除", save:"✓ 儲存", cancel:"✕ 取消",
@@ -41,10 +41,14 @@ const i18n = {
         card_booking: "預約管理", lbl_add_appt: "新增預約", wait: "等待...",
         loading: "載入中...", empty: "[ 空 ]", no_logs: "[ 無日誌 ]", no_appt: "暫無預約",
         role_viewer: "檢視者", role_operator: "操作員", role_manager: "經理", role_admin: "管理員",
-        perm_role: "角色", perm_call: "叫號", perm_pass: "過號", perm_recall: "重呼", perm_issue: "發號", perm_settings: "設定", perm_appt: "預約",
-        msg_recall_confirm: "確定要重呼 %s 嗎？", msg_sent: "📢 已發送", msg_calibrated: "校正完成"
+        msg_recall_confirm: "確定要重呼 %s 嗎？", msg_sent: "📢 已發送", msg_calibrated: "校正完成",
+        
+        // [New Permissions]
+        perm_role: "角色權限", perm_call: "叫號/指揮", perm_issue: "發號", perm_stats: "數據/日誌", 
+        perm_settings: "系統設定", perm_line: "LINE設定", perm_appointment: "預約管理", perm_users: "帳號管理"
     },
     "en": { 
+        // ... (保留原有翻譯) ...
         status_conn:"✅ Connected", status_dis:"⚠️ Disconnected...", saved:"✅ Saved", denied:"❌ Denied", 
         expired:"Session Expired", login_fail:"Login Failed", confirm:"⚠️ Confirm", recall:"↩️ Recall", 
         edit:"✎ Edit", del:"✕ Del", save:"✓ Save", cancel:"✕ Cancel",
@@ -70,13 +74,17 @@ const i18n = {
         card_booking: "Booking Manager", lbl_add_appt: "Add Booking", wait: "Waiting...",
         loading: "Loading...", empty: "[ Empty ]", no_logs: "[ No Logs ]", no_appt: "No Appointments",
         role_viewer: "Viewer", role_operator: "Operator", role_manager: "Manager", role_admin: "Admin",
-        perm_role: "Role", perm_call: "Call", perm_pass: "Pass", perm_recall: "Recall", perm_issue: "Issue", perm_settings: "Settings", perm_appt: "Booking",
-        msg_recall_confirm: "Recall number %s?", msg_sent: "📢 Sent", msg_calibrated: "Calibrated"
+        msg_recall_confirm: "Recall number %s?", msg_sent: "📢 Sent", msg_calibrated: "Calibrated",
+        
+        // [New Permissions]
+        perm_role: "Role", perm_call: "Call/Cmd", perm_issue: "Ticketing", perm_stats: "Stats/Logs", 
+        perm_settings: "Settings", perm_line: "Line Config", perm_appointment: "Booking", perm_users: "Users"
     }
 };
 
 let curLang = localStorage.getItem('callsys_lang')||'zh-TW', T = i18n[curLang], userRole="normal", username="", uniqueUser="", cachedLine=null, isDark = localStorage.getItem('callsys_admin_theme') === 'dark';
 const socket = io({ autoConnect: false });
+let globalRoleConfig = null; // 儲存全域權限設定
 
 async function req(url, data={}, btn=null) {
     if(btn) btn.disabled=true;
@@ -90,60 +98,36 @@ async function req(url, data={}, btn=null) {
 
 const confirmBtn = (el, txt, action) => {
     if(!el) return; let t, c=5;
-    // 儲存原始文字 key，以便切換語言時更新
     el.dataset.originalKey = Object.keys(T).find(key => T[key] === txt) || txt; 
-    
     el.onclick = (e) => { 
         e.stopPropagation(); 
         if(el.classList.contains("is-confirming")) { action(); reset(); } 
-        else { 
-            el.classList.add("is-confirming"); 
-            el.textContent = `${T.confirm} (${c})`; 
-            t = setInterval(() => { c--; el.textContent = `${T.confirm} (${c})`; if(c<=0) reset(); }, 1000); 
-        } 
+        else { el.classList.add("is-confirming"); el.textContent = `${T.confirm} (${c})`; t = setInterval(() => { c--; el.textContent = `${T.confirm} (${c})`; if(c<=0) reset(); }, 1000); } 
     };
-    const reset = () => { 
-        clearInterval(t); el.classList.remove("is-confirming"); 
-        // 恢復時嘗試使用翻譯
-        el.textContent = T[el.dataset.originalKey] || txt; 
-        c=5; 
-    };
+    const reset = () => { clearInterval(t); el.classList.remove("is-confirming"); el.textContent = T[el.dataset.originalKey] || txt; c=5; };
 };
 
-// [關鍵] 更新所有 UI，包含重新渲染列表
 const updateLangUI = () => {
     T = i18n[curLang]||i18n["zh-TW"]; 
-    
-    // 1. 更新靜態 HTML 文字
     $$('[data-i18n]').forEach(e => { const k = e.getAttribute('data-i18n'); if(T[k]) e.textContent = T[k]; });
     $$('[data-i18n-ph]').forEach(e => e.placeholder = T[e.getAttribute('data-i18n-ph')]||"");
+    $$('button[data-original-key]').forEach(b => { if(!b.classList.contains('is-confirming')) b.textContent = T[b.dataset.originalKey]; });
     
-    // 2. 更新按鈕原始文字 (若沒在確認狀態)
-    $$('button[data-original-key]').forEach(b => {
-        if(!b.classList.contains('is-confirming')) b.textContent = T[b.dataset.originalKey];
-    });
-
-    // 3. [關鍵] 重新載入動態列表，確保 JS 生成的內容也翻譯
-    loadUsers(); 
-    loadStats(); 
-    loadAppointments(); 
-    if(isSuperAdmin()) loadRoles(); // 重新渲染權限表
-    if(cachedLine) renderLineSettings(); else loadLineSettings();
+    // 如果有權限，重新載入
+    if(checkPerm('users')) loadUsers(); 
+    if(checkPerm('stats')) loadStats(); 
+    if(checkPerm('appointment')) loadAppointments(); 
+    if(isSuperAdmin()) loadRoles(); 
+    if(checkPerm('line')) { if(cachedLine) renderLineSettings(); else loadLineSettings(); }
+    if(checkPerm('settings')) req("/api/featured/get").then(l => renderList("featured-list-ui", l, renderFeaturedItem));
     
-    // 重新請求列表以刷新翻譯 (Passed List, Featured Links)
-    req("/api/featured/get").then(l => renderList("featured-list-ui", l, renderFeaturedItem));
-    
-    // 更新登入者資訊顯示
     if(username) $("sidebar-user-info").textContent = username;
 };
 
 function renderList(ulId, list, fn, emptyMsgKey="empty") {
     const ul = $(ulId); if(!ul) return; 
     while (ul.firstChild) ul.removeChild(ul.firstChild); 
-    if(!list?.length) {
-        ul.innerHTML=`<li class="list-item" style="justify-content:center;color:var(--text-sub);">${T[emptyMsgKey] || T.empty}</li>`;
-        return;
-    }
+    if(!list?.length) { ul.innerHTML=`<li class="list-item" style="justify-content:center;color:var(--text-sub);">${T[emptyMsgKey] || T.empty}</li>`; return; }
     const frag = document.createDocumentFragment();
     list.forEach(x => { const el = fn(x); if(el) frag.appendChild(el); });
     ul.appendChild(frag);
@@ -155,13 +139,54 @@ function applyTheme() {
     if($('admin-theme-toggle-mobile')) $('admin-theme-toggle-mobile').textContent = isDark ? '☀️' : '🌙';
 }
 
-const checkSession = () => {
+// [關鍵] 前端權限檢查 Helper
+const checkPerm = (perm) => {
+    if(isSuperAdmin()) return true;
+    if(!globalRoleConfig) return false;
+    const myRoleConfig = globalRoleConfig[userRole];
+    if(!myRoleConfig) return false;
+    return myRoleConfig.can.includes('*') || myRoleConfig.can.includes(perm);
+};
+
+// [關鍵] 根據權限隱藏/顯示 UI 元素
+const applyUIPermissions = async () => {
+    // 1. 取得最新權限設定
+    globalRoleConfig = await req("/api/admin/roles/get");
+    if(!globalRoleConfig) return;
+
+    // 2. 遍歷所有帶有 data-perm 的元素
+    $$('[data-perm]').forEach(el => {
+        const requiredPerm = el.getAttribute('data-perm');
+        if (checkPerm(requiredPerm)) {
+            el.style.display = ''; // 恢復預設 (flex/block)
+            // 特殊處理：如果是卡片，需要恢復 flex
+            if(el.classList.contains('admin-card')) el.style.display = 'flex';
+        } else {
+            el.style.display = 'none'; // 隱藏
+        }
+    });
+
+    // 3. 觸發一次導航點擊，避免停留在被隱藏的頁面
+    const visibleNav = document.querySelector('.nav-btn[style="display: none;"]');
+    if(visibleNav && visibleNav.classList.contains('active')) {
+        const firstVisible = document.querySelector('.nav-btn:not([style*="none"])');
+        if(firstVisible) firstVisible.click();
+    }
+};
+
+const checkSession = async () => {
     uniqueUser = localStorage.getItem('callsys_user');
     userRole = localStorage.getItem('callsys_role'); 
     username = localStorage.getItem('callsys_nick');
     if (uniqueUser === 'superadmin' && userRole !== 'ADMIN') { userRole = 'ADMIN'; localStorage.setItem('callsys_role', 'ADMIN'); }
-    if(uniqueUser) showPanel(); else showLogin();
+    
+    if(uniqueUser) {
+        showPanel();
+        await applyUIPermissions(); // 登入後立即應用權限
+        updateLangUI(); // 更新文字
+    } else showLogin();
 };
+
 const logout = () => { 
     localStorage.removeItem('callsys_user'); localStorage.removeItem('callsys_role'); localStorage.removeItem('callsys_nick');
     document.cookie = "token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
@@ -172,18 +197,14 @@ const isSuperAdmin = () => (uniqueUser === 'superadmin' || userRole === 'super' 
 
 const showPanel = () => {
     $("login-container").style.display="none"; $("admin-panel").style.display="flex"; $("sidebar-user-info").textContent = username;
-    const isSuper = isSuperAdmin();
-    const setFlex = (id, show) => { if($(id)) $(id).style.display = show ? "flex" : "none"; };
-    const setBlock = (id, show) => { if($(id)) $(id).style.display = show ? "block" : "none"; };
     
-    const lineBtn = document.querySelector('button[data-target="section-line"]');
-    if(lineBtn) lineBtn.style.display = isSuper ? "flex" : "none";
-
-    ["card-user-management", "card-role-management", "btn-export-csv", "mode-switcher-group", "unlock-pwd-group"].forEach(id => setBlock(id, isSuper));
+    const isSuper = isSuperAdmin();
+    // 只有 Super Admin 能看到的角色管理與全域重置
+    const setBlock = (id, show) => { if($(id)) $(id).style.display = show ? "block" : "none"; };
+    ["card-role-management", "btn-export-csv", "mode-switcher-group", "unlock-pwd-group"].forEach(id => setBlock(id, isSuper));
     ['resetNumber','resetIssued','resetPassed','resetFeaturedContents','btn-clear-logs','btn-clear-stats','btn-reset-line-msg','resetAll'].forEach(id => setBlock(id, isSuper));
     
     socket.connect(); 
-    updateLangUI(); // 這裡會觸發所有載入
     upgradeSystemModeUI();
 };
 
@@ -195,14 +216,11 @@ function upgradeSystemModeUI() {
     const wrapper = mk('div', 'segmented-control');
     radios.forEach(radio => {
         const textNode = radio.nextSibling;
-        // 翻譯模式標籤
         const labelKey = radio.value === 'ticketing' ? 'mode_online' : 'mode_manual';
         const labelText = T[labelKey]; 
         if(textNode) textNode.remove();
         const label = mk('div', 'segmented-option', labelText);
-        // 綁定動態更新
         label.dataset.i18n = labelKey; 
-        
         label.onclick = () => { radio.checked = true; radio.dispatchEvent(new Event('change')); updateSegmentedVisuals(wrapper); };
         wrapper.appendChild(label); wrapper.appendChild(radio);
     });
@@ -218,17 +236,16 @@ function updateSegmentedVisuals(wrapper) {
 
 socket.on("connect", () => { $("status-bar").classList.remove("visible"); toast(`${T.status_conn} (${username})`, "success"); });
 socket.on("disconnect", () => $("status-bar").classList.add("visible"));
-socket.on("updateQueue", d => { $("number").textContent=d.current; $("issued-number").textContent=d.issued; $("waiting-count").textContent=Math.max(0, d.issued-d.current); loadStats(); });
-socket.on("update", n => { $("number").textContent=n; loadStats(); });
-socket.on("initAdminLogs", l => renderLogs(l, true));
-socket.on("newAdminLog", l => renderLogs([l], false));
+socket.on("updateQueue", d => { $("number").textContent=d.current; $("issued-number").textContent=d.issued; $("waiting-count").textContent=Math.max(0, d.issued-d.current); if(checkPerm('stats')) loadStats(); });
+socket.on("update", n => { $("number").textContent=n; if(checkPerm('stats')) loadStats(); });
+socket.on("initAdminLogs", l => { if(checkPerm('stats')) renderLogs(l, true); });
+socket.on("newAdminLog", l => { if(checkPerm('stats')) renderLogs([l], false); });
 socket.on("updatePublicStatus", b => $("public-toggle").checked = b);
 socket.on("updateSoundSetting", b => $("sound-toggle").checked = b);
 socket.on("updateSystemMode", m => { $$('input[name="systemMode"]').forEach(r => r.checked = (r.value === m)); const w = document.querySelector('.segmented-control'); if(w) updateSegmentedVisuals(w); });
-socket.on("updateAppointments", l => renderAppointments(l));
-socket.on("updateOnlineAdmins", l => renderList("online-users-list", (l||[]).sort((a,b)=>(a.role==='super'?-1:1)), u => mk("li","list-item",null,{},[mk("div","list-info",null,{},[mk("span","list-main-text",`🟢 ${u.nickname}`), mk("span","list-sub-text",u.username)])]), "loading"));
+socket.on("updateAppointments", l => { if(checkPerm('appointment')) renderAppointments(l); });
+socket.on("updateOnlineAdmins", l => { if(checkPerm('users')) renderList("online-users-list", (l||[]).sort((a,b)=>(a.role==='super'?-1:1)), u => mk("li","list-item",null,{},[mk("div","list-info",null,{},[mk("span","list-main-text",`🟢 ${u.nickname}`), mk("span","list-sub-text",u.username)])]), "loading"); });
 
-// Render Passed List
 socket.on("updatePassed", l => renderList("passed-list-ui", l, n => {
     const acts = mk("div", "list-actions", null, {}, [
         mk("button", "btn-secondary", T.recall, {onclick:()=>{ if(confirm(T.msg_recall_confirm.replace('%s', n))) req("/api/control/recall-passed",{number:n}); }}),
@@ -237,7 +254,6 @@ socket.on("updatePassed", l => renderList("passed-list-ui", l, n => {
     return mk("li", "list-item", null, {}, [mk("span","list-main-text",`${n} 號`,{style:"font-size:1rem;color:var(--primary);"}), acts]);
 }, "empty"));
 
-// Render Featured Links
 const renderFeaturedItem = (item) => {
     const view = mk("div", "list-info", null, {}, [mk("span","list-main-text",item.linkText), mk("span","list-sub-text",item.linkUrl)]);
     const form = mk("div", "edit-form-wrapper", null, {style:"display:none;"}, [
@@ -253,7 +269,7 @@ const renderFeaturedItem = (item) => {
     ]);
     return mk("li", "list-item", null, {}, [view, acts, form]);
 };
-socket.on("updateFeaturedContents", l => renderList("featured-list-ui", l, renderFeaturedItem, "empty"));
+socket.on("updateFeaturedContents", l => { if(checkPerm('settings')) renderList("featured-list-ui", l, renderFeaturedItem, "empty"); });
 
 async function loadAppointments() { try { renderAppointments((await req("/api/appointment/list"))?.appointments); } catch(e){} }
 function renderAppointments(list) {
@@ -285,9 +301,7 @@ async function loadUsers() {
         if(u.username === uniqueUser || isSuper) acts.appendChild(mk("button","btn-secondary",T.edit,{onclick:()=>{view.style.display="none";acts.style.display="none";form.style.display="flex";}}));
         if(u.username !== 'superadmin' && isSuper) {
             const sel = mk("select","role-select",null,{onchange:async()=>await req("/api/admin/set-role",{targetUsername:u.username, newRole:sel.value})});
-            // 重建選項以確保是當前語言
             Object.keys(roleNames).forEach(k=>sel.add(new Option(roleNames[k], k, false, u.role===k)));
-            
             const btnDel = mk("button","btn-secondary",T.del); confirmBtn(btnDel, T.del, async()=>{await req("/api/admin/del-user",{delUsername:u.username}); loadUsers();});
             acts.append(sel, btnDel);
         }
@@ -296,15 +310,29 @@ async function loadUsers() {
 }
 
 async function loadRoles() {
-    const cfg = await req("/api/admin/roles/get"), ctr = $("role-editor-content"); if(!cfg || !ctr) return; ctr.innerHTML="";
+    // [New Permissions Matrix]
+    const cfg = globalRoleConfig || await req("/api/admin/roles/get"); 
+    const ctr = $("role-editor-content"); if(!cfg || !ctr) return; ctr.innerHTML="";
     const tbl = mk("table", "role-table"), th = mk("tr");
-    // [關鍵] 動態產生翻譯標題
-    [T.perm_role, T.perm_call, T.perm_pass, T.perm_recall, T.perm_issue, T.perm_settings, T.perm_appt].forEach(t => th.appendChild(mk("th", null, t)));
+    
+    // 定義權限 Key 與翻譯的對應
+    const perms = [
+        {k:'call', t:T.perm_call}, {k:'issue', t:T.perm_issue}, {k:'stats', t:T.perm_stats},
+        {k:'settings', t:T.perm_settings}, {k:'appointment', t:T.perm_appointment}, 
+        {k:'line', t:T.perm_line}, {k:'users', t:T.perm_users}
+    ];
+
+    th.appendChild(mk("th", null, T.perm_role));
+    perms.forEach(p => th.appendChild(mk("th", null, p.t)));
     tbl.appendChild(mk("thead", null, null, {}, [th]));
+    
     const tb = mk("tbody");
     ['VIEWER', 'OPERATOR', 'MANAGER'].forEach(r => {
         const tr = mk("tr", null, null, {}, [mk("td", null, r, {style:"font-weight:bold"})]);
-        ['call','pass','recall','issue','settings','appointment'].forEach(k => tr.appendChild(mk("td", null, null, {}, [mk("input", "role-chk", null, {type:"checkbox", dataset:{role:r, perm:k}, checked:(cfg[r]?.can||[]).includes(k)})])));
+        perms.forEach(p => {
+            const isChecked = (cfg[r]?.can||[]).includes(p.k);
+            tr.appendChild(mk("td", null, null, {}, [mk("input", "role-chk", null, {type:"checkbox", dataset:{role:r, perm:p.k}, checked:isChecked})]));
+        });
         tb.appendChild(tr);
     });
     tbl.appendChild(tb); ctr.appendChild(mk("div", "role-table-wrapper", null, {}, [tbl]));
@@ -350,14 +378,10 @@ function renderLogs(logs, init) {
     while(ul.children.length > 50) ul.removeChild(ul.lastChild);
 }
 
-// [Optimistic UI] Helper
 const act = (id, api, data={}) => $(id)?.addEventListener("click", async () => {
     const numEl = $("number");
     const originalVal = numEl ? parseInt(numEl.textContent || 0) : 0;
-    if(api.includes('call') && numEl && data.direction) {
-        numEl.textContent = originalVal + (data.direction === 'next' ? 1 : -1);
-        numEl.style.opacity = "0.6"; 
-    }
+    if(api.includes('call') && numEl && data.direction) { numEl.textContent = originalVal + (data.direction === 'next' ? 1 : -1); numEl.style.opacity = "0.6"; }
     try { await req(api, data, $(id)); } catch(e) { if(numEl) numEl.textContent = originalVal; } finally { if(numEl) numEl.style.opacity = "1"; }
 });
 const bind = (id, fn) => $(id)?.addEventListener("click", fn);
@@ -387,7 +411,12 @@ bind("btn-add-appt", async()=>{ const n=$("appt-number").value, t=$("appt-time")
 bind("btn-save-roles", async()=>{ 
     const c={ VIEWER:{level:0,can:[]}, OPERATOR:{level:1,can:[]}, MANAGER:{level:2,can:[]}, ADMIN:{level:9,can:['*']} };
     $$(".role-chk:checked").forEach(k => c[k.dataset.role].can.push(k.dataset.perm));
-    if(await req("/api/admin/roles/update", {rolesConfig:c})) toast(T.saved,"success");
+    if(await req("/api/admin/roles/update", {rolesConfig:c})) {
+        toast(T.saved,"success");
+        // 更新成功後，重新套用一次 UI 權限 (預覽)
+        globalRoleConfig = c;
+        applyUIPermissions();
+    }
 });
 bind("btn-save-unlock-pwd", async()=>{ const p=$("line-unlock-pwd").value; if(await req("/api/admin/line-settings/save-pass", {password:p})) toast(T.saved,"success"); });
 bind("btn-export-csv", async()=>{ 
@@ -452,17 +481,13 @@ document.addEventListener("DOMContentLoaded", () => {
         $$('.section-group').forEach(s=>s.classList.remove('active')); 
         const target = $(b.dataset.target);
         if(target) target.classList.add('active');
-        
         if(b.dataset.target === 'section-stats') loadStats();
         if(b.dataset.target === 'section-settings') { loadAppointments(); loadUsers(); }
     });
     
-    // [關鍵] 綁定所有語言選擇器
     [ $("admin-lang-selector"), $("admin-lang-selector-mobile") ].forEach(sel => {
         sel?.addEventListener("change", e => { 
-            curLang = e.target.value; 
-            localStorage.setItem('callsys_lang', curLang); 
-            // 同步所有選擇器
+            curLang = e.target.value; localStorage.setItem('callsys_lang', curLang); 
             if($("admin-lang-selector")) $("admin-lang-selector").value = curLang;
             if($("admin-lang-selector-mobile")) $("admin-lang-selector-mobile").value = curLang;
             updateLangUI(); 
