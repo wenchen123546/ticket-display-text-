@@ -1,5 +1,5 @@
 /* ==========================================
- * 後台樣式 (admin.css) - v16.2 Mobile Fix
+ * 後台樣式 (admin.css) - v17.1 Layout & Role Cards
  * ========================================== */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap');
 
@@ -69,7 +69,7 @@ body {
     font-family: 'Inter', system-ui, -apple-system, sans-serif; 
     background: var(--bg-body); color: var(--text-main); 
     font-size: 14px; line-height: 1.5; letter-spacing: -0.01em;
-    overflow: hidden; /* Desktop default, mobile will override */
+    overflow: hidden; /* Desktop default */
     transition: background-color 0.3s ease, color 0.3s ease;
 }
 
@@ -97,6 +97,7 @@ body {
     color: var(--text-sub); background: transparent; border: none; cursor: pointer; 
     font-weight: 500; font-size: 0.95rem; text-align: left; 
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    white-space: nowrap; /* 防止按鈕文字換行 */
 }
 .nav-btn:hover { background: var(--bg-hover); color: var(--text-main); }
 .nav-btn.active { background: var(--primary-soft); color: var(--primary); font-weight: 700; }
@@ -116,7 +117,7 @@ body {
 .section-group.active { display: block; }
 
 /* ==========================================
-   2. 卡片 (Cards)
+   2. 卡片 (Cards) - v17.1 Fixes
    ========================================== */
 .card-container { 
     display: grid; gap: 24px; 
@@ -132,7 +133,6 @@ body {
     padding: 24px; 
     height: 100%; position: relative; 
     transition: transform 0.2s, box-shadow 0.2s;
-    
     display: flex; flex-direction: column; justify-content: space-between; gap: 16px; 
 }
 body.dark-mode .admin-card { border: 1px solid rgba(255,255,255,0.08); }
@@ -143,8 +143,13 @@ body.dark-mode .admin-card { border: 1px solid rgba(255,255,255,0.08); }
     border-bottom: 1px solid var(--border-color); 
     font-size: 1rem; color: var(--text-main); font-weight: 700; 
     display: flex; align-items: center; gap: 10px; letter-spacing: -0.01em; flex-shrink: 0;
+    
+    /* [修正] 防止語言切換時標題過長 */
+    white-space: nowrap; 
+    overflow: hidden; 
+    text-overflow: ellipsis;
 }
-.card-icon { font-size: 1.2rem; filter: grayscale(0.2); }
+.card-icon { font-size: 1.2rem; filter: grayscale(0.2); flex-shrink: 0; }
 
 .admin-card > .control-group:last-of-type, .admin-card > button:last-child { margin-top: 0; }
 .admin-card .control-group { flex-grow: 1; display: flex; flex-direction: column; justify-content: center; }
@@ -165,7 +170,7 @@ body.dark-mode .admin-card { border: 1px solid rgba(255,255,255,0.08); }
 .dashboard-item .label { font-size: 0.9rem; font-weight: 600; color: var(--text-sub); text-transform: uppercase; letter-spacing: 0.5px; }
 
 /* ==========================================
-   3. 輸入元件 (Inputs)
+   3. 輸入與按鈕
    ========================================== */
 .control-group { margin-bottom: 0; display: flex; flex-direction: column; gap: 8px; }
 .control-group label { font-size: 0.85rem; font-weight: 600; color: var(--text-main); display: flex; justify-content: space-between; }
@@ -199,13 +204,12 @@ input:focus, select:focus, textarea:focus { border-color: var(--primary); backgr
 .segmented-option.active { background: var(--bg-surface); color: var(--primary); box-shadow: 0 2px 4px rgba(0,0,0,0.05); font-weight: 700; border: 1px solid var(--border-color); }
 input[type="radio"] { display: none; }
 
-/* ==========================================
-   4. 按鈕 (Buttons)
-   ========================================== */
 button { 
     height: var(--input-h); border-radius: var(--btn-radius); 
     font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px;
     cursor: pointer; border: none; transition: all 0.2s ease; font-size: 0.95rem; user-select: none;
+    /* [修正] 防止按鈕內容因翻譯過長而破版 */
+    white-space: nowrap; padding: 0 16px;
 }
 button:active { transform: scale(0.97); }
 
@@ -233,14 +237,22 @@ button:active { transform: scale(0.97); }
 .secondary-actions-row, .big-action-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 0; }
 
 /* ==========================================
-   5. 列表 (Lists)
+   4. 列表 (Lists) - 高度限制修正
    ========================================== */
 .list-container { 
-    flex: 1; height: auto; min-height: 120px; max-height: none;
+    flex: 1; 
+    /* [修正] 設定最大高度，防止內容無限拉長卡片 */
+    max-height: 40vh; 
+    min-height: 150px;
+    
     border: 1px solid var(--border-color); border-radius: var(--btn-radius); 
     overflow: hidden; background: var(--bg-input); display: flex; flex-direction: column; 
 }
-.scroll-list { flex: 1; overflow-y: auto; margin: 0; padding: 0; list-style: none; min-height: 0; }
+.scroll-list { 
+    flex: 1; overflow-y: auto; margin: 0; padding: 0; list-style: none; min-height: 0; 
+    /* 優化滾動行為 */
+    overscroll-behavior: contain;
+}
 .scroll-list::-webkit-scrollbar { width: 6px; }
 .scroll-list::-webkit-scrollbar-thumb { background-color: var(--border-color); border-radius: 10px; }
 
@@ -259,6 +271,45 @@ button:active { transform: scale(0.97); }
 .list-actions button { height: 32px; font-size: 0.8rem; padding: 0 12px; }
 .edit-form-wrapper { display: flex; flex-direction: column; gap: 8px; width: 100%; padding: 8px 0; }
 .edit-form-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+/* ==========================================
+   5. [新] 垂直權限卡片 (Role Cards)
+   ========================================== */
+.role-editor-container {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    max-height: 60vh; /* 內部滾動，防止卡片太長 */
+    overflow-y: auto;
+    padding-right: 4px;
+}
+.role-block {
+    background: var(--bg-input);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 16px;
+    display: flex; flex-direction: column; gap: 12px;
+}
+.role-header {
+    display: flex; align-items: center; gap: 8px;
+    font-weight: 800; color: var(--primary);
+    padding-bottom: 8px; border-bottom: 1px dashed var(--border-color);
+}
+.perm-grid {
+    display: grid;
+    /* 自動填滿網格 */
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    gap: 10px;
+}
+.perm-item {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 0.9rem; color: var(--text-main);
+    cursor: pointer; padding: 6px 8px;
+    border-radius: 6px; transition: 0.2s;
+    background: var(--bg-surface); border: 1px solid transparent;
+}
+.perm-item:hover { background: var(--bg-body); border-color: var(--border-color); }
+.perm-item input[type="checkbox"] { width: 18px; height: 18px; margin: 0; accent-color: var(--primary); cursor: pointer; }
 
 /* ==========================================
    6. 雜項 (Misc)
@@ -311,90 +362,31 @@ button:active { transform: scale(0.97); }
 .btn-circle:hover { border-color: var(--primary); color: var(--primary); background: var(--bg-surface); transform: scale(1.1); }
 
 /* ==========================================
-   7. RWD (Mobile Fix v16.2)
+   7. RWD (Mobile Fixes v17.1)
    ========================================== */
 @media (max-width: 768px) {
-    /* 解除全域滾動鎖定，讓手機可以滑動 */
-    body { 
-        height: auto; 
-        overflow-y: auto !important; 
-        -webkit-overflow-scrolling: touch; 
-    }
-    
-    #admin-panel { 
-        flex-direction: column; 
-        height: auto; 
-        min-height: 100vh;
-        overflow: visible; /* 允許內容撐開 */
-    }
-
-    /* Sidebar 修復 */
-    .sidebar { 
-        width: 100%; height: auto; 
-        position: sticky; top: 0; 
-        border-right: none; border-bottom: 1px solid var(--border-color); 
-        flex-direction: row; padding: 0; 
-        box-shadow: var(--shadow-sm); 
-        z-index: 1000; /* 確保在最上層 */
-        overflow-x: auto; /* 允許橫向滑動 */
-    }
+    body { height: auto; overflow-y: auto !important; -webkit-overflow-scrolling: touch; }
+    #admin-panel { flex-direction: column; height: auto; min-height: 100vh; overflow: visible; }
+    .sidebar { width: 100%; height: auto; position: sticky; top: 0; border-right: none; border-bottom: 1px solid var(--border-color); flex-direction: row; padding: 0; box-shadow: var(--shadow-sm); z-index: 1000; overflow-x: auto; }
     .sidebar-header, .sidebar-footer { display: none; }
+    .sidebar-nav { flex-direction: row; padding: 8px 12px; gap: 8px; flex-wrap: nowrap; }
+    .nav-btn { flex-direction: column; padding: 8px 12px; font-size: 0.75rem; gap: 4px; justify-content: center; text-align: center; flex: 0 0 auto; min-width: 70px; white-space: nowrap; }
     
-    .sidebar-nav { 
-        flex-direction: row; 
-        padding: 8px 12px; 
-        gap: 8px; 
-        /* 關鍵：避免按鈕被擠壓 */
-        flex-wrap: nowrap; 
-    }
-    
-    .nav-btn { 
-        flex-direction: column; 
-        padding: 8px 12px; 
-        font-size: 0.75rem; 
-        gap: 4px; 
-        justify-content: center; text-align: center; 
-        /* 關鍵：固定按鈕大小，不隨容器縮放 */
-        flex: 0 0 auto; 
-        min-width: 70px; 
-        white-space: nowrap; 
-    }
-    
-    /* Content 修復 */
-    .content-area { 
-        padding: 16px; 
-        overflow: visible; 
-        height: auto;
-    }
-    
-    /* Grid 改為單欄 */
-    .card-container { 
-        display: flex; 
-        flex-direction: column; 
-        gap: 16px; 
-    } 
-    
-    /* 卡片高度修復：手機上不強制滿高，依內容撐開 */
-    .admin-card { 
-        height: auto !important; 
-        min-height: auto;
-    }
-    
-    /* Dashboard 調整 */
-    .dashboard-header { 
-        grid-template-columns: 1fr 1fr; 
-        gap: 12px; 
-    }
+    .content-area { padding: 16px; overflow: visible; height: auto; }
+    .card-container { display: flex; flex-direction: column; gap: 16px; } 
+    .admin-card { height: auto !important; min-height: auto; }
+    .dashboard-header { grid-template-columns: 1fr 1fr; gap: 12px; }
     .dashboard-item:last-child { grid-column: 1 / -1; }
-    
     .mobile-only-settings { display: block; margin-top: 24px; padding-top: 20px; border-top: 1px dashed var(--border-color); }
     
     button, input, select { min-height: 48px; }
+    
+    /* 手機版允許按鈕換行，避免太長的翻譯被切斷 */
+    button { white-space: normal; line-height: 1.2; text-align: center; }
+    /* 但導航按鈕還是保持不換行 */
+    .nav-btn { white-space: nowrap; }
 
-    /* 限制手機版列表高度，避免太長 */
-    .list-container {
-        max-height: 400px;
-    }
+    /* 手機列表高度限制 */
+    .list-container { max-height: 300px; }
 }
-
 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
