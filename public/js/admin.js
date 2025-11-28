@@ -1,5 +1,5 @@
 /* ==========================================
- * 後台邏輯 (admin.js) - v107.0 Fixed
+ * 後台邏輯 (admin.js) - v108.0 Fragment & Security
  * ========================================== */
 const $ = i => document.getElementById(i), $$ = s => document.querySelectorAll(s);
 const mk = (t, c, txt, ev={}, ch=[]) => { 
@@ -33,8 +33,7 @@ const i18n = {
         card_roles: "權限設定", btn_save_roles: "儲存權限變更",
         btn_save: "儲存", btn_restore: "恢復預設值",
         modal_edit: "編輯數據", btn_done: "完成",
-        card_booking: "預約管理", lbl_add_appt: "新增預約",
-        wait: "等待"
+        card_booking: "預約管理", lbl_add_appt: "新增預約", wait: "等待"
     },
     "en": { 
         status_conn:"✅ Connected", status_dis:"⚠️ Disconnected...", saved:"✅ Saved", denied:"❌ Denied", 
@@ -59,20 +58,21 @@ const i18n = {
         card_roles: "Role Permissions", btn_save_roles: "Save Permission Changes",
         btn_save: "Save", btn_restore: "Restore Defaults",
         modal_edit: "Edit Data", btn_done: "Done",
-        card_booking: "Booking Manager", lbl_add_appt: "Add Booking",
-        wait: "Waiting"
+        card_booking: "Booking Manager", lbl_add_appt: "Add Booking", wait: "Waiting"
     }
 };
 
-let curLang = localStorage.getItem('callsys_lang')||'zh-TW', T = i18n[curLang], token="", userRole="normal", username="", uniqueUser="", cachedLine=null, isDark = localStorage.getItem('callsys_admin_theme') === 'dark';
-const socket = io({ autoConnect: false, auth: { token: "" } });
+let curLang = localStorage.getItem('callsys_lang')||'zh-TW', T = i18n[curLang], userRole="normal", username="", uniqueUser="", cachedLine=null, isDark = localStorage.getItem('callsys_admin_theme') === 'dark';
+// [Security] No token in auth, use Cookie
+const socket = io({ autoConnect: false });
 
+// [Security] Removed token from body, Cookies are handled automatically by browser
 async function req(url, data={}, btn=null) {
     if(btn) btn.disabled=true;
     try {
-        const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...data, token }) });
+        const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
         const res = await r.json();
-        if(!r.ok) { if(r.status===403 && !res.error?.includes("權限")) logout(); toast(`❌ ${res.error||'Error'}`, "error"); return null; }
+        if(!r.ok) { if(r.status===403) { if(!res.error?.includes("權限")) logout(); } toast(`❌ ${res.error||'Error'}`, "error"); return null; }
         return res;
     } catch(e) { toast(`❌ ${e.message}`, "error"); return null; } finally { if(btn) setTimeout(()=>btn.disabled=false, 300); }
 }
@@ -87,10 +87,18 @@ const updateLangUI = () => {
     $$('[data-i18n-ph]').forEach(e => e.placeholder = T[e.getAttribute('data-i18n-ph')]||"");
     loadUsers(); loadStats(); loadAppointments(); if(cachedLine) renderLineSettings(); else loadLineSettings();
 };
+
+// [Performance] Use DocumentFragment for batched DOM updates
 function renderList(ulId, list, fn, emptyMsg="[ Empty ]") {
-    const ul = $(ulId); if(!ul) return; ul.innerHTML = "";
-    if(!list?.length) return ul.innerHTML=`<li class="list-item" style="justify-content:center;color:var(--text-sub);">${emptyMsg}</li>`;
-    list.forEach(x => ul.appendChild(fn(x)));
+    const ul = $(ulId); if(!ul) return; 
+    while (ul.firstChild) ul.removeChild(ul.firstChild); // Faster clear
+    if(!list?.length) {
+        ul.innerHTML=`<li class="list-item" style="justify-content:center;color:var(--text-sub);">${emptyMsg}</li>`;
+        return;
+    }
+    const frag = document.createDocumentFragment();
+    list.forEach(x => { const el = fn(x); if(el) frag.appendChild(el); });
+    ul.appendChild(frag);
 }
 function applyTheme() {
     document.body.classList.toggle('dark-mode', isDark); localStorage.setItem('callsys_admin_theme', isDark?'dark':'light');
@@ -98,14 +106,20 @@ function applyTheme() {
 }
 
 const checkSession = () => {
-    token = localStorage.getItem('callsys_token'); 
+    // Only check local state for UI rendering, auth is cookie-based
     uniqueUser = localStorage.getItem('callsys_user');
     userRole = localStorage.getItem('callsys_role'); 
     username = localStorage.getItem('callsys_nick');
     if (uniqueUser === 'superadmin' && userRole !== 'ADMIN') { userRole = 'ADMIN'; localStorage.setItem('callsys_role', 'ADMIN'); }
-    if(token && uniqueUser) showPanel(); else showLogin();
+    if(uniqueUser) showPanel(); else showLogin();
 };
-const logout = () => { localStorage.removeItem('callsys_token'); location.reload(); };
+// Clear local state and reload (Cookie will be cleared by server logic if possible or just expire)
+const logout = () => { 
+    localStorage.removeItem('callsys_user'); localStorage.removeItem('callsys_role'); localStorage.removeItem('callsys_nick');
+    // Force cookie expiration by setting past date
+    document.cookie = "token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+    location.reload(); 
+};
 const showLogin = () => { $("login-container").style.display="block"; $("admin-panel").style.display="none"; socket.disconnect(); };
 const isSuperAdmin = () => (uniqueUser === 'superadmin' || userRole === 'super' || userRole === 'ADMIN');
 
@@ -120,7 +134,7 @@ const showPanel = () => {
 
     ["card-user-management", "card-role-management", "btn-export-csv", "mode-switcher-group", "unlock-pwd-group"].forEach(id => setBlock(id, isSuper));
     ['resetNumber','resetIssued','resetPassed','resetFeaturedContents','btn-clear-logs','btn-clear-stats','btn-reset-line-msg','resetAll'].forEach(id => setBlock(id, isSuper));
-    socket.auth.token = token; socket.connect(); 
+    socket.connect(); 
     updateLangUI();
     if(isSuper) { loadRoles(); loadUsers(); } 
     upgradeSystemModeUI();
@@ -264,7 +278,9 @@ function renderLineSettings() {
 function renderLogs(logs, init) {
     const ul = $("admin-log-ui"); if(!ul) return; if(init) ul.innerHTML=""; 
     if(!logs?.length && init) return ul.innerHTML="<li class='list-item' style='color:var(--text-sub);'>[No Logs]</li>";
-    logs.forEach(m => { const li = mk("li", "list-item", m, {style:"font-family:monospace;font-size:0.8rem;"}); init ? ul.appendChild(li) : ul.insertBefore(li, ul.firstChild); });
+    const frag = document.createDocumentFragment();
+    logs.forEach(m => frag.appendChild(mk("li", "list-item", m, {style:"font-family:monospace;font-size:0.8rem;"})));
+    init ? ul.appendChild(frag) : ul.insertBefore(frag.firstChild, ul.firstChild);
     while(ul.children.length > 50) ul.removeChild(ul.lastChild);
 }
 
@@ -309,9 +325,10 @@ bind("add-user-btn", async()=>{ const u=$("new-user-username").value, p=$("new-u
 bind("admin-theme-toggle", ()=>{ isDark = !isDark; applyTheme(); });
 bind("admin-theme-toggle-mobile", ()=>{ isDark = !isDark; applyTheme(); });
 bind("login-button", async () => {
+    // [Security] Token is now handled by HttpOnly Cookie
     const res = await fetch("/login", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({username:$("username-input").value, password:$("password-input").value})}).then(r=>r.json()).catch(()=>({error:T.login_fail}));
-    if(res.token) { 
-        localStorage.setItem('callsys_token', res.token); localStorage.setItem('callsys_user', res.username); localStorage.setItem('callsys_role', res.userRole); localStorage.setItem('callsys_nick', res.nickname); checkSession(); 
+    if(res.success) { 
+        localStorage.setItem('callsys_user', res.username); localStorage.setItem('callsys_role', res.userRole); localStorage.setItem('callsys_nick', res.nickname); checkSession(); 
     } else $("login-error").textContent=res.error||T.login_fail;
 });
 bind("btn-logout", logout); bind("btn-logout-mobile", logout);
