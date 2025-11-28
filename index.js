@@ -1,5 +1,5 @@
 /* ==========================================
- * 伺服器 (index.js) - v109.0 Batch & Security
+ * 伺服器 (index.js) - v17.0 Role Matrix Security
  * ========================================== */
 require('dotenv').config();
 const { Server } = require("http"), express = require("express"), socketio = require("socket.io");
@@ -13,8 +13,17 @@ if (!ADMIN_TOKEN || !REDIS_URL) { console.error("❌ Missing ADMIN_TOKEN or REDI
 
 // --- Config & Consts ---
 const BUSINESS_HOURS = { start: 8, end: 22, enabled: false };
-const DB_FLUSH_INTERVAL = 5000; // [Optimization] 批次寫入間隔 (ms)
-const DEFAULT_ROLES = { VIEWER: { level: 0, can: [] }, OPERATOR: { level: 1, can: ['call', 'pass', 'recall', 'issue'] }, MANAGER: { level: 2, can: ['call', 'pass', 'recall', 'issue', 'settings', 'appointment'] }, ADMIN: { level: 9, can: ['*'] } };
+const DB_FLUSH_INTERVAL = 5000;
+
+// [Security] 擴充後的權限定義
+// keys: call, issue, stats, settings, appointment, line, users, pass, recall
+const DEFAULT_ROLES = { 
+    VIEWER: { level: 0, can: ['stats'] }, 
+    OPERATOR: { level: 1, can: ['call', 'pass', 'recall', 'issue', 'appointment'] }, 
+    MANAGER: { level: 2, can: ['call', 'pass', 'recall', 'issue', 'appointment', 'stats', 'settings', 'users'] }, 
+    ADMIN: { level: 9, can: ['*'] } 
+};
+
 const KEYS = { 
     CURRENT: 'callsys:number', ISSUED: 'callsys:issued', MODE: 'callsys:mode', PASSED: 'callsys:passed', 
     FEATURED: 'callsys:featured', LOGS: 'callsys:admin-log', USERS: 'callsys:users', NICKS: 'callsys:nicknames', 
@@ -25,7 +34,6 @@ const KEYS = {
 
 // --- Setup ---
 const app = express(); app.disable('x-powered-by');
-// [Security] 限制 Socket CORS 來源
 const allowedOrigins = ALLOWED_ORIGINS ? ALLOWED_ORIGINS.split(',') : ["http://localhost:3000"];
 const server = Server(app), io = socketio(server, { 
     cors: { origin: allowedOrigins, methods: ["GET", "POST"], credentials: true }, 
@@ -47,15 +55,15 @@ initLine();
 
 try { if (!fs.existsSync(path.join(__dirname, 'user_logs'))) fs.mkdirSync(path.join(__dirname, 'user_logs')); } catch(e) {}
 
-// --- Database Setup (Optimized with WAL & Batch) ---
+// --- Database Setup ---
 const dbPath = path.join(__dirname, 'callsys.db');
 const db = new sqlite3.Database(dbPath);
-const dbQueue = []; // [Optimization] 寫入緩衝區
+const dbQueue = [];
 
 const initDatabase = () => {
     return new Promise((resolve, reject) => {
         db.serialize(() => {
-            db.run(`PRAGMA journal_mode = WAL;`, (err) => { if (err) console.error("WAL Mode Failed:", err); });
+            db.run(`PRAGMA journal_mode = WAL;`);
             db.run(`CREATE TABLE IF NOT EXISTS history (id INTEGER PRIMARY KEY, date_str TEXT, timestamp INTEGER, number INTEGER, action TEXT, operator TEXT, wait_time_min REAL)`);
             db.run(`CREATE TABLE IF NOT EXISTS appointments (id INTEGER PRIMARY KEY, number INTEGER, scheduled_time INTEGER, status TEXT DEFAULT 'pending')`);
             db.run(`CREATE INDEX IF NOT EXISTS idx_history_date ON history(date_str)`);
@@ -67,7 +75,6 @@ const initDatabase = () => {
     });
 };
 
-// [Optimization] 批次寫入排程
 setInterval(() => {
     if (dbQueue.length === 0) return;
     const batch = [...dbQueue]; dbQueue.length = 0;
@@ -145,7 +152,6 @@ app.post("/login", rateLimit({windowMs:9e5,max:100}), H(async (req, res) => {
     await redis.set(`${KEYS.SESSION}${token}`, JSON.stringify({username:u, role:u==='superadmin'?'super':'normal', userRole, nickname:nick}), "EX", 28800);
     
     const isProd = process.env.NODE_ENV === 'production';
-    // [Security] Add SameSite=Strict
     res.setHeader('Set-Cookie', [
         `token=${token}; HttpOnly; Path=/; Max-Age=28800; SameSite=Strict; ${isProd ? 'Secure' : ''}`
     ]);
@@ -159,14 +165,11 @@ app.post("/api/ticket/take", rateLimit({windowMs:36e5,max:20}), H(async req => {
     const t = await redis.incr(KEYS.ISSUED); 
     await redis.hincrby(`${KEYS.HOURLY}${dateStr}`, `${hour}_i`, 1);
     await redis.expire(`${KEYS.HOURLY}${dateStr}`, 172800);
-    // [Optimization] 使用 Queue
     dbQueue.push({dateStr, timestamp: Date.now(), number: t, action: 'online_take', operator: 'User', wait_time_min: await calcWaitTime()});
     await broadcastQueue(); return { ticket: t };
 }));
 
-// Core Logic Wrapper
 async function ctl(type, {body, user}) {
-    // [Security] Input Validation
     if(body.number !== undefined) { const n=parseInt(body.number); if(isNaN(n) || n < 0 || n > 9999) return { error: "非法數值" }; }
     if(body.direction && !['next', 'prev'].includes(body.direction)) return { error: "無效操作" };
 
@@ -206,7 +209,6 @@ async function ctl(type, {body, user}) {
     }
     if(msg) { 
         addLog(user.nickname, msg); 
-        // [Optimization] 使用 Queue
         dbQueue.push({dateStr, timestamp: Date.now(), number: newNum||curr, action: type, operator: user.nickname, wait_time_min: await calcWaitTime()});
     }
     await broadcastQueue(); return { number: newNum };
@@ -240,26 +242,27 @@ app.post("/api/passed/remove", auth, perm('pass'), H(async r => {
     const n = parseInt(r.body.number); if(n>0) { await redis.zrem(KEYS.PASSED, n); await redis.hincrby(`${KEYS.HOURLY}${getTWTime().dateStr}`, `${getTWTime().hour}_p`, -1); io.emit("updatePassed", (await redis.zrange(KEYS.PASSED,0,-1)).map(Number)); addLog(r.user.nickname, `🗑️ 移除過號 ${n}`); }
 }));
 
-// Admin & Settings
-app.post("/api/admin/users", auth, H(async r => {
+// Users API (Protected by 'users' permission)
+app.post("/api/admin/users", auth, perm('users'), H(async r => {
     const rawUsers = [{username:'superadmin',nickname:await redis.hget(KEYS.NICKS,'superadmin')||'Super',role:'ADMIN'}, ...(await redis.hkeys(KEYS.USERS)).map(x=>({username:x, nickname:null, role:null}))];
     const resolvedUsers = await Promise.all(rawUsers.map(async u=>{ if(u.username!=='superadmin'){u.nickname=await redis.hget(KEYS.NICKS,u.username)||u.username; u.role=await redis.hget(KEYS.USER_ROLES,u.username)||'OPERATOR';} return u; }));
     return { users: resolvedUsers };
 }));
-app.post("/api/admin/add-user", auth, perm('settings'), H(async r=>{ if(await redis.hexists(KEYS.USERS, r.body.newUsername)) throw new Error("已存在"); await redis.hset(KEYS.USERS, r.body.newUsername, await bcrypt.hash(r.body.newPassword,10)); await redis.hset(KEYS.NICKS, r.body.newUsername, r.body.newNickname); await redis.hset(KEYS.USER_ROLES, r.body.newUsername, r.body.newRole||'OPERATOR'); }));
-app.post("/api/admin/del-user", auth, perm('settings'), H(async r=>{ if(r.body.delUsername==='superadmin') throw new Error("不可刪除"); await redis.hdel(KEYS.USERS, r.body.delUsername); await redis.hdel(KEYS.NICKS, r.body.delUsername); await redis.hdel(KEYS.USER_ROLES, r.body.delUsername); }));
+app.post("/api/admin/add-user", auth, perm('users'), H(async r=>{ if(await redis.hexists(KEYS.USERS, r.body.newUsername)) throw new Error("已存在"); await redis.hset(KEYS.USERS, r.body.newUsername, await bcrypt.hash(r.body.newPassword,10)); await redis.hset(KEYS.NICKS, r.body.newUsername, r.body.newNickname); await redis.hset(KEYS.USER_ROLES, r.body.newUsername, r.body.newRole||'OPERATOR'); }));
+app.post("/api/admin/del-user", auth, perm('users'), H(async r=>{ if(r.body.delUsername==='superadmin') throw new Error("不可刪除"); await redis.hdel(KEYS.USERS, r.body.delUsername); await redis.hdel(KEYS.NICKS, r.body.delUsername); await redis.hdel(KEYS.USER_ROLES, r.body.delUsername); }));
 app.post("/api/admin/set-nickname", auth, H(async r => { if(r.user.role!=='super' && r.user.username!==r.body.targetUsername) throw new Error("權限不足"); await redis.hset(KEYS.NICKS, r.body.targetUsername, r.body.nickname); }));
-app.post("/api/admin/set-role", auth, perm('settings'), H(async r => { if(r.user.role!=='super') throw new Error("僅限超級管理員"); await redis.hset(KEYS.USER_ROLES, r.body.targetUsername, r.body.newRole); }));
+app.post("/api/admin/set-role", auth, perm('users'), H(async r => { if(r.user.role!=='super') throw new Error("僅限超級管理員"); await redis.hset(KEYS.USER_ROLES, r.body.targetUsername, r.body.newRole); }));
+
 app.post("/api/admin/roles/get", auth, H(async r => JSON.parse(await redis.get(KEYS.ROLES)) || DEFAULT_ROLES));
 app.post("/api/admin/roles/update", auth, perm('settings'), H(async r => { if(r.user.role!=='super') throw new Error("僅超級管理員"); await redis.set(KEYS.ROLES, JSON.stringify(r.body.rolesConfig)); addLog(r.user.nickname, "🔧 修改權限"); }));
 
-// Stats & Features
-app.post("/api/admin/stats", auth, H(async req => {
+// Stats & Features (Protected by 'stats' and 'settings')
+app.post("/api/admin/stats", auth, perm('stats'), H(async req => {
     const {dateStr, hour} = getTWTime(), hData = await redis.hgetall(`${KEYS.HOURLY}${dateStr}`), counts = new Array(24).fill(0);
     let total = 0; if(hData) for(let i=0; i<24; i++) { let iss = parseInt(hData[`${i}_i`]||hData[i]||0), pass = parseInt(hData[`${i}_p`]||0), net = Math.max(0, iss - pass); counts[i] = net; total += net; }
     return { history: await all("SELECT * FROM history ORDER BY id DESC LIMIT 50"), hourlyCounts: counts, todayCount: Math.max(0, total), serverHour: hour };
 }));
-app.post("/api/admin/stats/clear", auth, perm('settings'), H(async r => { const {dateStr} = getTWTime(); await redis.del(`${KEYS.HOURLY}${dateStr}`); await run("DELETE FROM history WHERE date_str=?", [dateStr]); addLog(r.user.nickname, "🗑️ 清空今日統計"); }));
+app.post("/api/admin/stats/clear", auth, perm('stats'), H(async r => { const {dateStr} = getTWTime(); await redis.del(`${KEYS.HOURLY}${dateStr}`); await run("DELETE FROM history WHERE date_str=?", [dateStr]); addLog(r.user.nickname, "🗑️ 清空今日統計"); }));
 app.post("/api/admin/stats/adjust", auth, perm('settings'), H(async r => { const {dateStr} = getTWTime(); await redis.hincrby(`${KEYS.HOURLY}${dateStr}`, `${r.body.hour}_i`, r.body.delta); }));
 app.post("/api/admin/stats/calibrate", auth, perm('settings'), H(async r => {
     const {dateStr, hour} = getTWTime(), [issuedStr, passedList] = await Promise.all([redis.get(KEYS.ISSUED), redis.zrange(KEYS.PASSED, 0, -1)]);
@@ -270,13 +273,13 @@ app.post("/api/admin/stats/calibrate", auth, perm('settings'), H(async r => {
     if(diff !== 0) { await redis.hincrby(`${KEYS.HOURLY}${dateStr}`, `${hour}_i`, diff); addLog(r.user.nickname, `⚖️ 校正統計 (${diff > 0 ? '+' : ''}${diff})`); }
     return { success: true, diff };
 }));
-app.post("/api/admin/export-csv", auth, perm('settings'), H(async r => {
+app.post("/api/admin/export-csv", auth, perm('stats'), H(async r => {
     const targetDate = r.body.date || getTWTime().dateStr;
     const rows = await all("SELECT * FROM history WHERE date_str = ? ORDER BY id ASC", [targetDate]);
     const csv = "\uFEFFDate,Time,Number,Action,Operator,Wait(min)\n" + rows.map(d => `${d.date_str},${new Date(d.timestamp).toLocaleTimeString('zh-TW')},${d.number},${d.action},${d.operator},${d.wait_time_min}`).join("\n");
     return { csvData: csv, fileName: `export_${targetDate}.csv` };
 }));
-app.post("/api/logs/clear", auth, perm('settings'), H(async r => { await redis.del(KEYS.LOGS); io.to("admin").emit("initAdminLogs", []); }));
+app.post("/api/logs/clear", auth, perm('stats'), H(async r => { await redis.del(KEYS.LOGS); io.to("admin").emit("initAdminLogs", []); }));
 
 app.post("/api/featured/add", auth, perm('settings'), H(async r=>{ await redis.rpush(KEYS.FEATURED, JSON.stringify(r.body)); io.emit("updateFeaturedContents", (await redis.lrange(KEYS.FEATURED,0,-1)).map(JSON.parse)); }));
 app.post("/api/featured/get", auth, H(async r => (await redis.lrange(KEYS.FEATURED,0,-1)).map(JSON.parse)));
@@ -293,11 +296,13 @@ app.post("/set-public-status", auth, perm('settings'), H(async r=>{ await redis.
 app.post("/set-system-mode", auth, perm('settings'), H(async r=>{ await redis.set(KEYS.MODE, r.body.mode); io.emit("updateSystemMode", r.body.mode); }));
 app.post("/reset", auth, perm('settings'), H(async r => resetSys(r.user.nickname)));
 app.post("/api/admin/broadcast", auth, H(async r => { io.emit("adminBroadcast", r.body.message); addLog(r.user.nickname, `📢 廣播: ${r.body.message}`); }));
-app.post("/api/admin/line-settings/get", auth, perm('settings'), H(async r => ({ "LINE Access Token": await redis.get(KEYS.LINE.CFG_TOKEN), "LINE Channel Secret": await redis.get(KEYS.LINE.CFG_SECRET) })));
-app.post("/api/admin/line-settings/save", auth, perm('settings'), H(async r => { if(r.body["LINE Access Token"]) await redis.set(KEYS.LINE.CFG_TOKEN, r.body["LINE Access Token"]); if(r.body["LINE Channel Secret"]) await redis.set(KEYS.LINE.CFG_SECRET, r.body["LINE Channel Secret"]); initLine(); addLog(r.user.nickname, "🔧 更新 LINE 設定"); }));
-app.post("/api/admin/line-settings/reset", auth, perm('settings'), H(async r => { await redis.del(KEYS.LINE.CFG_TOKEN, KEYS.LINE.CFG_SECRET); initLine(); }));
-app.post("/api/admin/line-settings/get-unlock-pass", auth, perm('settings'), H(async r => ({ password: await redis.get(KEYS.LINE.PWD) })));
-app.post("/api/admin/line-settings/save-pass", auth, perm('settings'), H(async r => { await redis.set(KEYS.LINE.PWD, r.body.password); }));
+
+// Line Settings API (Protected by 'line' permission)
+app.post("/api/admin/line-settings/get", auth, perm('line'), H(async r => ({ "LINE Access Token": await redis.get(KEYS.LINE.CFG_TOKEN), "LINE Channel Secret": await redis.get(KEYS.LINE.CFG_SECRET) })));
+app.post("/api/admin/line-settings/save", auth, perm('line'), H(async r => { if(r.body["LINE Access Token"]) await redis.set(KEYS.LINE.CFG_TOKEN, r.body["LINE Access Token"]); if(r.body["LINE Channel Secret"]) await redis.set(KEYS.LINE.CFG_SECRET, r.body["LINE Channel Secret"]); initLine(); addLog(r.user.nickname, "🔧 更新 LINE 設定"); }));
+app.post("/api/admin/line-settings/reset", auth, perm('line'), H(async r => { await redis.del(KEYS.LINE.CFG_TOKEN, KEYS.LINE.CFG_SECRET); initLine(); }));
+app.post("/api/admin/line-settings/get-unlock-pass", auth, perm('line'), H(async r => ({ password: await redis.get(KEYS.LINE.PWD) })));
+app.post("/api/admin/line-settings/save-pass", auth, perm('line'), H(async r => { await redis.set(KEYS.LINE.PWD, r.body.password); }));
 
 // Line Bot
 async function checkLine(curr) {
@@ -324,14 +329,13 @@ if(LINE_ACCESS_TOKEN) {
 
 cron.schedule('0 4 * * *', () => { resetSys('系統自動'); run("DELETE FROM history WHERE timestamp < ?", [Date.now()-(30*86400000)]); }, { timezone: "Asia/Taipei" });
 
-// [Security] Socket Middleware for Auth
+// Socket Middleware
 io.use(async (socket, next) => {
     try {
-        if (socket.handshake.auth.token) { // Backward compatibility
+        if (socket.handshake.auth.token) { 
             const u = JSON.parse(await redis.get(`${KEYS.SESSION}${socket.handshake.auth.token}`));
             if (u) { socket.user = u; return next(); }
         }
-        // Cookie Auth
         const cookieStr = socket.request.headers.cookie;
         if (cookieStr) {
             const cookies = parseCookie(cookieStr);
@@ -341,12 +345,11 @@ io.use(async (socket, next) => {
                 if (u) { socket.user = u; return next(); }
             }
         }
-        next(); // Allow anonymous as public, filter in connection
+        next(); 
     } catch(e) { next(); }
 });
 
 io.on("connection", async s => {
-    // Admin Room Join logic updated to use req.user from middleware
     if(s.user) { 
         s.join("admin"); 
         const socks = await io.in("admin").fetchSockets(); 
@@ -361,9 +364,8 @@ io.on("connection", async s => {
     s.emit("updateSoundSetting",snd==="1"); s.emit("updatePublicStatus",pub!=="0"); s.emit("updateSystemMode",m||'ticketing'); s.emit("updateWaitTime",await calcWaitTime());
 });
 
-// --- Server Start (Wait for DB) ---
 initDatabase().then(() => {
-    server.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server v109.0 running on ${PORT}`));
+    server.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server v17.0 running on ${PORT}`));
 }).catch(err => {
     console.error("❌ Failed to start server due to DB error:", err);
     process.exit(1);
