@@ -1,34 +1,3 @@
-<!DOCTYPE html>
-<html lang="zh-TW">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-<title>管理後台</title>
-<script src="/socket.io/socket.io.js"></script>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-<script src="https://npmcdn.com/flatpickr/dist/l10n/zh-tw.js"></script>
-
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/css/admin.css"> 
-</head>
-<body>
-
-<div id="status-bar" data-i18n="status_dis">⚠️ 伺服器連線中斷...</div>
-
-<div id="login-container">
-    <div class="login-header">
-        <h1 style="color:var(--primary); margin-bottom:5px; font-weight:800;">Admin Console</h1>
-        <p style="color:var(--text-sub);" data-i18n="login_title">請登入管理系統</p>
-    </div>
-    <form onsubmit="return false;">
-        <div class="control-group"><input type="text" id="username-input" data-i18n-ph="ph_account" placeholder="帳號" autocomplete="username"></div>
-        <div class="control-group"><input type="password" id="password-input" data-i18n-ph="ph_password" placeholder="密碼" autocomplete="current-password"></div>
-        <button id="login-button" type="submit" class="btn-hero" style="font-size:1rem; height:48px;" data-i18n="login_btn">登入</button>
-    </form>
-    <p id="login-error" style="color:var(--danger); margin-top:15px; text-align:center;"></p>
-</div>
-
 <div id="admin-panel" style="display:none;">
     
     <aside class="sidebar">
@@ -52,7 +21,6 @@
     </aside>
 
     <main class="content-area">
-        
         <div id="section-live" class="section-group active">
             <div class="dashboard-header">
                 <div class="dashboard-item main-stat">
@@ -70,7 +38,7 @@
             </div>
 
             <div class="card-container">
-                <div class="card-wrapper full-width-card">
+                <div class="card-wrapper">
                     <div class="admin-card control-deck">
                         <h3><span class="card-icon">📢</span> <span data-i18n="card_call">指揮中心</span></h3>
                         <div class="hero-control-row">
@@ -87,7 +55,7 @@
                                     <button class="btn-secondary" id="btn-call-add-1">+1</button>
                                     <button class="btn-secondary" id="btn-call-add-5">+5</button>
                                 </div>
-                                <input type="number" id="manualNumber" placeholder="#" inputmode="numeric" pattern="\d*" min="0" oninput="validity.valid||(value='');">
+                                <input type="number" id="manualNumber" placeholder="#" inputmode="numeric" pattern="\d*" min="0">
                                 <button id="setNumber" class="btn-secondary success" data-i18n="btn_exec">GO</button>
                             </div>
                         </div>
@@ -105,7 +73,7 @@
                         <div class="control-group" style="margin-top:auto;">
                             <label data-i18n="lbl_fix_issue">修正發號數</label>
                             <div class="input-group">
-                                <input type="number" id="manualIssuedNumber" placeholder="#" inputmode="numeric" min="0" oninput="validity.valid||(value='');">
+                                <input type="number" id="manualIssuedNumber" placeholder="#" inputmode="numeric" min="0">
                                 <button id="setIssuedNumber" class="btn-secondary" data-i18n="btn_fix">修正</button>
                             </div>
                         </div>
@@ -113,7 +81,7 @@
                     </div>
                 </div>
 
-                <div class="card-wrapper" id="card-editor">
+                <div class="card-wrapper">
                     <div class="admin-card">
                         <h3><span class="card-icon">📝</span> <span data-i18n="card_passed">過號名單</span></h3>
                         <div class="list-container">
@@ -194,7 +162,7 @@
                             </div>
                         </div>
                         <button id="resetAll" class="btn-reset-single" style="color:var(--danger);" data-i18n="btn_reset_all">💥 全域重置</button>
-
+                        
                         <div class="mobile-only-settings">
                             <div class="control-group" style="display:flex; gap:10px;">
                                 <button id="admin-theme-toggle-mobile" class="btn-secondary" style="flex:1;">🌙 Theme</button>
@@ -209,13 +177,11 @@
                     <div class="admin-card">
                         <h3><span class="card-icon">📅</span> <span data-i18n="card_booking">預約管理</span></h3>
                         <p style="color:var(--text-sub); margin-bottom:10px; font-size:0.85rem;">叫號時自動優先處理到期預約</p>
-                        
                         <div class="list-container" style="height: 200px;">
                             <ul id="appointment-list-ui" class="scroll-list">
                                 <li style="text-align:center; padding:20px; color:var(--text-sub);">Loading...</li>
                             </ul>
                         </div>
-
                         <div class="control-group compact-group" style="margin-top:auto;">
                             <label data-i18n="lbl_add_appt">新增預約</label>
                             <div class="input-group">
@@ -314,20 +280,3 @@
         </div>
     </main>
 </div>
-
-<div id="edit-stats-overlay" class="modal-overlay">
-    <div class="modal-content">
-        <h3 data-i18n="modal_edit">編輯數據</h3>
-        <div style="display:flex; justify-content:center; align-items:center; gap:20px; margin:20px 0;">
-            <button id="btn-stats-minus" class="btn-circle">-1</button>
-            <span id="modal-current-count" style="font-size:2.5rem; font-weight:800;">0</span>
-            <button id="btn-stats-plus" class="btn-circle">+1</button>
-        </div>
-        <button id="btn-modal-close" class="btn-secondary" style="width:100%;" data-i18n="btn_done">完成</button>
-    </div>
-</div>
-
-<div id="toast-notification"></div>
-<script src="/js/admin.js"></script> 
-</body>
-</html>
