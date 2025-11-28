@@ -1,5 +1,5 @@
 /* ==========================================
- * 前台邏輯 (main.js) - v64.0 Connection Keep-Alive
+ * 前台邏輯 (main.js) - v105.0 UX & Audio
  * ========================================== */
 const $ = i => document.getElementById(i), $$ = s => document.querySelectorAll(s);
 const on = (el, ev, fn) => el?.addEventListener(ev, fn), show = (el, v) => el && (el.style.display = v ? 'block' : 'none');
@@ -7,14 +7,12 @@ const ls = localStorage, doc = document;
 
 // --- Config & State ---
 const i18n = {
-    "zh-TW": { cur:"目前叫號", iss:"已發至", online:"線上取號", help:"免排隊，手機領號", man_t:"號碼提醒", man_p:"輸入您的號碼開啟到號提醒", take:"立即取號", track:"追蹤", my:"我的號碼", ahead:"前方", wait:"⏳ 剩 %s 組", arr:"🎉 輪到您了！", pass:"⚠️ 已過號", p_list:"過號", none:"無", links:"精選連結", copy:"複製", sound:"音效", s_on:"開啟", s_off:"靜音", scan:"掃描追蹤", off:"連線中斷", ok:"取號成功", fail:"失敗", no_in:"請輸入號碼", cancel:"取消追蹤？", copied:"已複製", notice:"📢 ", q_left:"還剩 %s 組！", est:"約 %s 分", est_less:"< 1 分", just:"剛剛", ago:"%s 分前", conn:"已連線", retry:"連線中 (%s)...", wait_count:"等待中", sys_close:"⛔ 系統已關閉" },
-    "en": { cur:"Now Serving", iss:"Issued", online:"Get Ticket", help:"Digital ticket & notify", man_t:"Number Alert", man_p:"Enter number to get alerted", take:"Get Ticket", track:"Track", my:"Your #", ahead:"Ahead", wait:"⏳ %s groups", arr:"🎉 Your Turn!", pass:"⚠️ Passed", p_list:"Passed", none:"None", links:"Links", copy:"Copy", sound:"Sound", s_on:"On", s_off:"Mute", scan:"Scan", off:"Offline", ok:"Success", fail:"Failed", no_in:"Enter #", cancel:"Stop tracking?", copied:"Copied", notice:"📢 ", q_left:"%s groups left!", est:"~%s min", est_less:"< 1 min", just:"Now", ago:"%s m ago", conn:"Online", retry:"Retry (%s)...", wait_count:"Waiting", sys_close:"⛔ System Closed" }
+    "zh-TW": { cur:"目前叫號", iss:"已發至", online:"線上取號", help:"免排隊，手機領號", man_t:"號碼提醒", man_p:"輸入您的號碼開啟到號提醒", take:"立即取號", track:"追蹤", my:"我的號碼", ahead:"前方", wait:"⏳ 剩 %s 組", arr:"🎉 輪到您了！", pass:"⚠️ 已過號", p_list:"過號", none:"無", links:"精選連結", copy:"複製", sound:"音效", s_on:"開啟", s_off:"靜音", scan:"掃描追蹤", off:"連線中斷", ok:"取號成功", fail:"失敗", no_in:"請輸入號碼", cancel:"取消追蹤？", copied:"已複製", notice:"📢 ", q_left:"還剩 %s 組！", est:"約 %s 分", est_less:"< 1 分", just:"剛剛", ago:"%s 分前", conn:"已連線", retry:"連線中 (%s)...", wait_count:"等待中", sys_close:"⛔ 系統已暫停服務", sys_close_desc:"請稍候，我們將很快回來" },
+    "en": { cur:"Now Serving", iss:"Issued", online:"Get Ticket", help:"Digital ticket & notify", man_t:"Number Alert", man_p:"Enter number to get alerted", take:"Get Ticket", track:"Track", my:"Your #", ahead:"Ahead", wait:"⏳ %s groups", arr:"🎉 Your Turn!", pass:"⚠️ Passed", p_list:"Passed", none:"None", links:"Links", copy:"Copy", sound:"Sound", s_on:"On", s_off:"Mute", scan:"Scan", off:"Offline", ok:"Success", fail:"Failed", no_in:"Enter #", cancel:"Stop tracking?", copied:"Copied", notice:"📢 ", q_left:"%s groups left!", est:"~%s min", est_less:"< 1 min", just:"Now", ago:"%s m ago", conn:"Online", retry:"Retry (%s)...", wait_count:"Waiting", sys_close:"⛔ System Paused", sys_close_desc:"Please wait, we will be back soon" }
 };
 let lang = ls.getItem('callsys_lang')||'zh-TW', T = i18n[lang], myTicket = ls.getItem('callsys_ticket'), sysMode = 'ticketing';
 let sndEnabled = true, localMute = false, avgTime = 0, lastUpd = null, audioCtx = null, connTimer, wakeLock = null;
 let isDarkMode = ls.getItem('callsys_theme') === 'dark';
-
-// State Cache
 let cachedMode = ls.getItem('callsys_mode_cache');
 let cachedPublic = ls.getItem('callsys_public_cache');
 
@@ -26,13 +24,26 @@ const toast = (msg, type='info', ms=3000) => {
     const el = doc.createElement('div'); el.className = `toast-message ${type} show`; el.textContent = msg; c.appendChild(el);
     if(navigator.vibrate) navigator.vibrate(50); setTimeout(() => { el.classList.remove('show'); setTimeout(()=>el.remove(), 300); }, ms);
 };
+
+// [UX] Enhanced Wake Lock with Re-acquire
 const toggleWakeLock = async (act) => {
     if(!('wakeLock' in navigator)) return;
-    try { if(act && !wakeLock) wakeLock = await navigator.wakeLock.request('screen'); else if(!act && wakeLock) { await wakeLock.release(); wakeLock=null; } } catch(e){}
+    try { 
+        if(act) {
+            if(!wakeLock) wakeLock = await navigator.wakeLock.request('screen');
+            wakeLock.addEventListener('release', () => { wakeLock = null; if(doc.visibilityState==='visible' && myTicket) toggleWakeLock(true); });
+        } else if(wakeLock) { await wakeLock.release(); wakeLock=null; } 
+    } catch(e){}
 };
+
+// [UX] iOS Safari Silent Buffer Fix
 const unlockAudio = () => {
     if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
     if(audioCtx.state === 'suspended') audioCtx.resume().then(()=>updateMuteUI(false));
+    // Play silent buffer to unlock iOS audio
+    const buffer = audioCtx.createBuffer(1, 1, 22050); 
+    const source = audioCtx.createBufferSource(); 
+    source.buffer = buffer; source.connect(audioCtx.destination); source.start(0);
     if('speechSynthesis' in window) window.speechSynthesis.getVoices();
 };
 const speak = (txt) => {
@@ -42,7 +53,7 @@ const speak = (txt) => {
         if(v) u.voice = v; window.speechSynthesis.speak(u);
     }
 };
-const playDing = () => { if($("notify-sound") && !localMute) $("notify-sound").play().then(()=>updateMuteUI(false)).catch(()=>updateMuteUI(true, true)); };
+const playDing = () => { if($("notify-sound") && !localMute) { $("notify-sound").play().then(()=>updateMuteUI(false)).catch(()=>updateMuteUI(true, true)); } };
 
 // --- UI Logic ---
 const applyTheme = () => { doc.body.classList.toggle('dark-mode', isDarkMode); if($('theme-toggle')) $('theme-toggle').textContent = isDarkMode ? '☀️' : '🌙'; ls.setItem('callsys_theme', isDarkMode ? 'dark' : 'light'); };
@@ -50,6 +61,8 @@ const applyText = () => {
     $$('[data-i18n]').forEach(e => { const k={current_number:'cur', issued_number:'iss', online_ticket_title:'online', help_take_ticket:'help', manual_input_title:'man_t', take_ticket:'take', set_reminder:'track', my_number:'my', wait_count:'wait_count', passed_list_title:'p_list', passed_empty:'none', links_title:'links', copy_link:'copy', sound_enable:'sound', scan_qr:'scan'}[e.dataset.i18n]; if(k && T[k]) e.textContent = T[k]; });
     if($("manual-ticket-input")) $("manual-ticket-input").placeholder = T.man_p;
     $$("#hero-waiting-count, #ticket-waiting-count").forEach(e => e.previousElementSibling && (e.previousElementSibling.textContent = e.id.includes('hero') ? T.wait_count : T.ahead));
+    if($("overlay-title")) $("overlay-title").textContent = T.sys_close;
+    if($("overlay-desc")) $("overlay-desc").textContent = T.sys_close_desc;
 };
 const renderMode = () => {
     const isT = sysMode==='ticketing', hasT = !!myTicket;
@@ -74,6 +87,18 @@ const updateMuteUI = (mute, force=false) => {
 };
 const updTime = () => { if(lastUpd) { const m = Math.floor((new Date()-lastUpd)/60000); $("last-updated").textContent = m<1?T.just:T.ago.replace("%s",m); }};
 
+// [UX] System Closed Overlay
+const toggleClosedOverlay = (isClosed) => {
+    let ov = $("closed-overlay");
+    if (!ov) {
+        ov = doc.createElement('div'); ov.id = "closed-overlay";
+        ov.innerHTML = `<div style="text-align:center;"><div style="font-size:4rem;">⛔</div><h2 id="overlay-title" style="margin:20px 0 10px;font-weight:900;">${T.sys_close}</h2><p id="overlay-desc" style="opacity:0.8;">${T.sys_close_desc}</p></div>`;
+        Object.assign(ov.style, { position:'fixed', inset:0, background:'var(--bg-body)', zIndex:9998, display:'none', justifyContent:'center', alignItems:'center', flexDirection:'column' });
+        doc.body.appendChild(ov);
+    }
+    ov.style.display = isClosed ? 'flex' : 'none';
+};
+
 // --- Socket Events ---
 socket.on("connect", () => { socket.emit('joinRoom', 'public'); clearTimeout(connTimer); $("status-bar").textContent=T.conn; $("status-bar").classList.remove("visible"); })
     .on("disconnect", () => connTimer = setTimeout(() => { $("status-bar").textContent=T.off; $("status-bar").classList.add("visible"); }, 1000))
@@ -94,37 +119,13 @@ socket.on("connect", () => { socket.emit('joinRoom', 'public'); clearTimeout(con
     .on("updateSoundSetting", b => sndEnabled = b)
     .on("updatePublicStatus", b => { 
         const s = b ? '1' : '0';
-        // [Fix] Refresh on ANY change (Open -> Closed OR Closed -> Open)
-        if (cachedPublic !== null && cachedPublic !== s) {
-            ls.setItem('callsys_public_cache', s);
-            location.reload(); 
-        } else {
-            if(cachedPublic !== s) ls.setItem('callsys_public_cache', s);
-            cachedPublic = s;
-            
-            if (!b) {
-                // System Closed - UI Update
-                doc.body.classList.add("is-closed");
-                $("status-bar").textContent = T.sys_close || "⛔ 系統已關閉";
-                $("status-bar").classList.add("visible");
-                // [CRITICAL] DO NOT DISCONNECT. Must keep socket alive to listen for "Open" event.
-            } else {
-                // System Open - UI Update
-                doc.body.classList.remove("is-closed");
-                $("status-bar").classList.remove("visible");
-            }
-        }
+        if(cachedPublic !== s) ls.setItem('callsys_public_cache', s);
+        cachedPublic = s;
+        toggleClosedOverlay(!b); // Show overlay if not public
     })
     .on("updateSystemMode", m => { 
-        if (cachedMode && cachedMode !== m) {
-            ls.setItem('callsys_mode_cache', m);
-            location.reload(); 
-        } else {
-            if(cachedMode !== m) ls.setItem('callsys_mode_cache', m);
-            cachedMode = m;
-            sysMode = m; 
-            renderMode();
-        }
+        if(cachedMode !== m) ls.setItem('callsys_mode_cache', m);
+        cachedMode = m; sysMode = m; renderMode();
     })
     .on("updatePassed", l => { 
         const ul=$("passedList"), mt=$("passed-empty-msg"); if($("passed-count")) $("passed-count").textContent = l?.length||0;
@@ -133,26 +134,34 @@ socket.on("connect", () => { socket.emit('joinRoom', 'public'); clearTimeout(con
     .on("updateFeaturedContents", l => $("featured-container") && ($("featured-container").innerHTML = l.map(c=>`<a class="link-chip" href="${c.linkUrl}" target="_blank">${c.linkText}</a>`).join("")))
     .on("updateTimestamp", ts => { lastUpd = new Date(ts); updTime(); });
 
-setInterval(updTime, 10000); doc.addEventListener('visibilitychange', () => toggleWakeLock(doc.visibilityState==='visible' && myTicket));
+setInterval(updTime, 10000); 
+doc.addEventListener('visibilitychange', () => { if(doc.visibilityState==='visible' && myTicket) toggleWakeLock(true); });
 
 // --- Interactions ---
 doc.addEventListener("DOMContentLoaded", () => {
     if($("language-selector")) $("language-selector").value = lang;
     applyTheme(); applyText(); renderMode(); socket.connect();
+    
+    // [UX] Prevent duplicate ticket via local check
+    if(ls.getItem('callsys_ticket')) { $("btn-take-ticket").disabled = true; $("btn-take-ticket").textContent = "已取號"; }
+
     const unlock = () => { unlockAudio(); doc.body.removeEventListener('click', unlock); }; doc.body.addEventListener('click', unlock);
     if($("qr-code-placeholder")) try{ new QRCode($("qr-code-placeholder"), {text:location.href, width:120, height:120}); }catch(e){}
 
     on($("btn-take-ticket"), "click", async () => {
-        const b = $("btn-take-ticket"); if(b.disabled) return; unlockAudio(); if(Notification.permission!=='granted') Notification.requestPermission();
+        const b = $("btn-take-ticket"); if(b.disabled) return; 
+        if(ls.getItem('callsys_ticket')) return toast("您已有號碼", "error"); // Double check
+        
+        unlockAudio(); if(Notification.permission!=='granted') Notification.requestPermission();
         b.disabled = true;
         try { const r = await fetch("/api/ticket/take", {method:"POST"}).then(d=>d.json()); if(r.success) { myTicket=r.ticket; ls.setItem('callsys_ticket', myTicket); renderMode(); toast(T.ok, "success"); } else toast(r.error||T.fail, "error"); } catch(e) { toast(T.off, "error"); }
-        setTimeout(() => b.disabled = false, 1000);
+        setTimeout(() => { if(!myTicket) b.disabled = false; }, 1000);
     });
     on($("btn-track-ticket"), "click", () => {
         unlockAudio(); const v = $("manual-ticket-input").value; if(!v) return toast(T.no_in, "error");
         if(Notification.permission!=='granted') Notification.requestPermission(); myTicket=parseInt(v); ls.setItem('callsys_ticket', myTicket); $("manual-ticket-input").value=""; renderMode();
     });
-    on($("btn-cancel-ticket"), "click", () => { if(confirm(T.cancel)) { ls.removeItem('callsys_ticket'); myTicket=null; renderMode(); }});
+    on($("btn-cancel-ticket"), "click", () => { if(confirm(T.cancel)) { ls.removeItem('callsys_ticket'); myTicket=null; renderMode(); $("btn-take-ticket").disabled = false; $("btn-take-ticket").textContent = T.take; }});
     on($("sound-prompt"), "click", () => { unlockAudio(); updateMuteUI(!localMute); });
     on($("copy-link-prompt"), "click", () => navigator.clipboard?.writeText(location.href).then(() => {
         const b=$("copy-link-prompt"), i=b.children[0], t=b.children[1], oi=i.textContent, ot=t.textContent;
