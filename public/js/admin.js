@@ -1,5 +1,5 @@
 /* ==========================================
- * 後台邏輯 (admin.js) - v97.0 Final Optimization
+ * 後台邏輯 (admin.js) - v98.0 Layout & Stats Fix
  * ========================================== */
 const $ = i => document.getElementById(i), $$ = s => document.querySelectorAll(s);
 const mk = (t, c, txt, ev={}, ch=[]) => { 
@@ -244,7 +244,6 @@ function renderLogs(logs, init) {
     const ul = $("admin-log-ui"); if(!ul) return; if(init) ul.innerHTML=""; 
     if(!logs?.length && init) return ul.innerHTML="<li>[No Logs]</li>";
     logs.forEach(m => { const li = mk("li", null, m); init ? ul.appendChild(li) : ul.insertBefore(li, ul.firstChild); });
-    // [Fix] Prevent Infinite List (Limit to 50 nodes)
     while(ul.children.length > 50) ul.removeChild(ul.lastChild);
 }
 
@@ -296,8 +295,19 @@ bind("btn-logout", logout); bind("btn-logout-mobile", logout);
     const needsZero = id.startsWith('reset') && !['All','Passed','Featured','line'].some(s => id.includes(s));
     confirmBtn(el, el.textContent, async () => {
         await req(url, needsZero ? {number: 0} : {});
-        // [Fix] Immediate UI Update for Stats Clearing
-        if(id === 'btn-clear-stats') { $("stats-today-count").textContent="0"; $("hourly-chart").innerHTML=""; toast(T.saved, "success"); }
+        if(id === 'btn-clear-stats') { 
+            $("stats-today-count").textContent="0"; 
+            const chart = $("hourly-chart"); chart.innerHTML="";
+            // [Fix] Rebuild empty chart structure immediately to avoid layout jump
+            for(let i=0; i<24; i++) {
+                chart.appendChild(mk("div", `chart-col ${i===new Date().getHours()?'current':''}`, null, {}, [
+                    mk("div","chart-val","0"),
+                    mk("div","chart-bar",null,{style:"height:2%;background:var(--border-color)"}),
+                    mk("div","chart-label",String(i).padStart(2,'0'))
+                ]));
+            }
+            toast(T.saved, "success"); 
+        }
         if(id === 'btn-clear-logs') { $("admin-log-ui").innerHTML="<li>[No Logs]</li>"; toast(T.saved, "success"); }
     });
 });
