@@ -1,5 +1,5 @@
 /* ==========================================
- * 後台邏輯 (admin.js) - v17.8 User UI Polish
+ * 後台邏輯 (admin.js) - v17.9 Final Polish
  * ========================================== */
 const $ = i => document.getElementById(i), $$ = s => document.querySelectorAll(s);
 const mk = (t, c, txt, ev={}, ch=[]) => { 
@@ -229,16 +229,42 @@ socket.on("updateSoundSetting", b => $("sound-toggle").checked = b);
 socket.on("updateSystemMode", m => { $$('input[name="systemMode"]').forEach(r => r.checked = (r.value === m)); const w = document.querySelector('.segmented-control'); if(w) updateSegmentedVisuals(w); });
 socket.on("updateAppointments", l => { if(checkPerm('appointment')) renderAppointments(l); });
 
+/* --- [Polished] Online Users Socket Handler --- */
 socket.on("updateOnlineAdmins", l => { 
     if(checkPerm('users')) {
+        const getGradient = (str) => {
+            const hash = str.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+            return `linear-gradient(135deg, hsl(${hash%360}, 75%, 60%), hsl(${(hash+50)%360}, 75%, 50%))`;
+        };
+
         renderList("online-users-list", (l||[]).sort((a,b)=>(a.role==='super'?-1:1)), u => {
-            const dot = mk("span", "status-dot pulse");
-            const firstChar = (u.nickname || u.username).charAt(0).toUpperCase();
-            const avatar = mk("div", "user-avatar is-online", firstChar, {style:"width:32px;height:32px;font-size:0.8rem;"});
-            const name = mk("div", "user-name", null, {style:"font-size:0.9rem"}, [dot, mk("span",null,u.nickname)]);
-            const ip = mk("div", "user-id", u.username === 'superadmin' ? 'Super Admin' : `@${u.username}`);
-            const info = mk("div", "user-info-col", null, {}, [name, ip]);
-            return mk("li", "user-list-item", null, {style:"padding:10px 14px;"}, [avatar, info]);
+            const roleClass = (u.userRole || u.role || 'OPERATOR').toLowerCase();
+            const roleLabel = (u.userRole || u.role) === 'ADMIN' ? 'ADMIN' : ((u.userRole || u.role) === 'MANAGER' ? 'MANAGER' : 'OPERATOR');
+            const displayNick = u.nickname || u.username;
+
+            const card = mk("li", "user-card-item online-mode");
+            
+            const avatar = mk("div", "user-avatar-fancy", displayNick.charAt(0).toUpperCase(), { 
+                style: `background: ${getGradient(u.username)}` 
+            });
+            
+            const pulse = mk("span", "status-pulse-indicator");
+            const nickDiv = mk("div", "user-nick-fancy", null, {}, [pulse, mk("span", null, displayNick)]);
+            
+            const infoDiv = mk("div", "user-info-fancy", null, {}, [
+                nickDiv,
+                mk("div", "user-id-fancy", `IP/ID: @${u.username}`),
+                mk("div", `role-badge-fancy ${roleClass.includes('admin')?'admin':roleClass}`, roleLabel)
+            ]);
+            
+            const header = mk("div", "user-card-header", null, {}, [avatar, infoDiv]);
+            
+            const actions = mk("div", "user-card-actions", null, {style:"justify-content:flex-end; opacity:0.7; font-size:0.8rem;"}, [
+                mk("span", null, "🟢 Active Now")
+            ]);
+
+            card.append(header, actions);
+            return card;
         }, "loading");
     }
 });
@@ -253,7 +279,7 @@ socket.on("updatePassed", l => renderList("passed-list-ui", l, n => {
 
 const renderFeaturedItem = (item) => {
     const view = mk("div", "list-info", null, {}, [mk("span","list-main-text",item.linkText), mk("span","list-sub-text",item.linkUrl)]);
-    const form = mk("div", "edit-form-wrapper", null, {style:"display:none;"}, [
+    const form = mk("div", "edit-form-wrapper", null, {style:"display:none; position:relative;"}, [
         mk("input",null,null,{value:item.linkText, placeholder:"Name"}), mk("input",null,null,{value:item.linkUrl, placeholder:"URL"}),
         mk("div","edit-form-actions",null,{},[
             mk("button","btn-secondary",T.cancel,{onclick:()=>{form.style.display="none";view.style.display="flex";acts.style.display="flex";}}),
@@ -280,96 +306,66 @@ function renderAppointments(list) {
     }, "no_appt");
 }
 
-/* --- [UI Polished] Load Users Function --- */
+/* --- [Fixed & Polished] Load Users Function --- */
 async function loadUsers() {
     const d = await req("/api/admin/users"); if(!d?.users) return;
     const isSuper = isSuperAdmin(); 
     
-    // 輔助函式：生成漸層色
     const getGradient = (str) => {
         const hash = str.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
-        const hue1 = hash % 360;
-        const hue2 = (hue1 + 40) % 360;
-        return `linear-gradient(135deg, hsl(${hue1}, 70%, 60%), hsl(${hue2}, 70%, 55%))`;
+        const hue1 = hash % 360; const hue2 = (hue1 + 50) % 360;
+        return `linear-gradient(135deg, hsl(${hue1}, 75%, 60%), hsl(${hue2}, 75%, 50%))`;
     };
 
     renderList("user-list-ui", d.users, u => {
-        // 1. 準備資料
-        const firstChar = (u.nickname || u.username).charAt(0).toUpperCase();
-        const roleClass = u.role ? u.role.toLowerCase() : 'operator';
-        const roleLabel = u.role === 'OPERATOR' ? 'Op (操作員)' : (u.role === 'MANAGER' ? 'Mgr (經理)' : (u.role === 'ADMIN' ? 'Adm (管理員)' : 'Adm'));
+        const roleClass = (u.role||'OPERATOR').toLowerCase();
+        const roleLabel = u.role === 'OPERATOR' ? 'Op (操作員)' : (u.role === 'MANAGER' ? 'Mgr (經理)' : 'Adm (管理員)');
         
-        // 2. 建立卡片容器
         const card = mk("li", "user-card-item");
         
-        // 3. 頭部區域 (Avatar + Info)
-        const avatar = mk("div", "user-avatar-fancy", firstChar, {
-            style: `background: ${getGradient(u.username)}`
-        });
-        
-        const nickDiv = mk("div", "user-nick-fancy", u.nickname || u.username);
-        const idDiv = mk("div", "user-id-fancy", `@${u.username}`);
-        const badge = mk("div", `role-badge-fancy ${roleClass}`, roleLabel);
-        
-        const infoDiv = mk("div", "user-info-fancy", null, {}, [nickDiv, idDiv, mk("div",null,null,{style:"height:4px"}), badge]);
+        const avatar = mk("div", "user-avatar-fancy", (u.nickname||u.username).charAt(0).toUpperCase(), { style: `background: ${getGradient(u.username)}` });
+        const infoDiv = mk("div", "user-info-fancy", null, {}, [
+            mk("div", "user-nick-fancy", u.nickname || u.username),
+            mk("div", "user-id-fancy", `@${u.username}`),
+            mk("div", `role-badge-fancy ${roleClass}`, roleLabel)
+        ]);
         const header = mk("div", "user-card-header", null, {}, [avatar, infoDiv]);
-        
-        // 4. 操作區域與編輯表單
+
         const actions = mk("div", "user-card-actions");
         
-        // 編輯表單 (預設隱藏)
-        const editForm = mk("div", "edit-form-wrapper", null, {style: "display:none; margin-top:10px;"}, [
-            mk("input", null, null, {value: u.nickname, placeholder: T.ph_nick, style:"margin-bottom:6px"}),
+        const editForm = mk("div", "edit-form-wrapper", null, {style: "display:none;"}, [
+            mk("div", null, "修改暱稱:", {style:"font-weight:700;font-size:0.9rem;margin-bottom:4px;"}),
+            mk("input", null, null, {value: u.nickname, placeholder: T.ph_nick}),
             mk("div", "edit-form-actions", null, {}, [
-                mk("button", "btn-secondary", T.cancel, {onclick: () => {
-                    editForm.style.display = "none";
-                    header.style.display = "flex";
-                    actions.style.display = "flex";
-                }}),
-                mk("button", "btn-secondary success", T.save, {onclick: async () => {
-                    if(await req("/api/admin/set-nickname", {targetUsername: u.username, nickname: editForm.children[0].value})) {
+                mk("button", "btn-secondary", T.cancel, {onclick: (e) => { e.stopPropagation(); editForm.style.display = "none"; }}),
+                mk("button", "btn-secondary success", T.save, {onclick: async (e) => {
+                    e.stopPropagation();
+                    if(await req("/api/admin/set-nickname", {targetUsername: u.username, nickname: editForm.children[1].value})) {
                         toast(T.saved, "success"); loadUsers();
                     }
                 }})
             ])
         ]);
 
-        // 5. 按鈕邏輯
         if (u.username === uniqueUser || isSuper) {
-            const btnEdit = mk("button", "btn-secondary", "✎", {
-                title: T.edit,
-                style: "width:32px; height:32px; padding:0;",
-                onclick: () => {
-                    editForm.style.display = "flex";
-                    header.style.display = "none";
-                    actions.style.display = "none";
-                }
-            });
+            const btnEdit = mk("button", "btn-action-icon", "✎", { title: T.edit });
+            btnEdit.onclick = () => { editForm.style.display = "flex"; };
             actions.appendChild(btnEdit);
         }
 
         if (u.username !== 'superadmin' && isSuper) {
-            // 權限下拉選單
+            const rightGrp = mk("div", null, null, {style:"display:flex; gap:8px; align-items:center;"});
+            
             const roleSel = mk("select", "role-select", null, {
-                style: "width:auto; height:32px; font-size:0.8rem;",
-                onchange: async () => {
-                    if(await req("/api/admin/set-role", {targetUsername: u.username, newRole: roleSel.value})) {
-                        toast(T.saved, "success"); loadUsers();
-                    }
-                }
+                title: "變更權限",
+                onchange: async () => { if(await req("/api/admin/set-role", {targetUsername: u.username, newRole: roleSel.value})) { toast(T.saved, "success"); loadUsers(); } }
             });
             ['OPERATOR', 'MANAGER', 'ADMIN'].forEach(r => roleSel.add(new Option(r, r, false, u.role === r)));
             
-            // 刪除按鈕
-            const btnDel = mk("button", "btn-secondary btn-warn", "✕", {
-                style: "width:32px; height:32px; padding:0; color:var(--danger); border-color:var(--danger-bg); background:var(--danger-bg);",
-                title: T.del
-            });
-            confirmBtn(btnDel, "✕", async () => {
-                await req("/api/admin/del-user", {delUsername: u.username}); loadUsers();
-            });
+            const btnDel = mk("button", "btn-action-icon danger", "✕", { title: T.del });
+            confirmBtn(btnDel, "✕", async () => { await req("/api/admin/del-user", {delUsername: u.username}); loadUsers(); });
 
-            const rightGrp = mk("div", null, null, {style:"display:flex; gap:6px;"}, [roleSel, btnDel]);
+            rightGrp.append(roleSel, btnDel);
             actions.appendChild(rightGrp);
         } else {
             actions.appendChild(mk("span"));
@@ -379,34 +375,24 @@ async function loadUsers() {
         return card;
     }, "loading");
 
-    // 6. 重繪 "新增使用者" 區塊
     const addSection = document.querySelector('#card-user-management .control-group.compact-group');
     if(addSection) {
-        addSection.innerHTML = ''; 
-        addSection.className = "add-user-container";
-
-        const title = mk("div", null, `➕ ${T.lbl_add_user}`, {style:"font-weight:700; margin-bottom:12px; font-size:0.9rem; color:var(--primary);"});
-        
+        addSection.innerHTML = ''; addSection.className = "add-user-container";
         const grid = mk("div", "add-user-grid");
         const iUser = mk("input", null, null, {id:"new-user-username", placeholder: T.ph_account});
         const iPass = mk("input", null, null, {id:"new-user-password", type:"password", placeholder: "Pwd"});
         const iNick = mk("input", null, null, {id:"new-user-nickname", placeholder: T.ph_nick});
         const iRole = mk("select", null, null, {id:"new-user-role"});
-        iRole.add(new Option("Operator", "OPERATOR"));
-        iRole.add(new Option("Manager", "MANAGER"));
-        iRole.add(new Option("Admin", "ADMIN"));
-        
-        const btnAdd = mk("button", "btn-add-user-fancy", "Create User");
+        iRole.add(new Option("Operator", "OPERATOR")); iRole.add(new Option("Manager", "MANAGER")); iRole.add(new Option("Admin", "ADMIN"));
+        const btnAdd = mk("button", "btn-add-user-fancy", `+ ${T.lbl_add_user}`);
         btnAdd.onclick = async()=>{ 
             if(!iUser.value || !iPass.value) return toast("請輸入帳號密碼", "error");
             if(await req("/api/admin/add-user", {newUsername:iUser.value, newPassword:iPass.value, newNickname:iNick.value, newRole:iRole.value})) { 
-                toast(T.saved,"success"); loadUsers(); 
-                iUser.value=""; iPass.value=""; iNick.value="";
+                toast(T.saved,"success"); loadUsers(); iUser.value=""; iPass.value=""; iNick.value="";
             } 
         };
-
         grid.append(iUser, iPass, iNick, iRole, btnAdd);
-        addSection.append(title, grid);
+        addSection.appendChild(grid);
     }
 }
 
