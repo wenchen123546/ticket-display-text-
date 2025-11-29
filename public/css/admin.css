@@ -1,5 +1,5 @@
 /* ==========================================
- * 後台樣式 (admin.css) - v17.8 User UI Polish
+ * 後台樣式 (admin.css) - v17.9 Final Polish
  * ========================================== */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap');
 
@@ -166,7 +166,6 @@ body.dark-mode .admin-card { border: 1px solid rgba(255,255,255,0.08); }
    ========================================== */
 .control-group { margin-bottom: 0; display: flex; flex-direction: column; gap: 8px; }
 .control-group label { font-size: 0.85rem; font-weight: 600; color: var(--text-main); display: flex; justify-content: space-between; }
-/* 確保底部輸入區不會被壓縮 */
 .admin-card .control-group.compact-group { flex-grow: 0; margin-top: auto; flex-shrink: 0; }
 
 input, select, textarea { 
@@ -174,16 +173,15 @@ input, select, textarea {
     border: 1px solid var(--border-color); padding: 0 16px; 
     background: var(--bg-input); color: var(--text-main); 
     width: 100%; transition: all 0.2s ease; font-family: inherit;
-    min-width: 0; /* 防止 Flex 子元素溢出 */
+    min-width: 0; 
 }
 input:focus, select:focus, textarea:focus { border-color: var(--primary); background: var(--bg-surface); box-shadow: 0 0 0 3px var(--primary-soft); }
 
-/* Input Group: 強制水平排列 */
 .input-group { 
     display: flex; gap: 8px; width: 100%; 
-    align-items: center; /* 垂直置中 */
+    align-items: center; 
 } 
-.input-group input { flex: 1; } /* 輸入框佔滿剩餘空間 */
+.input-group input { flex: 1; }
 
 .toggle-switch {
     appearance: none; width: 46px; height: 26px; background: var(--border-color);
@@ -209,7 +207,7 @@ button {
     font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px;
     cursor: pointer; border: none; transition: all 0.2s ease; font-size: 0.95rem; user-select: none;
     white-space: nowrap; padding: 0 16px;
-    flex-shrink: 0; /* 防止按鈕被壓縮 */
+    flex-shrink: 0;
 }
 button:active { transform: scale(0.97); }
 
@@ -256,7 +254,6 @@ button:active { transform: scale(0.97); }
 .scroll-list::-webkit-scrollbar { width: 6px; }
 .scroll-list::-webkit-scrollbar-thumb { background-color: var(--border-color); border-radius: 10px; }
 
-/* 列表單項 */
 .list-item { 
     display: flex; justify-content: space-between; align-items: center; 
     padding: 10px 14px; border-bottom: 1px solid var(--border-color); 
@@ -300,19 +297,6 @@ button:active { transform: scale(0.97); }
     box-shadow: 0 1px 2px rgba(0,0,0,0.05);
 }
 .list-actions button:not(:empty) { width: auto; padding: 0 10px; font-size: 0.8rem; }
-
-.role-select { 
-    height: 30px; padding: 0 6px; 
-    width: auto; max-width: 100px;
-    font-size: 0.8rem; border-radius: 6px; 
-    border: 1px solid var(--border-color); background: var(--bg-body);
-    color: var(--text-main);
-    cursor: pointer;
-}
-.role-select:focus { border-color: var(--primary); }
-
-.edit-form-wrapper { display: flex; flex-direction: column; gap: 8px; width: 100%; padding: 8px 0; }
-.edit-form-actions { display: flex; gap: 8px; justify-content: flex-end; }
 
 /* ==========================================
    5. 權限設定 UI
@@ -435,16 +419,20 @@ button:active { transform: scale(0.97); }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
 /* ==========================================
-   8. 優化後的帳號管理樣式 (User Management UI Polish)
+   8. 優化後的帳號與在線管理樣式 (v17.9 Fixed & Polished)
    ========================================== */
-#user-list-ui {
+
+/* 通用網格設定 (帳號與在線管理共用) */
+#user-list-ui, #online-users-list {
     display: grid !important;
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
     gap: 16px;
     padding: 4px;
     max-height: 500px;
+    overflow-y: auto;
 }
 
+/* --- [共用卡片基底] --- */
 .user-card-item {
     background: var(--bg-surface);
     border: 1px solid var(--border-color);
@@ -455,7 +443,8 @@ button:active { transform: scale(0.97); }
     gap: 12px;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
-    overflow: hidden;
+    overflow: visible; /* 修正：允許陰影或提示框超出 */
+    min-height: 120px; /* 確保高度一致 */
 }
 
 .user-card-item:hover {
@@ -464,36 +453,102 @@ button:active { transform: scale(0.97); }
     border-color: var(--border-focus);
 }
 
-.user-card-header { display: flex; align-items: center; gap: 12px; }
+/* --- [在線使用者專屬樣式] --- */
+.user-card-item.online-mode {
+    border-left: 4px solid var(--success); /* 左側綠條強調在線 */
+}
+
+/* 在線呼吸燈 */
+.status-pulse-indicator {
+    width: 10px; height: 10px;
+    background-color: var(--success);
+    border-radius: 50%;
+    box-shadow: 0 0 0 rgba(16, 185, 129, 0.7);
+    animation: pulse-green 2s infinite;
+    display: inline-block;
+    margin-right: 6px;
+}
+@keyframes pulse-green {
+    0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+    70% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+
+/* --- [卡片內容排版] --- */
+.user-card-header { 
+    display: flex; 
+    align-items: center; 
+    gap: 12px; 
+    width: 100%;
+}
 
 .user-avatar-fancy {
-    width: 42px; height: 42px;
-    border-radius: 10px; color: white; font-weight: 700; font-size: 1.1rem;
+    width: 46px; height: 46px;
+    border-radius: 12px; 
+    color: white; 
+    font-weight: 800; 
+    font-size: 1.2rem;
     display: flex; align-items: center; justify-content: center;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.1); text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.15); 
+    text-shadow: 0 1px 2px rgba(0,0,0,0.2);
     flex-shrink: 0;
 }
 
-.user-info-fancy { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.user-nick-fancy { font-weight: 700; color: var(--text-main); font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.user-id-fancy { font-size: 0.75rem; color: var(--text-sub); font-family: 'JetBrains Mono', monospace; opacity: 0.8; }
+.user-info-fancy { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
+.user-nick-fancy { font-weight: 700; color: var(--text-main); font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; }
+.user-id-fancy { font-size: 0.8rem; color: var(--text-sub); font-family: 'JetBrains Mono', monospace; opacity: 0.8; margin-top: 2px; }
 
+/* 角色標籤 */
 .role-badge-fancy {
-    font-size: 0.7rem; padding: 3px 8px; border-radius: 6px; font-weight: 700;
+    font-size: 0.7rem; padding: 4px 8px; border-radius: 6px; font-weight: 700;
     text-transform: uppercase; letter-spacing: 0.5px; display: inline-block; align-self: flex-start;
+    margin-top: 6px;
 }
-.role-badge-fancy.admin { background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; box-shadow: 0 2px 5px rgba(99, 102, 241, 0.3); }
-.role-badge-fancy.manager { background: #e0f2fe; color: #0284c7; border: 1px solid #bae6fd; }
-.role-badge-fancy.operator { background: #f1f5f9; color: #64748b; border: 1px solid #e2e8f0; }
+.role-badge-fancy.admin { background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; }
+.role-badge-fancy.manager { background: #e0f2fe; color: #0284c7; border: 1px solid rgba(2, 132, 199, 0.2); }
+.role-badge-fancy.operator { background: #f1f5f9; color: #64748b; border: 1px solid var(--border-color); }
+body.dark-mode .role-badge-fancy.manager { background: rgba(14, 165, 233, 0.2); color: #38bdf8; }
+body.dark-mode .role-badge-fancy.operator { background: rgba(148, 163, 184, 0.1); color: #94a3b8; }
 
-body.dark-mode .role-badge-fancy.manager { background: rgba(14, 165, 233, 0.2); color: #38bdf8; border-color: rgba(14, 165, 233, 0.3); }
-body.dark-mode .role-badge-fancy.operator { background: rgba(148, 163, 184, 0.1); color: #94a3b8; border-color: rgba(148, 163, 184, 0.2); }
-
+/* --- [操作區與表單] --- */
 .user-card-actions {
-    display: flex; justify-content: space-between; align-items: center;
-    padding-top: 12px; border-top: 1px dashed var(--border-color); margin-top: auto;
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center;
+    padding-top: 12px; 
+    border-top: 1px dashed var(--border-color); 
+    margin-top: auto;
+    min-height: 40px; /* 確保按鈕區域高度 */
 }
 
+/* 按鈕樣式增強 */
+.btn-action-icon {
+    width: 36px; height: 36px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-body);
+    color: var(--text-sub);
+    cursor: pointer;
+    transition: 0.2s;
+    font-size: 1rem;
+}
+.btn-action-icon:hover { background: var(--bg-hover); color: var(--primary); border-color: var(--primary); }
+.btn-action-icon.danger:hover { background: var(--danger-bg); color: var(--danger); border-color: var(--danger); }
+
+/* 編輯表單容器 */
+.edit-form-wrapper { 
+    display: flex; flex-direction: column; gap: 8px; width: 100%; 
+    padding: 10px; background: var(--bg-input); border-radius: 8px;
+    border: 1px solid var(--border-color);
+    position: absolute; /* 絕對定位覆蓋 */
+    top: 0; left: 0; width: 100%; height: 100%;
+    z-index: 10;
+    justify-content: center;
+}
+.edit-form-actions { display: flex; gap: 8px; justify-content: flex-end; width: 100%; }
+
+/* 新增使用者底部區塊 */
 .add-user-container {
     background: var(--bg-hover); border-top: 1px solid var(--border-color);
     padding: 16px; border-radius: 0 0 16px 16px; margin: -24px -24px -24px -24px;
