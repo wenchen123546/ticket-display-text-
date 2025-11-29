@@ -1,5 +1,5 @@
 /* ==========================================
- * 後台樣式 (admin.css) - v17.2 Mobile Response Fix
+ * 後台樣式 (admin.css) - v17.3 Layout Fix
  * ========================================== */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap');
 
@@ -133,7 +133,9 @@ body {
     padding: 24px; 
     height: 100%; position: relative; 
     transition: transform 0.2s, box-shadow 0.2s;
-    display: flex; flex-direction: column; justify-content: space-between; gap: 16px; 
+    
+    /* [修正] 將對齊方式從 space-between 改為 flex-start，避免內容少時上方出現大片空白 */
+    display: flex; flex-direction: column; justify-content: flex-start; gap: 16px; 
 }
 body.dark-mode .admin-card { border: 1px solid rgba(255,255,255,0.08); }
 .admin-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-float); border-color: var(--primary); }
@@ -149,6 +151,8 @@ body.dark-mode .admin-card { border: 1px solid rgba(255,255,255,0.08); }
 
 .admin-card .control-group { flex-grow: 1; display: flex; flex-direction: column; justify-content: center; }
 .admin-card .control-group.compact-group { flex-grow: 0; margin-top: auto; }
+
+/* [修正] 最後的按鈕自動推到底部，確保 Command Center 等卡片的 Reset 按鈕位置正確 */
 .admin-card > button:last-child { margin-top: 0; }
 
 /* Dashboard Stats */
@@ -230,7 +234,8 @@ button:active { transform: scale(0.97); }
 .btn-add { width: var(--input-h); padding: 0; background: var(--primary); color: white; font-size: 1.4rem; line-height: 1; flex-shrink: 0; }
 
 .btn-reset-single { 
-    width: 100%; margin-top: 0; padding: 10px; height: auto;
+    width: 100%; margin-top: auto; /* [修正] 強制重置按鈕置底 */
+    padding: 10px; height: auto;
     background: transparent; color: var(--text-light); font-size: 0.85rem; font-weight: 500;
 }
 .btn-reset-single:hover { color: var(--danger); text-decoration: none; background: var(--danger-bg); border-radius: var(--btn-radius); }
@@ -241,7 +246,8 @@ button:active { transform: scale(0.97); }
    ========================================== */
 .list-container { 
     flex: 1; 
-    max-height: 40vh; 
+    /* [修正] 移除 Desktop 高度限制，讓列表容器能填滿卡片高度 (配合 flex:1) */
+    /* max-height: 40vh; */
     min-height: 150px;
     border: 1px solid var(--border-color); border-radius: var(--btn-radius); 
     overflow: hidden; background: var(--bg-input); display: flex; flex-direction: column; 
