@@ -1,5 +1,5 @@
 /* ==========================================
- * 伺服器 (index.js) - v17.0 Role Matrix Security
+ * 伺服器 (index.js) - v17.2 Remove Viewer Role
  * ========================================== */
 require('dotenv').config();
 const { Server } = require("http"), express = require("express"), socketio = require("socket.io");
@@ -15,10 +15,9 @@ if (!ADMIN_TOKEN || !REDIS_URL) { console.error("❌ Missing ADMIN_TOKEN or REDI
 const BUSINESS_HOURS = { start: 8, end: 22, enabled: false };
 const DB_FLUSH_INTERVAL = 5000;
 
-// [Security] 擴充後的權限定義
+// [Security] 擴充後的權限定義 (已移除 VIEWER)
 // keys: call, issue, stats, settings, appointment, line, users, pass, recall
 const DEFAULT_ROLES = { 
-    VIEWER: { level: 0, can: ['stats'] }, 
     OPERATOR: { level: 1, can: ['call', 'pass', 'recall', 'issue', 'appointment'] }, 
     MANAGER: { level: 2, can: ['call', 'pass', 'recall', 'issue', 'appointment', 'stats', 'settings', 'users'] }, 
     ADMIN: { level: 9, can: ['*'] } 
@@ -365,7 +364,7 @@ io.on("connection", async s => {
 });
 
 initDatabase().then(() => {
-    server.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server v17.0 running on ${PORT}`));
+    server.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server v17.2 running on ${PORT}`));
 }).catch(err => {
     console.error("❌ Failed to start server due to DB error:", err);
     process.exit(1);
