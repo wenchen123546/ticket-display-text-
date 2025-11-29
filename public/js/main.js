@@ -1,5 +1,5 @@
 /* ==========================================
- * 前台邏輯 (main.js) - v109.0 UX/Kiosk
+ * 前台邏輯 (main.js) - v109.1 UX/Kiosk Optimized
  * ========================================== */
 const $ = i => document.getElementById(i), $$ = s => document.querySelectorAll(s);
 const on = (el, ev, fn) => el?.addEventListener(ev, fn), show = (el, v) => el && (el.style.display = v ? 'block' : 'none');
@@ -25,7 +25,7 @@ const toast = (msg, type='info', ms=3000) => {
     if(navigator.vibrate) navigator.vibrate(50); setTimeout(() => { el.classList.remove('show'); setTimeout(()=>el.remove(), 300); }, ms);
 };
 
-// [UX] Enhanced Wake Lock with Re-acquire
+// [UX] Enhanced Wake Lock
 const toggleWakeLock = async (act) => {
     if(!('wakeLock' in navigator)) return;
     try { 
@@ -36,25 +36,34 @@ const toggleWakeLock = async (act) => {
     } catch(e){}
 };
 
-// [UX] iOS Safari Silent Buffer Fix
+// [UX] iOS Safari Silent Buffer Fix & Enhanced TTS
 const unlockAudio = () => {
     if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
     if(audioCtx.state === 'suspended') audioCtx.resume().then(()=>updateMuteUI(false));
-    // Play silent buffer to unlock iOS audio
     const buffer = audioCtx.createBuffer(1, 1, 22050); 
     const source = audioCtx.createBufferSource(); 
     source.buffer = buffer; source.connect(audioCtx.destination); source.start(0);
     if('speechSynthesis' in window) window.speechSynthesis.getVoices();
-    // [Opt] Pre-load notify sound
     if($("notify-sound")) $("notify-sound").load();
 };
+
 const speak = (txt) => {
     if(!localMute && sndEnabled && 'speechSynthesis' in window) {
-        window.speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(txt); u.lang = 'zh-TW';
-        const v = window.speechSynthesis.getVoices().find(v => v.lang.includes('zh')||v.lang.includes('TW'));
-        if(v) u.voice = v; window.speechSynthesis.speak(u);
+        window.speechSynthesis.cancel(); 
+        const u = new SpeechSynthesisUtterance(txt); 
+        // [Optimization] Robust Voice Selection for Mobile Devices
+        let v = window.speechSynthesis.getVoices().find(v => v.lang === 'zh-TW' || v.lang === 'zh_TW');
+        if(!v) v = window.speechSynthesis.getVoices().find(v => v.lang.includes('zh'));
+        
+        u.lang = 'zh-TW'; // Default fallback
+        if(v) u.voice = v; 
+        
+        // Fix for some browsers cutting off speech
+        u.onend = () => { /* Optional: post-speech actions */ };
+        window.speechSynthesis.speak(u);
     }
 };
+
 const playDing = () => { if($("notify-sound") && !localMute) { $("notify-sound").currentTime = 0; $("notify-sound").play().then(()=>updateMuteUI(false)).catch(()=>updateMuteUI(true, true)); } };
 
 // --- UI Logic ---
@@ -145,11 +154,8 @@ const isKioskMode = () => new URLSearchParams(window.location.search).get('mode'
 // --- Interactions ---
 doc.addEventListener("DOMContentLoaded", () => {
     if(isKioskMode()) {
+        // [Optimization] Use CSS class instead of JS injection
         doc.body.classList.add('kiosk-mode');
-        // Inject Kiosk Styles programmatically to avoid file modification
-        const style = doc.createElement('style');
-        style.textContent = `body.kiosk-mode .hero-section { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 100; padding: 0; margin: 0; border-radius: 0; display:flex; flex-direction:column; justify-content:center; } body.kiosk-mode #number { font-size: 25vw; } body.kiosk-mode .hero-stats-grid { transform: scale(1.5); margin-top: 5vh; width: 80%; } body.kiosk-mode .side-panel, body.kiosk-mode .app-header { display: none !important; } body.kiosk-mode .bg-decoration { opacity: 0.8; }`;
-        doc.head.appendChild(style);
         toggleWakeLock(true);
     }
 
