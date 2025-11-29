@@ -45,10 +45,7 @@
             <button class="nav-btn" data-target="section-settings" data-perm="settings">
                 <span class="nav-icon">⚙️</span> <span data-i18n="nav_settings">系統設定</span>
             </button>
-            <button class="nav-btn" data-target="section-line" data-perm="line">
-                <span class="nav-icon">💬</span> <span data-i18n="nav_line">LINE設定</span>
-            </button>
-        </nav>
+            </nav>
         <div class="sidebar-footer">
             <div style="display:flex; gap:10px; margin-bottom:10px;">
                 <button id="admin-theme-toggle" class="btn-secondary" style="flex:1;">🌙</button>
@@ -270,21 +267,7 @@
                             <ul id="user-list-ui" class="scroll-list"></ul>
                         </div>
                         <div class="control-group compact-group" style="margin-top:auto;">
-                            <label data-i18n="lbl_add_user">新增帳號</label>
-                            <div class="input-group">
-                                <input type="text" id="new-user-username" placeholder="帳號">
-                                <input type="text" id="new-user-password" placeholder="密碼">
                             </div>
-                            <div class="input-group" style="margin-top:4px;">
-                                <input type="text" id="new-user-nickname" placeholder="暱稱">
-                                <select id="new-user-role" style="width: auto;">
-                                    <option value="OPERATOR" selected>Op (操作員)</option>
-                                    <option value="MANAGER">Mgr (經理)</option>
-                                    <option value="ADMIN">Adm (管理員)</option>
-                                </select>
-                                <button id="add-user-btn" class="btn-add">+</button>
-                            </div>
-                        </div>
                     </div>
                 </div>
 
@@ -295,11 +278,7 @@
                         <button id="btn-save-roles" class="btn-secondary success" style="width:100%; margin-top:16px;" data-i18n="btn_save_roles">儲存權限變更</button>
                     </div>
                 </div>
-            </div>
-        </div>
-
-        <div id="section-line" class="section-group">
-            <div class="card-container">
+                
                 <div class="card-wrapper full-width-card" data-perm="line">
                     <div class="admin-card">
                         <h3><span class="card-icon">💬</span> LINE 設定</h3>
@@ -316,8 +295,10 @@
                         <button id="btn-reset-line-msg" class="btn-reset-single" data-i18n="btn_restore">恢復預設值</button>
                     </div>
                 </div>
+
             </div>
         </div>
+
     </main>
 </div>
 
