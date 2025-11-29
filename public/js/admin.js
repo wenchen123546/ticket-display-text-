@@ -1,5 +1,5 @@
 /* ==========================================
- * 後台邏輯 (admin.js) - v20.2 Custom Msg Logic
+ * 後台邏輯 (admin.js) - v20.3 Auto Reply
  * ========================================== */
 const $ = i => document.getElementById(i), $$ = s => document.querySelectorAll(s);
 
@@ -126,6 +126,7 @@ const updateLangUI = () => {
     if($("section-settings").classList.contains("active") && checkPerm('line')) {
         if(cachedLine) renderLineSettings(); else loadLineSettings();
         loadLineMessages();
+        loadLineAutoReplies(); // [新增] 載入關鍵字設定
     }
 
     if(username) $("sidebar-user-info").textContent = username;
@@ -281,6 +282,46 @@ async function loadLineMessages() {
     }
 }
 
+// [New] Line Auto Reply Logic
+async function loadLineAutoReplies() {
+    const list = $("line-autoreply-list"); 
+    if(!list) return;
+    
+    // 1. 載入預設回覆
+    req("/api/admin/line-default-reply/get").then(r => {
+        if($("line-default-msg")) $("line-default-msg").value = r.reply || "";
+    });
+
+    // 2. 載入關鍵字列表
+    const rules = await req("/api/admin/line-autoreply/list");
+    
+    if (!rules || Object.keys(rules).length === 0) {
+        list.innerHTML = `<li class="list-item" style="justify-content:center; color:var(--text-sub);">[ 無自定義規則 ]</li>`;
+        return;
+    }
+
+    renderList("line-autoreply-list", Object.entries(rules), ([key, reply]) => {
+        const li = mk("li", "list-item");
+        
+        const info = mk("div", "list-info", null, {}, [
+            mk("span", "list-main-text", key, {style: "color:var(--primary);"}),
+            mk("span", "list-sub-text", reply)
+        ]);
+        
+        const btnDel = mk("button", "btn-action-icon danger", "✕", { title: T.del });
+        confirmBtn(btnDel, "✕", async () => {
+            await req("/api/admin/line-autoreply/del", { keyword: key });
+            loadLineAutoReplies();
+        });
+
+        const actions = mk("div", "list-actions");
+        actions.appendChild(btnDel);
+        
+        li.append(info, actions);
+        return li;
+    });
+}
+
 socket.on("connect", () => { $("status-bar").classList.remove("visible"); toast(`${T.status_conn} (${username})`, "success"); });
 socket.on("disconnect", () => $("status-bar").classList.add("visible"));
 socket.on("updateQueue", d => { $("number").textContent=d.current; $("issued-number").textContent=d.issued; $("waiting-count").textContent=Math.max(0, d.issued-d.current); if(checkPerm('stats')) loadStats(); });
@@ -352,7 +393,7 @@ function renderAppointments(list) {
 async function loadUsers() {
     const d = await req("/api/admin/users"); if(!d?.users) return;
     const isSuper = isSuperAdmin(); 
-    const getGradient = (str) => `linear-gradient(135deg, hsl(${str.split('').reduce((a,c)=>a+c.charCodeAt(0),0)%360}, 75%, 60%), hsl(${(str.split('').reduce((a,c)=>a+c.charCodeAt(0),0)+50)%360}, 75%, 50%))`;
+    const getGradient = (str) => `linear-gradient(135deg, hsl(${str.split('').reduce((a,c)=>a+c.charCodeAt(0),0)%360}, 75%, 60%), hsl(${(str.split('').reduce((a,c)=>a+c.charCodeAt(0)+50)%360}, 75%, 50%))`;
 
     renderList("user-list-ui", d.users, u => {
         const roleClass = (u.role||'OPERATOR').toLowerCase();
@@ -522,6 +563,27 @@ bind("btn-save-line-msgs", async () => {
     }
 });
 
+// [New] Bind Auto Reply Buttons
+bind("btn-save-default-reply", async () => {
+    const val = $("line-default-msg").value;
+    if(await req("/api/admin/line-default-reply/save", { reply: val }, $("btn-save-default-reply"))) {
+        toast(T.saved, "success");
+    }
+});
+
+bind("btn-add-keyword", async () => {
+    const key = $("new-keyword-in").value;
+    const rep = $("new-reply-in").value;
+    if(!key || !rep) return toast("請輸入關鍵字與回覆內容", "error");
+    
+    if(await req("/api/admin/line-autoreply/save", { keyword: key, reply: rep })) {
+        $("new-keyword-in").value = "";
+        $("new-reply-in").value = "";
+        toast(T.saved, "success");
+        loadLineAutoReplies();
+    }
+});
+
 bind("admin-theme-toggle", ()=>{ isDark = !isDark; applyTheme(); });
 bind("admin-theme-toggle-mobile", ()=>{ isDark = !isDark; applyTheme(); });
 bind("login-button", async () => { const res = await fetch("/login", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({username:$("username-input").value, password:$("password-input").value})}).then(r=>r.json()).catch(()=>({error:T.login_fail})); if(res.success) { localStorage.setItem('callsys_user', res.username); localStorage.setItem('callsys_role', res.userRole); localStorage.setItem('callsys_nick', res.nickname); checkSession(); } else $("login-error").textContent=res.error||T.login_fail; });
@@ -571,7 +633,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 loadUsers(); 
                 if(checkPerm('line')) { 
                     if(cachedLine) renderLineSettings(); else loadLineSettings(); 
-                    loadLineMessages(); // Load msg on tab switch
+                    loadLineMessages();
+                    loadLineAutoReplies(); // [新增]
                 } 
             }
         }
