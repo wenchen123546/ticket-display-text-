@@ -1,5 +1,5 @@
 /* ==========================================
- * 後台樣式 (admin.css) - v17.7 UI Polish
+ * 後台樣式 (admin.css) - v17.8 Final Fix
  * ========================================== */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap');
 
@@ -31,7 +31,7 @@
     --header-h: 64px;
     --card-radius: 16px;
     --btn-radius: 10px;
-    --input-h: 46px;
+    --input-h: 46px; /* 全域輸入框高度 */
     
     --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
     --shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
@@ -115,7 +115,7 @@ body {
 .section-group.active { display: block; }
 
 /* ==========================================
-   2. 卡片 (Cards)
+   2. 卡片與容器 (Cards)
    ========================================== */
 .card-container { 
     display: grid; gap: 24px; 
@@ -129,10 +129,10 @@ body {
     background: var(--bg-surface); border-radius: var(--card-radius); 
     border: 1px solid var(--border-color); box-shadow: var(--shadow-card); 
     padding: 24px; 
-    height: 100%; min-height: 200px;
+    height: 100%; min-height: 300px; /* 給予足夠高度 */
     position: relative; 
     transition: transform 0.2s, box-shadow 0.2s;
-    display: flex; flex-direction: column; justify-content: space-between; gap: 16px; 
+    display: flex; flex-direction: column; gap: 16px; 
     overflow: hidden; 
 }
 body.dark-mode .admin-card { border: 1px solid rgba(255,255,255,0.08); }
@@ -162,54 +162,28 @@ body.dark-mode .admin-card { border: 1px solid rgba(255,255,255,0.08); }
 .dashboard-item .label { font-size: 0.9rem; font-weight: 600; color: var(--text-sub); text-transform: uppercase; letter-spacing: 0.5px; }
 
 /* ==========================================
-   3. 輸入與按鈕 (Inputs & Buttons)
+   3. 全域輸入與按鈕 (Global Inputs & Buttons)
    ========================================== */
 .control-group { margin-bottom: 0; display: flex; flex-direction: column; gap: 8px; }
 .control-group label { font-size: 0.85rem; font-weight: 600; color: var(--text-main); display: flex; justify-content: space-between; }
-/* 確保底部輸入區不會被壓縮 */
-.admin-card .control-group.compact-group { flex-grow: 0; margin-top: auto; flex-shrink: 0; }
+/* 讓底部的操作區塊不要被壓縮 */
+.admin-card .control-group.compact-group { margin-top: auto; flex-shrink: 0; }
 
 input, select, textarea { 
     height: var(--input-h); border-radius: var(--btn-radius); font-size: 0.95rem; 
     border: 1px solid var(--border-color); padding: 0 16px; 
     background: var(--bg-input); color: var(--text-main); 
     width: 100%; transition: all 0.2s ease; font-family: inherit;
-    min-width: 0; /* 防止 Flex 子元素溢出 */
+    min-width: 0; 
 }
 input:focus, select:focus, textarea:focus { border-color: var(--primary); background: var(--bg-surface); box-shadow: 0 0 0 3px var(--primary-soft); }
-
-/* Input Group: 強制水平排列 */
-.input-group { 
-    display: flex; gap: 8px; width: 100%; 
-    align-items: center; /* 垂直置中 */
-} 
-.input-group input { flex: 1; } /* 輸入框佔滿剩餘空間 */
-
-.toggle-switch {
-    appearance: none; width: 46px; height: 26px; background: var(--border-color);
-    border-radius: 20px; position: relative; cursor: pointer; transition: 0.3s; border: none; padding: 0; flex-shrink: 0;
-}
-.toggle-switch::after {
-    content: ''; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px;
-    background: white; border-radius: 50%; transition: 0.3s cubic-bezier(0.4, 0.0, 0.2, 1); box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-}
-.toggle-switch:checked { background: var(--success); }
-.toggle-switch:checked::after { transform: translateX(20px); }
-
-.segmented-control { background: var(--bg-input); padding: 4px; border-radius: 12px; border: 1px solid var(--border-color); display: flex; gap: 4px; }
-.segmented-option { 
-    padding: 8px 12px; font-size: 0.85rem; border-radius: 8px; text-align: center; flex: 1; 
-    cursor: pointer; transition: 0.2s; color: var(--text-sub); font-weight: 500; white-space: nowrap;
-}
-.segmented-option.active { background: var(--bg-surface); color: var(--primary); box-shadow: 0 2px 4px rgba(0,0,0,0.05); font-weight: 700; border: 1px solid var(--border-color); }
-input[type="radio"] { display: none; }
 
 button { 
     height: var(--input-h); border-radius: var(--btn-radius); 
     font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px;
     cursor: pointer; border: none; transition: all 0.2s ease; font-size: 0.95rem; user-select: none;
     white-space: nowrap; padding: 0 16px;
-    flex-shrink: 0; /* 防止按鈕被壓縮 */
+    flex-shrink: 0; 
 }
 button:active { transform: scale(0.97); }
 
@@ -227,23 +201,20 @@ button:active { transform: scale(0.97); }
 .btn-secondary.success:hover { background: var(--success); color: white; }
 .btn-warn { background: var(--danger-bg); color: var(--danger-text); border: 1px solid transparent; }
 .btn-warn:hover { background: var(--danger); color: white; }
-.btn-add { width: var(--input-h); padding: 0; background: var(--primary); color: white; font-size: 1.4rem; line-height: 1; flex-shrink: 0; }
 
 .btn-reset-single { 
     width: 100%; margin-top: 0; padding: 10px; height: auto;
     background: transparent; color: var(--text-light); font-size: 0.85rem; font-weight: 500;
 }
 .btn-reset-single:hover { color: var(--danger); text-decoration: none; background: var(--danger-bg); border-radius: var(--btn-radius); }
-.secondary-actions-row, .big-action-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 0; }
 
 /* ==========================================
-   4. 列表優化 (Lists) - 核心修復
+   4. 列表樣式修復 (List Fixes) - 關鍵部分
    ========================================== */
 .list-container { 
     flex: 1; 
     min-height: 100px;
-    /* 限制高度，避免內容無限延伸 */
-    max-height: 400px; 
+    max-height: 400px; /* 限制高度，強制出捲軸 */
     border: 1px solid var(--border-color); border-radius: var(--btn-radius); 
     background: var(--bg-input); display: flex; flex-direction: column; 
     margin-bottom: 8px;
@@ -257,22 +228,25 @@ button:active { transform: scale(0.97); }
 .scroll-list::-webkit-scrollbar { width: 6px; }
 .scroll-list::-webkit-scrollbar-thumb { background-color: var(--border-color); border-radius: 10px; }
 
-/* 列表單項：強制水平排列 */
+/* 列表項目：使用 CSS Grid 強制對齊 */
 .list-item { 
-    display: flex; justify-content: space-between; align-items: center; 
-    padding: 10px 14px; border-bottom: 1px solid var(--border-color); 
-    background: var(--bg-surface); transition: background 0.15s;
-    flex-wrap: nowrap; /* 關鍵：不換行 */
+    display: grid;
+    /* 定義兩欄：左邊文字(自動延伸)，右邊操作(內容寬度) */
+    grid-template-columns: 1fr auto; 
+    align-items: center; 
     gap: 12px;
+    padding: 10px 14px; 
+    border-bottom: 1px solid var(--border-color); 
+    background: var(--bg-surface); 
+    transition: background 0.15s;
 }
 .list-item:last-child { border-bottom: none; }
 .list-item:hover { background: var(--bg-hover); }
 
-/* 文字資訊區：自動縮寫 */
+/* 文字區域 */
 .list-info { 
-    display: flex; flex-direction: column; overflow: hidden; gap: 2px;
-    flex: 1; /* 佔滿剩餘空間 */
-    min-width: 0; /* 允許縮小 */
+    display: flex; flex-direction: column; overflow: hidden; gap: 2px; 
+    min-width: 0; 
 }
 .list-main-text { 
     font-weight: 600; color: var(--text-main); font-size: 0.95rem; 
@@ -283,14 +257,14 @@ button:active { transform: scale(0.97); }
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; 
 }
 
-/* 操作按鈕區：靠右對齊 */
+/* 操作區域 */
 .list-actions { 
-    display: flex; gap: 6px; flex-shrink: 0; align-items: center; 
+    display: flex; gap: 6px; align-items: center; 
 }
 
-/* 優化操作按鈕：微型化 (Ghost Button Style) */
+/* ⚠️ 按鈕重置：強制覆寫全域按鈕樣式，避免巨大化 */
 .list-actions button { 
-    width: 32px; height: 32px; 
+    width: 32px; height: 32px; min-height: 0;
     padding: 0;
     font-size: 0.9rem;
     background: transparent; 
@@ -301,63 +275,60 @@ button:active { transform: scale(0.97); }
 }
 .list-actions button:hover { 
     background: var(--bg-hover); color: var(--primary); border-color: var(--border-color); 
-    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
 }
+/* 針對有文字的按鈕 (如 "編輯") */
+.list-actions button:not(:empty) { width: auto; padding: 0 10px; font-size: 0.8rem; }
 
-/* 針對有文字的按鈕 (如連結管理)，允許寬度自適應 */
-.list-actions button:not(:empty) {
-    width: auto; padding: 0 10px; font-size: 0.8rem;
-}
-
-/* 角色選單優化 */
+/* 角色下拉選單 */
 .role-select { 
-    height: 30px; padding: 0 6px; 
-    width: auto; max-width: 100px;
+    height: 30px; padding: 0 4px; 
+    width: auto; max-width: 90px;
     font-size: 0.8rem; border-radius: 6px; 
     border: 1px solid var(--border-color); background: var(--bg-body);
     color: var(--text-main);
     cursor: pointer;
 }
-.role-select:focus { border-color: var(--primary); }
 
-.edit-form-wrapper { display: flex; flex-direction: column; gap: 8px; width: 100%; padding: 8px 0; }
+.edit-form-wrapper { display: flex; flex-direction: column; gap: 8px; width: 100%; padding: 8px 0; grid-column: 1 / -1; }
 .edit-form-actions { display: flex; gap: 8px; justify-content: flex-end; }
 
 /* ==========================================
-   5. 權限設定 UI
+   5. 底部新增區塊 (Input Group Fix)
    ========================================== */
-.role-editor-container {
-    display: flex; flex-direction: column; gap: 16px;
-    max-height: 60vh; overflow-y: auto; padding-right: 4px;
+.input-group { 
+    display: flex; gap: 8px; width: 100%; 
+    align-items: stretch;
+} 
+/* 讓多個輸入框平分寬度 */
+.input-group input { flex: 1; min-width: 0; }
+
+/* ⚠️ 新增按鈕修復：移除固定寬度，改為彈性 */
+.btn-add { 
+    width: auto; /* 允許隨內容撐開 */
+    min-width: 46px; /* 保持最小方形 */
+    padding: 0 12px;
+    background: var(--primary); color: white; 
+    font-size: 1.2rem; line-height: 1; 
+    flex-shrink: 0; 
 }
-.role-block {
-    background: var(--bg-input); border: 1px solid var(--border-color);
-    border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 12px;
-}
-.role-header {
-    display: flex; align-items: center; gap: 8px;
-    font-weight: 800; color: var(--primary);
-    padding-bottom: 8px; border-bottom: 1px dashed var(--border-color);
-}
+
+/* ==========================================
+   6. 其他元件
+   ========================================== */
+.role-editor-container { display: flex; flex-direction: column; gap: 16px; max-height: 60vh; overflow-y: auto; }
+.role-block { background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.role-header { display: flex; align-items: center; gap: 8px; font-weight: 800; color: var(--primary); padding-bottom: 8px; border-bottom: 1px dashed var(--border-color); }
 .perm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; }
-.perm-item {
-    display: flex; align-items: center; gap: 8px;
-    font-size: 0.9rem; color: var(--text-main);
-    cursor: pointer; padding: 6px 8px;
-    border-radius: 6px; transition: 0.2s;
-    background: var(--bg-surface); border: 1px solid transparent;
-}
+.perm-item { display: flex; align-items: center; gap: 8px; font-size: 0.9rem; color: var(--text-main); cursor: pointer; padding: 6px 8px; border-radius: 6px; transition: 0.2s; background: var(--bg-surface); border: 1px solid transparent; }
 .perm-item:hover { background: var(--bg-body); border-color: var(--border-color); }
 .perm-item input[type="checkbox"] { width: 18px; height: 18px; margin: 0; accent-color: var(--primary); cursor: pointer; }
 
-/* ==========================================
-   6. 雜項
-   ========================================== */
-.chart-container { 
-    display: flex; align-items: flex-end; height: 180px; gap: 6px; 
-    padding-top: 20px; border-bottom: 1px dashed var(--border-color); 
-    margin-bottom: 0; flex-grow: 1;
-}
+.toggle-switch { appearance: none; width: 46px; height: 26px; background: var(--border-color); border-radius: 20px; position: relative; cursor: pointer; transition: 0.3s; border: none; padding: 0; flex-shrink: 0; }
+.toggle-switch::after { content: ''; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; background: white; border-radius: 50%; transition: 0.3s cubic-bezier(0.4, 0.0, 0.2, 1); box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+.toggle-switch:checked { background: var(--success); }
+.toggle-switch:checked::after { transform: translateX(20px); }
+
+.chart-container { display: flex; align-items: flex-end; height: 180px; gap: 6px; padding-top: 20px; border-bottom: 1px dashed var(--border-color); margin-bottom: 0; flex-grow: 1; }
 .chart-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; cursor: pointer; position: relative; }
 .chart-bar { width: 100%; min-height: 4px; border-radius: 4px 4px 0 0; background: var(--primary); opacity: 0.4; transition: 0.3s; }
 .chart-col:hover .chart-bar { opacity: 1; transform: scaleY(1.05); }
@@ -365,35 +336,6 @@ button:active { transform: scale(0.97); }
 .chart-val { font-size: 0.7rem; margin-bottom: 4px; opacity: 0; transition: 0.2s; font-weight: 700; transform: translateY(5px); color: var(--text-main); }
 .chart-col:hover .chart-val { opacity: 1; transform: translateY(0); }
 .chart-label { font-size: 0.65rem; margin-top: 6px; color: var(--text-sub); }
-
-#login-container { 
-    width: 100%; max-width: 400px; margin: auto; padding: 48px; 
-    background: var(--bg-surface); border-radius: 24px; 
-    box-shadow: var(--shadow-float); border: 1px solid var(--border-color); 
-    position: relative; top: 10%;
-}
-
-.settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 16px; margin-bottom: 0; flex-grow: 1; }
-.setting-card { 
-    padding: 16px; border: 1px solid var(--border-color); border-radius: 12px; 
-    background: var(--bg-surface); display: flex; justify-content: space-between; align-items: center; 
-    cursor: pointer; transition: 0.2s;
-}
-.setting-card:hover { border-color: var(--primary); box-shadow: var(--shadow-sm); }
-.setting-label { font-weight: 600; font-size: 0.9rem; }
-
-#status-bar { position: fixed; top: 0; width: 100%; z-index: 9999; background: var(--danger); color: white; text-align: center; padding: 10px; font-weight: 700; font-size: 0.9rem; transform: translateY(-100%); transition: 0.3s; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
-#status-bar.visible { transform: translateY(0); }
-#toast-notification { 
-    position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(20px); 
-    background: var(--text-main); color: var(--bg-body); padding: 12px 24px; border-radius: 50px; 
-    font-weight: 600; opacity: 0; pointer-events: none; transition: 0.3s; z-index: 9999;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.2); font-size: 0.95rem; border: 1px solid var(--border-color);
-    white-space: nowrap;
-}
-#toast-notification.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-#toast-notification.success { background: var(--success); color: #fff; }
-#toast-notification.error { background: var(--danger); color: #fff; }
 
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); z-index: 5000; display: none; justify-content: center; align-items: center; }
 .modal-content { background: var(--bg-surface); padding: 32px; border-radius: 20px; width: 340px; text-align: center; box-shadow: var(--shadow-float); border: 1px solid var(--border-color); animation: popIn 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
@@ -417,10 +359,8 @@ button:active { transform: scale(0.97); }
     .content-area { width: 100%; padding: 16px; overflow: visible; height: auto; display: block; }
     
     .card-container { display: flex; flex-direction: column; gap: 20px; } 
-    /* Mobile 上高度自適應，不限制 */
     .admin-card { height: auto !important; min-height: auto; gap: 20px; }
     .list-container { max-height: none; height: auto; }
-    /* Mobile 列表仍需限制高度，避免單一列表過長 */
     .scroll-list { max-height: 400px; }
     
     .dashboard-header { grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -429,16 +369,16 @@ button:active { transform: scale(0.97); }
     .big-number { font-size: 2.8rem; } 
     .sub-number { font-size: 2rem; }
 
-    /* Mobile 輸入框垂直排列，但寬度撐滿 */
-    .input-group { flex-direction: column; align-items: stretch; }
-    .input-group input { width: 100%; }
+    /* Mobile: 輸入框垂直排列 */
+    .input-group { flex-direction: column; }
     
     .btn-add { width: 100%; height: 44px; font-size: 1.2rem; }
     button, input, select { min-height: 48px; font-size: 16px; }
     button { white-space: normal; line-height: 1.2; height: auto; padding: 12px; }
     
+    /* Mobile: 列表按鈕放大好點擊 */
     .list-actions { flex-wrap: wrap; justify-content: flex-end; }
-    .list-actions button { width: 44px; height: 44px; } /* 手指好點擊 */
+    .list-actions button { width: 44px; height: 44px; } 
 
     .mobile-only-settings { display: block; margin-top: 24px; padding-top: 20px; border-top: 1px dashed var(--border-color); }
     #login-container { width: 100%; padding: 32px 24px; box-shadow: none; top: 0; margin-top: 40px; border: none; }
