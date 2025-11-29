@@ -1,5 +1,5 @@
 /* ==========================================
- * 後台邏輯 (admin.js) - v18.2 Restore Backgrounds
+ * 後台邏輯 (admin.js) - v19.1 Visual Polish
  * ========================================== */
 const $ = i => document.getElementById(i), $$ = s => document.querySelectorAll(s);
 const mk = (t, c, txt, ev={}, ch=[]) => { 
@@ -198,24 +198,36 @@ function upgradeSystemModeUI() {
     const radios = container.querySelectorAll('input[type="radio"]');
     if (radios.length < 2) return;
     const wrapper = mk('div', 'segmented-control');
+    const labelsToRemove = [];
     radios.forEach(radio => {
-        const textNode = radio.nextSibling;
-        const labelKey = radio.value === 'ticketing' ? 'mode_online' : 'mode_manual';
-        const labelText = T[labelKey]; 
-        if(textNode) textNode.remove();
-        const label = mk('div', 'segmented-option', labelText);
-        label.dataset.i18n = labelKey; 
-        label.onclick = () => { radio.checked = true; radio.dispatchEvent(new Event('change')); updateSegmentedVisuals(wrapper); };
-        wrapper.appendChild(label); wrapper.appendChild(radio);
+        const labelNode = radio.closest('label');
+        if(labelNode) labelsToRemove.push(labelNode);
+        const val = radio.value;
+        const labelKey = val === 'ticketing' ? 'mode_online' : 'mode_manual';
+        const labelText = T[labelKey] || val; 
+        const newLabel = mk('label', 'segmented-option', labelText);
+        newLabel.dataset.i18n = labelKey; 
+        wrapper.appendChild(newLabel);
+        newLabel.appendChild(radio); 
+        newLabel.onclick = (e) => { 
+            if(!radio.checked) { radio.checked = true; radio.dispatchEvent(new Event('change')); }
+            updateSegmentedVisuals(wrapper); 
+        };
     });
-    const title = container.querySelector('label');
-    container.innerHTML = ''; if(title) container.appendChild(title); container.appendChild(wrapper);
+    labelsToRemove.forEach(l => l.replaceWith(...l.childNodes)); 
+    const title = container.querySelector('label:not(.segmented-option)');
+    container.innerHTML = ''; 
+    if(title) container.appendChild(title); 
+    container.appendChild(wrapper);
     updateSegmentedVisuals(wrapper);
 }
+
 function updateSegmentedVisuals(wrapper) {
     const radios = wrapper.querySelectorAll('input[type="radio"]');
-    const labels = wrapper.querySelectorAll('.segmented-option');
-    radios.forEach((r, i) => { if(labels[i]) labels[i].classList.toggle('active', r.checked); });
+    radios.forEach(r => {
+        const lbl = r.closest('.segmented-option');
+        if(lbl) { if(r.checked) lbl.classList.add('active'); else lbl.classList.remove('active'); }
+    });
 }
 
 socket.on("connect", () => { $("status-bar").classList.remove("visible"); toast(`${T.status_conn} (${username})`, "success"); });
@@ -229,40 +241,20 @@ socket.on("updateSoundSetting", b => $("sound-toggle").checked = b);
 socket.on("updateSystemMode", m => { $$('input[name="systemMode"]').forEach(r => r.checked = (r.value === m)); const w = document.querySelector('.segmented-control'); if(w) updateSegmentedVisuals(w); });
 socket.on("updateAppointments", l => { if(checkPerm('appointment')) renderAppointments(l); });
 
-/* --- [Polished] Online Users Socket Handler --- */
 socket.on("updateOnlineAdmins", l => { 
     if(checkPerm('users')) {
-        const getGradient = (str) => {
-            const hash = str.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
-            return `linear-gradient(135deg, hsl(${hash%360}, 75%, 60%), hsl(${(hash+50)%360}, 75%, 50%))`;
-        };
-
+        const getGradient = (str) => `linear-gradient(135deg, hsl(${str.split('').reduce((a,c)=>a+c.charCodeAt(0),0)%360}, 75%, 60%), hsl(${(str.split('').reduce((a,c)=>a+c.charCodeAt(0),0)+50)%360}, 75%, 50%))`;
         renderList("online-users-list", (l||[]).sort((a,b)=>(a.role==='super'?-1:1)), u => {
             const roleClass = (u.userRole || u.role || 'OPERATOR').toLowerCase();
             const roleLabel = (u.userRole || u.role) === 'ADMIN' ? 'ADMIN' : ((u.userRole || u.role) === 'MANAGER' ? 'MANAGER' : 'OPERATOR');
             const displayNick = u.nickname || u.username;
-
             const card = mk("li", "user-card-item online-mode");
-            
-            const avatar = mk("div", "user-avatar-fancy", displayNick.charAt(0).toUpperCase(), { 
-                style: `background: ${getGradient(u.username)}` 
-            });
-            
+            const avatar = mk("div", "user-avatar-fancy", displayNick.charAt(0).toUpperCase(), { style: `background: ${getGradient(u.username)}` });
             const pulse = mk("span", "status-pulse-indicator");
             const nickDiv = mk("div", "user-nick-fancy", null, {}, [pulse, mk("span", null, displayNick)]);
-            
-            const infoDiv = mk("div", "user-info-fancy", null, {}, [
-                nickDiv,
-                mk("div", "user-id-fancy", `IP/ID: @${u.username}`),
-                mk("div", `role-badge-fancy ${roleClass.includes('admin')?'admin':roleClass}`, roleLabel)
-            ]);
-            
+            const infoDiv = mk("div", "user-info-fancy", null, {}, [nickDiv, mk("div", "user-id-fancy", `IP/ID: @${u.username}`), mk("div", `role-badge-fancy ${roleClass.includes('admin')?'admin':roleClass}`, roleLabel)]);
             const header = mk("div", "user-card-header", null, {}, [avatar, infoDiv]);
-            
-            const actions = mk("div", "user-card-actions", null, {style:"justify-content:flex-end; opacity:0.7; font-size:0.8rem;"}, [
-                mk("span", null, "🟢 Active Now")
-            ]);
-
+            const actions = mk("div", "user-card-actions", null, {style:"justify-content:flex-end; opacity:0.7; font-size:0.8rem;"}, [mk("span", null, "🟢 Active Now")]);
             card.append(header, actions);
             return card;
         }, "loading");
@@ -306,26 +298,15 @@ function renderAppointments(list) {
     }, "no_appt");
 }
 
-/* --- [UI Fixed] Load Users Function --- */
 async function loadUsers() {
     const d = await req("/api/admin/users"); if(!d?.users) return;
     const isSuper = isSuperAdmin(); 
-    
-    // 漸層生成
-    const getGradient = (str) => {
-        const hash = str.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
-        return `linear-gradient(135deg, hsl(${hash%360}, 75%, 60%), hsl(${(hash+50)%360}, 75%, 50%))`;
-    };
+    const getGradient = (str) => `linear-gradient(135deg, hsl(${str.split('').reduce((a,c)=>a+c.charCodeAt(0),0)%360}, 75%, 60%), hsl(${(str.split('').reduce((a,c)=>a+c.charCodeAt(0),0)+50)%360}, 75%, 50%))`;
 
-    // 渲染卡片列表
     renderList("user-list-ui", d.users, u => {
         const roleClass = (u.role||'OPERATOR').toLowerCase();
         const roleLabel = u.role === 'OPERATOR' ? 'Op (操作員)' : (u.role === 'MANAGER' ? 'Mgr (經理)' : 'Adm (管理員)');
-        
-        // 1. 卡片本體
         const card = mk("li", "user-card-item");
-        
-        // 2. 資訊區 (Header)
         const avatar = mk("div", "user-avatar-fancy", (u.nickname||u.username).charAt(0).toUpperCase(), { style: `background: ${getGradient(u.username)}` });
         const infoDiv = mk("div", "user-info-fancy", null, {}, [
             mk("div", "user-nick-fancy", u.nickname || u.username),
@@ -333,81 +314,53 @@ async function loadUsers() {
             mk("div", `role-badge-fancy ${roleClass}`, roleLabel)
         ]);
         const header = mk("div", "user-card-header", null, {}, [avatar, infoDiv]);
-
-        // 3. 底部操作區 (Footer)
         const actions = mk("div", "user-card-actions");
-        
-        // 4. 編輯覆蓋層
         const editForm = mk("div", "edit-form-wrapper", null, {style: "display:none;"}, [
             mk("h4", null, "修改暱稱", {style:"margin:0 0 10px 0; color:var(--text-main);"}),
             mk("input", null, null, {value: u.nickname, placeholder: T.ph_nick, style:"margin-bottom:10px;"}),
             mk("div", "edit-form-actions", null, {}, [
                 mk("button", "btn-secondary", T.cancel, {onclick: (e) => { e.stopPropagation(); editForm.style.display = "none"; }}),
-                mk("button", "btn-secondary success", T.save, {onclick: async (e) => {
-                    e.stopPropagation();
-                    if(await req("/api/admin/set-nickname", {targetUsername: u.username, nickname: editForm.children[1].value})) {
-                        toast(T.saved, "success"); loadUsers();
-                    }
-                }})
+                mk("button", "btn-secondary success", T.save, {onclick: async (e) => { e.stopPropagation(); if(await req("/api/admin/set-nickname", {targetUsername: u.username, nickname: editForm.children[1].value})) { toast(T.saved, "success"); loadUsers(); } }})
             ])
         ]);
 
-        // 操作按鈕邏輯
         if (u.username === uniqueUser || isSuper) {
             const btnEdit = mk("button", "btn-action-icon", "✎", { title: T.edit });
             btnEdit.onclick = () => { editForm.style.display = "flex"; };
             actions.appendChild(btnEdit);
-        } else {
-            actions.appendChild(mk("span")); // 佔位
-        }
+        } else actions.appendChild(mk("span"));
 
         if (u.username !== 'superadmin' && isSuper) {
             const rightGrp = mk("div", null, null, {style:"display:flex; gap:8px; align-items:center;"});
-            
             const roleSel = mk("select", "role-select", null, {
-                title: "變更權限",
-                style: "height:32px; font-size:0.8rem; padding:0 8px;",
+                title: "變更權限", style: "height:32px; font-size:0.8rem; padding:0 8px;",
                 onchange: async () => { if(await req("/api/admin/set-role", {targetUsername: u.username, newRole: roleSel.value})) { toast(T.saved, "success"); loadUsers(); } }
             });
             ['OPERATOR', 'MANAGER', 'ADMIN'].forEach(r => roleSel.add(new Option(r, r, false, u.role === r)));
-            
             const btnDel = mk("button", "btn-action-icon danger", "✕", { title: T.del });
             confirmBtn(btnDel, "✕", async () => { await req("/api/admin/del-user", {delUsername: u.username}); loadUsers(); });
-
             rightGrp.append(roleSel, btnDel);
             actions.appendChild(rightGrp);
         }
-
         card.append(header, actions, editForm);
         return card;
     }, "loading");
 
-    // 重繪 "新增使用者" 區塊 - 確保它在卡片底部
     const cardContainer = $("card-user-management");
     let cardAdminBody = cardContainer?.querySelector('.admin-card');
-    
-    // 移除舊的新增區塊（如果存在）
     const oldAdd = document.getElementById("add-user-container-fixed");
     if(oldAdd) oldAdd.remove();
 
     if(cardAdminBody) {
         const addContainer = mk("div", "add-user-container", null, {id:"add-user-container-fixed"});
         const addGrid = mk("div", "add-user-grid");
-
         const iUser = mk("input", null, null, {id:"new-user-username", placeholder: T.ph_account});
         const iPass = mk("input", null, null, {id:"new-user-password", type:"password", placeholder: "Pwd"});
         const iNick = mk("input", null, null, {id:"new-user-nickname", placeholder: T.ph_nick});
         const iRole = mk("select", null, null, {id:"new-user-role"});
         iRole.add(new Option("Operator", "OPERATOR")); iRole.add(new Option("Manager", "MANAGER")); iRole.add(new Option("Admin", "ADMIN"));
-        
-        const btnAdd = mk("button", "btn-hero btn-add-user-fancy", `+ ${T.lbl_add_user}`, {style: "height:46px; font-size:1rem; grid-column: 1 / -1;"});
-        btnAdd.onclick = async()=>{ 
-            if(!iUser.value || !iPass.value) return toast("請輸入帳號密碼", "error");
-            if(await req("/api/admin/add-user", {newUsername:iUser.value, newPassword:iPass.value, newNickname:iNick.value, newRole:iRole.value})) { 
-                toast(T.saved,"success"); loadUsers(); iUser.value=""; iPass.value=""; iNick.value="";
-            } 
-        };
-        
+        const btnAdd = mk("button", "btn-hero btn-add-user-fancy", `+ ${T.lbl_add_user}`, {style: "height:46px; font-size:1rem;"});
+        btnAdd.onclick = async()=>{ if(!iUser.value || !iPass.value) return toast("請輸入帳號密碼", "error"); if(await req("/api/admin/add-user", {newUsername:iUser.value, newPassword:iPass.value, newNickname:iNick.value, newRole:iRole.value})) { toast(T.saved,"success"); loadUsers(); iUser.value=""; iPass.value=""; iNick.value=""; } };
         addGrid.append(iUser, iPass, iNick, iRole, btnAdd);
         addContainer.appendChild(addGrid);
         cardAdminBody.appendChild(addContainer);
@@ -417,26 +370,14 @@ async function loadUsers() {
 async function loadRoles() {
     const cfg = globalRoleConfig || await req("/api/admin/roles/get"); 
     const ctr = $("role-editor-content"); if(!cfg || !ctr) return; ctr.innerHTML="";
-    
-    const perms = [
-        {k:'call', t:T.perm_call}, {k:'issue', t:T.perm_issue}, {k:'stats', t:T.perm_stats},
-        {k:'settings', t:T.perm_settings}, {k:'appointment', t:T.perm_appointment}, 
-        {k:'line', t:T.perm_line}, {k:'users', t:T.perm_users}
-    ];
-    const roleMeta = {
-        'OPERATOR': { icon: '🎮', label: T.role_operator },
-        'MANAGER': { icon: '🛡️', label: T.role_manager }
-    };
+    const perms = [{k:'call', t:T.perm_call}, {k:'issue', t:T.perm_issue}, {k:'stats', t:T.perm_stats}, {k:'settings', t:T.perm_settings}, {k:'appointment', t:T.perm_appointment}, {k:'line', t:T.perm_line}, {k:'users', t:T.perm_users}];
+    const roleMeta = { 'OPERATOR': { icon: '🎮', label: T.role_operator }, 'MANAGER': { icon: '🛡️', label: T.role_manager } };
 
     const container = mk("div", "role-editor-container");
     ['OPERATOR', 'MANAGER'].forEach(r => {
         const block = mk("div", "role-block");
         const meta = roleMeta[r] || {icon:'👤', label:r};
-        const header = mk("div", "role-header", null, {}, [
-            mk("span", null, meta.icon),
-            mk("span", null, `${meta.label} (${r})`)
-        ]);
-
+        const header = mk("div", "role-header", null, {}, [mk("span", null, meta.icon), mk("span", null, `${meta.label} (${r})`)]);
         const grid = mk("div", "perm-grid");
         perms.forEach(p => {
             const isChecked = (cfg[r]?.can||[]).includes(p.k);
@@ -444,7 +385,6 @@ async function loadRoles() {
             const label = mk("label", "perm-item", null, {}, [chk, mk("span", null, p.t)]);
             grid.appendChild(label);
         });
-
         block.appendChild(header); block.appendChild(grid); container.appendChild(block);
     });
     ctr.appendChild(container);
@@ -523,11 +463,7 @@ bind("btn-add-appt", async()=>{ const n=$("appt-number").value, t=$("appt-time")
 bind("btn-save-roles", async()=>{ 
     const c={ OPERATOR:{level:1,can:[]}, MANAGER:{level:2,can:[]}, ADMIN:{level:9,can:['*']} };
     $$(".role-chk:checked").forEach(k => c[k.dataset.role].can.push(k.dataset.perm));
-    if(await req("/api/admin/roles/update", {rolesConfig:c})) {
-        toast(T.saved,"success");
-        globalRoleConfig = c;
-        applyUIPermissions();
-    }
+    if(await req("/api/admin/roles/update", {rolesConfig:c})) { toast(T.saved,"success"); globalRoleConfig = c; applyUIPermissions(); }
 });
 bind("btn-save-unlock-pwd", async()=>{ const p=$("line-unlock-pwd").value; if(await req("/api/admin/line-settings/save-pass", {password:p})) toast(T.saved,"success"); });
 bind("btn-export-csv", async()=>{ 
@@ -539,9 +475,7 @@ bind("admin-theme-toggle", ()=>{ isDark = !isDark; applyTheme(); });
 bind("admin-theme-toggle-mobile", ()=>{ isDark = !isDark; applyTheme(); });
 bind("login-button", async () => {
     const res = await fetch("/login", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({username:$("username-input").value, password:$("password-input").value})}).then(r=>r.json()).catch(()=>({error:T.login_fail}));
-    if(res.success) { 
-        localStorage.setItem('callsys_user', res.username); localStorage.setItem('callsys_role', res.userRole); localStorage.setItem('callsys_nick', res.nickname); checkSession(); 
-    } else $("login-error").textContent=res.error||T.login_fail;
+    if(res.success) { localStorage.setItem('callsys_user', res.username); localStorage.setItem('callsys_role', res.userRole); localStorage.setItem('callsys_nick', res.nickname); checkSession(); } else $("login-error").textContent=res.error||T.login_fail;
 });
 bind("btn-logout", logout); bind("btn-logout-mobile", logout);
 
@@ -561,11 +495,7 @@ bind("btn-logout", logout); bind("btn-logout-mobile", logout);
             $("stats-today-count").textContent="0"; 
             const chart = $("hourly-chart"); chart.innerHTML="";
             for(let i=0; i<24; i++) {
-                chart.appendChild(mk("div", `chart-col ${i===new Date().getHours()?'current':''}`, null, {}, [
-                    mk("div","chart-val","0"),
-                    mk("div","chart-bar",null,{style:"height:2%;background:var(--border-color)"}),
-                    mk("div","chart-label",String(i).padStart(2,'0'))
-                ]));
+                chart.appendChild(mk("div", `chart-col ${i===new Date().getHours()?'current':''}`, null, {}, [mk("div","chart-val","0"), mk("div","chart-bar",null,{style:"height:2%;background:var(--border-color)"}), mk("div","chart-label",String(i).padStart(2,'0'))]));
             }
             toast(T.saved, "success"); 
         }
@@ -593,15 +523,8 @@ document.addEventListener("DOMContentLoaded", () => {
         const target = $(b.dataset.target);
         if(target) {
             target.classList.add('active');
-            
             if(b.dataset.target === 'section-stats') loadStats();
-            if(b.dataset.target === 'section-settings') { 
-                loadAppointments(); 
-                loadUsers(); 
-                if(checkPerm('line')) {
-                    if(cachedLine) renderLineSettings(); else loadLineSettings();
-                }
-            }
+            if(b.dataset.target === 'section-settings') { loadAppointments(); loadUsers(); if(checkPerm('line')) { if(cachedLine) renderLineSettings(); else loadLineSettings(); } }
         }
     });
     
