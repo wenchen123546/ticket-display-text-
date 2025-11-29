@@ -1,5 +1,5 @@
 /* ==========================================
- * 後台樣式 (admin.css) - v17.7 UI Polish
+ * 後台樣式 (admin.css) - v17.8 User UI Polish
  * ========================================== */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap');
 
@@ -237,12 +237,11 @@ button:active { transform: scale(0.97); }
 .secondary-actions-row, .big-action-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 0; }
 
 /* ==========================================
-   4. 列表優化 (Lists) - 核心修復
+   4. 列表優化 (Lists)
    ========================================== */
 .list-container { 
     flex: 1; 
     min-height: 100px;
-    /* 限制高度，避免內容無限延伸 */
     max-height: 400px; 
     border: 1px solid var(--border-color); border-radius: var(--btn-radius); 
     background: var(--bg-input); display: flex; flex-direction: column; 
@@ -257,22 +256,21 @@ button:active { transform: scale(0.97); }
 .scroll-list::-webkit-scrollbar { width: 6px; }
 .scroll-list::-webkit-scrollbar-thumb { background-color: var(--border-color); border-radius: 10px; }
 
-/* 列表單項：強制水平排列 */
+/* 列表單項 */
 .list-item { 
     display: flex; justify-content: space-between; align-items: center; 
     padding: 10px 14px; border-bottom: 1px solid var(--border-color); 
     background: var(--bg-surface); transition: background 0.15s;
-    flex-wrap: nowrap; /* 關鍵：不換行 */
+    flex-wrap: nowrap;
     gap: 12px;
 }
 .list-item:last-child { border-bottom: none; }
 .list-item:hover { background: var(--bg-hover); }
 
-/* 文字資訊區：自動縮寫 */
 .list-info { 
     display: flex; flex-direction: column; overflow: hidden; gap: 2px;
-    flex: 1; /* 佔滿剩餘空間 */
-    min-width: 0; /* 允許縮小 */
+    flex: 1;
+    min-width: 0;
 }
 .list-main-text { 
     font-weight: 600; color: var(--text-main); font-size: 0.95rem; 
@@ -283,12 +281,10 @@ button:active { transform: scale(0.97); }
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; 
 }
 
-/* 操作按鈕區：靠右對齊 */
 .list-actions { 
     display: flex; gap: 6px; flex-shrink: 0; align-items: center; 
 }
 
-/* 優化操作按鈕：微型化 (Ghost Button Style) */
 .list-actions button { 
     width: 32px; height: 32px; 
     padding: 0;
@@ -303,13 +299,8 @@ button:active { transform: scale(0.97); }
     background: var(--bg-hover); color: var(--primary); border-color: var(--border-color); 
     box-shadow: 0 1px 2px rgba(0,0,0,0.05);
 }
+.list-actions button:not(:empty) { width: auto; padding: 0 10px; font-size: 0.8rem; }
 
-/* 針對有文字的按鈕 (如連結管理)，允許寬度自適應 */
-.list-actions button:not(:empty) {
-    width: auto; padding: 0 10px; font-size: 0.8rem;
-}
-
-/* 角色選單優化 */
 .role-select { 
     height: 30px; padding: 0 6px; 
     width: auto; max-width: 100px;
@@ -417,10 +408,8 @@ button:active { transform: scale(0.97); }
     .content-area { width: 100%; padding: 16px; overflow: visible; height: auto; display: block; }
     
     .card-container { display: flex; flex-direction: column; gap: 20px; } 
-    /* Mobile 上高度自適應，不限制 */
     .admin-card { height: auto !important; min-height: auto; gap: 20px; }
     .list-container { max-height: none; height: auto; }
-    /* Mobile 列表仍需限制高度，避免單一列表過長 */
     .scroll-list { max-height: 400px; }
     
     .dashboard-header { grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -429,7 +418,6 @@ button:active { transform: scale(0.97); }
     .big-number { font-size: 2.8rem; } 
     .sub-number { font-size: 2rem; }
 
-    /* Mobile 輸入框垂直排列，但寬度撐滿 */
     .input-group { flex-direction: column; align-items: stretch; }
     .input-group input { width: 100%; }
     
@@ -438,10 +426,78 @@ button:active { transform: scale(0.97); }
     button { white-space: normal; line-height: 1.2; height: auto; padding: 12px; }
     
     .list-actions { flex-wrap: wrap; justify-content: flex-end; }
-    .list-actions button { width: 44px; height: 44px; } /* 手指好點擊 */
+    .list-actions button { width: 44px; height: 44px; }
 
     .mobile-only-settings { display: block; margin-top: 24px; padding-top: 20px; border-top: 1px dashed var(--border-color); }
     #login-container { width: 100%; padding: 32px 24px; box-shadow: none; top: 0; margin-top: 40px; border: none; }
 }
 
 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+/* ==========================================
+   8. 優化後的帳號管理樣式 (User Management UI Polish)
+   ========================================== */
+#user-list-ui {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+    padding: 4px;
+    max-height: 500px;
+}
+
+.user-card-item {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+}
+
+.user-card-item:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-card);
+    border-color: var(--border-focus);
+}
+
+.user-card-header { display: flex; align-items: center; gap: 12px; }
+
+.user-avatar-fancy {
+    width: 42px; height: 42px;
+    border-radius: 10px; color: white; font-weight: 700; font-size: 1.1rem;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1); text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    flex-shrink: 0;
+}
+
+.user-info-fancy { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.user-nick-fancy { font-weight: 700; color: var(--text-main); font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.user-id-fancy { font-size: 0.75rem; color: var(--text-sub); font-family: 'JetBrains Mono', monospace; opacity: 0.8; }
+
+.role-badge-fancy {
+    font-size: 0.7rem; padding: 3px 8px; border-radius: 6px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.5px; display: inline-block; align-self: flex-start;
+}
+.role-badge-fancy.admin { background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; box-shadow: 0 2px 5px rgba(99, 102, 241, 0.3); }
+.role-badge-fancy.manager { background: #e0f2fe; color: #0284c7; border: 1px solid #bae6fd; }
+.role-badge-fancy.operator { background: #f1f5f9; color: #64748b; border: 1px solid #e2e8f0; }
+
+body.dark-mode .role-badge-fancy.manager { background: rgba(14, 165, 233, 0.2); color: #38bdf8; border-color: rgba(14, 165, 233, 0.3); }
+body.dark-mode .role-badge-fancy.operator { background: rgba(148, 163, 184, 0.1); color: #94a3b8; border-color: rgba(148, 163, 184, 0.2); }
+
+.user-card-actions {
+    display: flex; justify-content: space-between; align-items: center;
+    padding-top: 12px; border-top: 1px dashed var(--border-color); margin-top: auto;
+}
+
+.add-user-container {
+    background: var(--bg-hover); border-top: 1px solid var(--border-color);
+    padding: 16px; border-radius: 0 0 16px 16px; margin: -24px -24px -24px -24px;
+}
+.add-user-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.add-user-grid input, .add-user-grid select { font-size: 0.85rem; height: 38px; }
+.btn-add-user-fancy { grid-column: 1 / -1; margin-top: 4px; background: var(--text-main); color: var(--bg-body); }
