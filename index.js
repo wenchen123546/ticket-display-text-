@@ -1,5 +1,5 @@
 /* ==========================================
- * 伺服器 (index.js) - v18.4 Auto-Reply & Default Reply
+ * 伺服器 (index.js) - v18.5 Super Admin Fix
  * ========================================== */
 require('dotenv').config();
 const { Server } = require("http"), express = require("express"), socketio = require("socket.io");
@@ -31,9 +31,9 @@ const KEYS = {
         MSG: { 
             APPROACH: 'callsys:line:msg:approach', ARRIVAL: 'callsys:line:msg:arrival', 
             SUCCESS: 'callsys:line:msg:success', PASSED: 'callsys:line:msg:passed', CANCEL: 'callsys:line:msg:cancel',
-            DEFAULT: 'callsys:line:msg:default' // [新增] 預設回覆
+            DEFAULT: 'callsys:line:msg:default' 
         },
-        AUTOREPLY: 'callsys:line:autoreply_rules' // [新增] 關鍵字規則 Hash
+        AUTOREPLY: 'callsys:line:autoreply_rules'
     } 
 };
 
@@ -157,15 +157,12 @@ app.post('/callback', async (req, res, next) => {
         if (!lineClient) return;
         const rp = x => lineClient.replyMessage(e.replyToken, { type: 'text', text: x }).catch(err => console.error("Reply Error:", err));
 
-        // 1. 後台登入邏輯 (最高優先級)
         if(t==='後台登入') return rp((await redis.get(`${KEYS.LINE.ADMIN}${u}`)) ? `🔗 ${process.env.RENDER_EXTERNAL_URL}/admin.html` : (await redis.set(`${KEYS.LINE.CTX}${u}`,'WAIT_PWD','EX',120),"請輸入密碼"));
         if((await redis.get(`${KEYS.LINE.CTX}${u}`))==='WAIT_PWD' && t===(await redis.get(KEYS.LINE.PWD)||`unlock${ADMIN_TOKEN}`)) { await redis.set(`${KEYS.LINE.ADMIN}${u}`,"1","EX",600); await redis.del(`${KEYS.LINE.CTX}${u}`); return rp("🔓 驗證成功"); }
 
-        // 2. 自定義關鍵字回覆 (Custom Auto-Reply)
         const customReply = await redis.hget(KEYS.LINE.AUTOREPLY, t);
         if (customReply) return rp(customReply);
         
-        // 3. 系統指令與數字
         const [msgSucc, msgPass, msgCanc, msgDefault] = await redis.mget(KEYS.LINE.MSG.SUCCESS, KEYS.LINE.MSG.PASSED, KEYS.LINE.MSG.CANCEL, KEYS.LINE.MSG.DEFAULT);
         const TXT_SUCC = msgSucc || '設定成功: {number}號';
         const TXT_PASS = msgPass || '已過號';
@@ -185,7 +182,6 @@ app.post('/callback', async (req, res, next) => {
             return rp(TXT_SUCC.replace(/{number}/g, n)); 
         }
 
-        // 4. 預設回覆 (Default Reply)
         if (msgDefault && msgDefault.trim() !== "") {
             return rp(msgDefault);
         }
@@ -205,9 +201,16 @@ const auth = async(req, res, next) => {
         if(!u) throw 0; req.user = u; await redis.expire(`${KEYS.SESSION}${token}`, 28800); next();
     } catch(e) { res.status(403).json({error:"權限/Session失效"}); }
 };
+
+// [Modified] perm Middleware with Super Admin Bypass
 const perm = (act) => async (req, res, next) => {
-    const rKey = req.user.role === 'super' ? 'ADMIN' : (req.user.userRole || 'OPERATOR');
-    const role = (JSON.parse(await redis.get(KEYS.ROLES)) || DEFAULT_ROLES)[rKey];
+    // Super Admin has absolute power, bypass all checks
+    if(req.user.role === 'super') return next();
+
+    const rKey = req.user.userRole || 'OPERATOR';
+    const rolesCfg = JSON.parse(await redis.get(KEYS.ROLES)) || DEFAULT_ROLES;
+    const role = rolesCfg[rKey] || DEFAULT_ROLES.OPERATOR; // Safety Fallback
+    
     if(role.level >= 9 || role.can.includes(act) || role.can.includes('*')) return next();
     res.status(403).json({ error: "權限不足" });
 };
@@ -430,4 +433,4 @@ io.on("connection", async s => {
     s.emit("updateSoundSetting",snd==="1"); s.emit("updatePublicStatus",pub!=="0"); s.emit("updateSystemMode",m||'ticketing'); s.emit("updateWaitTime",await calcWaitTime());
 });
 
-initDatabase().then(() => { server.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server v18.4 running on ${PORT}`)); }).catch(err => { console.error("❌ DB Error:", err); process.exit(1); });
+initDatabase().then(() => { server.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server v18.5 running on ${PORT}`)); }).catch(err => { console.error("❌ DB Error:", err); process.exit(1); });
