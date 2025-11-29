@@ -1,9 +1,9 @@
 /* ==========================================
- * 後台邏輯 (admin.js) - v20.0 Secured & Dynamic
+ * 後台邏輯 (admin.js) - v20.2 Custom Msg Logic
  * ========================================== */
 const $ = i => document.getElementById(i), $$ = s => document.querySelectorAll(s);
 
-// [Security] Enhanced mk function: Default textContent, explicit isHtml for icons
+// [Security] Enhanced mk function
 const mk = (t, c, txt, ev={}, ch=[], isHtml=false) => { 
     const e = document.createElement(t); 
     if(c) e.className=c; 
@@ -120,11 +120,12 @@ const updateLangUI = () => {
     if(isSuperAdmin()) loadRoles(); 
     if(checkPerm('settings')) {
         req("/api/featured/get").then(l => renderList("featured-list-ui", l, renderFeaturedItem));
-        initBusinessHoursUI(); // Dynamic injection
+        initBusinessHoursUI(); 
     }
     
     if($("section-settings").classList.contains("active") && checkPerm('line')) {
         if(cachedLine) renderLineSettings(); else loadLineSettings();
+        loadLineMessages();
     }
 
     if(username) $("sidebar-user-info").textContent = username;
@@ -134,7 +135,7 @@ function renderList(ulId, list, fn, emptyMsgKey="empty") {
     const ul = $(ulId); if(!ul) return; 
     while (ul.firstChild) ul.removeChild(ul.firstChild); 
     if(!list?.length) { 
-        ul.innerHTML=""; // Clear first
+        ul.innerHTML=""; 
         ul.appendChild(mk("li", "list-item", T[emptyMsgKey] || T.empty, {style:"justify-content:center;color:var(--text-sub);"})); 
         return; 
     }
@@ -250,39 +251,34 @@ function updateSegmentedVisuals(wrapper) {
 async function initBusinessHoursUI() {
     if(!checkPerm('settings')) return;
     const card = $("card-sys"); if(!card || card.querySelector('#business-hours-group')) return;
-    
-    // Create Config Elements
     const container = mk("div", "control-group", null, {id:"business-hours-group", style:"margin-top:10px; border-top:1px dashed var(--border-color); padding-top:10px;"});
     const label = mk("label", null, "營業時間控制");
-    
     const wrapper = mk("div", null, null, {style:"display:flex; gap:10px; align-items:center;"});
     const toggle = mk("input", "toggle-switch", null, {type:"checkbox", id:"bh-enabled"});
     const startIn = mk("input", null, null, {type:"number", min:0, max:23, placeholder:"Start", style:"width:60px;text-align:center;"});
     const arrow = mk("span", null, "➜");
     const endIn = mk("input", null, null, {type:"number", min:0, max:24, placeholder:"End", style:"width:60px;text-align:center;"});
     const btnSave = mk("button", "btn-secondary success", "儲存", {style:"margin-left:auto;"});
-
     wrapper.append(toggle, startIn, arrow, endIn, btnSave);
     container.append(label, wrapper);
-    
-    // Insert before reset button
     const resetBtn = $("resetAll");
-    if(resetBtn) card.insertBefore(container, resetBtn);
-    else card.appendChild(container);
-
-    // Load Data
+    if(resetBtn) card.insertBefore(container, resetBtn); else card.appendChild(container);
     const d = await req("/api/admin/settings/hours/get");
-    if(d) {
-        toggle.checked = d.enabled;
-        startIn.value = d.start;
-        endIn.value = d.end;
-    }
+    if(d) { toggle.checked = d.enabled; startIn.value = d.start; endIn.value = d.end; }
+    btnSave.onclick = async () => { if(await req("/api/admin/settings/hours/save", {enabled: toggle.checked, start: startIn.value, end: endIn.value})) toast(T.saved, "success"); };
+}
 
-    btnSave.onclick = async () => {
-        if(await req("/api/admin/settings/hours/save", {enabled: toggle.checked, start: startIn.value, end: endIn.value})) {
-            toast(T.saved, "success");
-        }
-    };
+// [New] Load Line Messages
+async function loadLineMessages() {
+    if(!$("msg-success")) return;
+    const d = await req("/api/admin/line-messages/get");
+    if(d) {
+        $("msg-success").value = d.success;
+        $("msg-approach").value = d.approach;
+        $("msg-arrival").value = d.arrival;
+        $("msg-passed").value = d.passed;
+        $("msg-cancel").value = d.cancel;
+    }
 }
 
 socket.on("connect", () => { $("status-bar").classList.remove("visible"); toast(`${T.status_conn} (${username})`, "success"); });
@@ -321,12 +317,10 @@ socket.on("updatePassed", l => renderList("passed-list-ui", l, n => {
         mk("button", "btn-secondary", T.recall, {onclick:()=>{ if(confirm(T.msg_recall_confirm.replace('%s', n))) req("/api/control/recall-passed",{number:n}); }}),
         (b => { confirmBtn(b, T.del, ()=>req("/api/passed/remove",{number:n})); return b; })(mk("button", "btn-secondary", T.del))
     ]);
-    // mk updated: 3rd arg is textContent. Use style for color.
     return mk("li", "list-item", null, {}, [mk("span","list-main-text",`${n} 號`,{style:"font-size:1rem;color:var(--primary);"}), acts]);
 }, "empty"));
 
 const renderFeaturedItem = (item) => {
-    // mk updated: safely handle text.
     const view = mk("div", "list-info", null, {}, [mk("span","list-main-text",item.linkText), mk("span","list-sub-text",item.linkUrl)]);
     const form = mk("div", "edit-form-wrapper", null, {style:"display:none; position:relative;"}, [
         mk("input",null,null,{value:item.linkText, placeholder:"Name"}), mk("input",null,null,{value:item.linkUrl, placeholder:"URL"}),
@@ -424,77 +418,24 @@ async function loadUsers() {
     }
 }
 
-// Matrix Table for Role Permissions
 async function loadRoles() {
     const cfg = globalRoleConfig || await req("/api/admin/roles/get"); 
     const ctr = $("role-editor-content"); if(!cfg || !ctr) return; ctr.innerHTML="";
-    
-    // 定義權限列表
-    const perms = [
-        {k:'call', t:T.perm_call}, 
-        {k:'issue', t:T.perm_issue}, 
-        {k:'stats', t:T.perm_stats}, 
-        {k:'settings', t:T.perm_settings}, 
-        {k:'appointment', t:T.perm_appointment}, 
-        {k:'line', t:T.perm_line}, 
-        {k:'users', t:T.perm_users}
-    ];
-    
-    // 定義要顯示的角色
+    const perms = [{k:'call', t:T.perm_call}, {k:'issue', t:T.perm_issue}, {k:'stats', t:T.perm_stats}, {k:'settings', t:T.perm_settings}, {k:'appointment', t:T.perm_appointment}, {k:'line', t:T.perm_line}, {k:'users', t:T.perm_users}];
     const targetRoles = ['OPERATOR', 'MANAGER'];
-    const roleMeta = { 
-        'OPERATOR': { icon: '🎮', label: T.role_operator, class: 'role-op' }, 
-        'MANAGER': { icon: '🛡️', label: T.role_manager, class: 'role-mgr' } 
-    };
-
-    // 建立表格容器
+    const roleMeta = { 'OPERATOR': { icon: '🎮', label: T.role_operator, class: 'role-op' }, 'MANAGER': { icon: '🛡️', label: T.role_manager, class: 'role-mgr' } };
     const tableWrapper = mk("div", "perm-table-wrapper");
     const table = mk("table", "perm-matrix");
-    
-    // 1. 建立表頭 (Thead)
-    const thead = mk("thead");
-    const trHead = mk("tr");
+    const thead = mk("thead"); const trHead = mk("tr");
     trHead.appendChild(mk("th", null, "權限項目 / 角色"));
-    targetRoles.forEach(r => {
-        const meta = roleMeta[r];
-        const th = mk("th", `th-role ${meta.class}`);
-        // mk updated: pass true for isHtml
-        const iconHtml = `<div class="th-content"><span class="th-icon">${meta.icon}</span><span>${meta.label}</span></div>`;
-        th.innerHTML = iconHtml; 
-        trHead.appendChild(th);
-    });
-    thead.appendChild(trHead);
-    table.appendChild(thead);
-
-    // 2. 建立內容 (Tbody)
+    targetRoles.forEach(r => { const meta = roleMeta[r]; const th = mk("th", `th-role ${meta.class}`); const iconHtml = `<div class="th-content"><span class="th-icon">${meta.icon}</span><span>${meta.label}</span></div>`; th.innerHTML = iconHtml; trHead.appendChild(th); });
+    thead.appendChild(trHead); table.appendChild(thead);
     const tbody = mk("tbody");
-    perms.forEach(p => {
-        const tr = mk("tr");
-        const tdName = mk("td", "td-perm-name", p.t);
-        tr.appendChild(tdName);
-
-        targetRoles.forEach(r => {
-            const tdCheck = mk("td", "td-check");
-            const isChecked = (cfg[r]?.can||[]).includes(p.k);
-            
-            const label = mk("label", "custom-check");
-            const chk = mk("input", "role-chk", null, {
-                type: "checkbox", 
-                dataset: { role: r, perm: p.k }, 
-                checked: isChecked
-            });
-            const checkmark = mk("span", "checkmark");
-            
-            label.append(chk, checkmark);
-            tdCheck.appendChild(label);
-            tr.appendChild(tdCheck);
-        });
+    perms.forEach(p => { const tr = mk("tr"); const tdName = mk("td", "td-perm-name", p.t); tr.appendChild(tdName);
+        targetRoles.forEach(r => { const tdCheck = mk("td", "td-check"); const isChecked = (cfg[r]?.can||[]).includes(p.k); const label = mk("label", "custom-check"); const chk = mk("input", "role-chk", null, {type: "checkbox", dataset: { role: r, perm: p.k }, checked: isChecked}); const checkmark = mk("span", "checkmark"); label.append(chk, checkmark); tdCheck.appendChild(label); tr.appendChild(tdCheck); });
         tbody.appendChild(tr);
     });
-    
-    table.appendChild(tbody);
-    tableWrapper.appendChild(table);
-    ctr.appendChild(tableWrapper);
+    table.appendChild(tbody); tableWrapper.appendChild(table); ctr.appendChild(tableWrapper);
 }
 
 async function loadStats() {
@@ -506,12 +447,7 @@ async function loadStats() {
             d.hourlyCounts.forEach((v, i) => chart.appendChild(mk("div", `chart-col ${i===d.serverHour?'current':''}`, null, {onclick:()=>openStatModal(i,v)}, [
                 mk("div","chart-val",v||""), mk("div","chart-bar",null,{style:`height:${Math.max(v/max*100,2)}%;background:${v===0?'var(--border-color)':''}`}), mk("div","chart-label",String(i).padStart(2,'0'))
             ])));
-            renderList("stats-list-ui", d.history||[], h => {
-                const li = mk("li","list-item");
-                // Manual innerHTML for color formatting
-                li.innerHTML = `<span>${new Date(h.timestamp).toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'})} - <b style="color:var(--primary)">${h.number}</b> <small style="color:var(--text-sub)">(${h.operator})</small></span>`;
-                return li;
-            }, "no_logs");
+            renderList("stats-list-ui", d.history||[], h => { const li = mk("li","list-item"); li.innerHTML = `<span>${new Date(h.timestamp).toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'})} - <b style="color:var(--primary)">${h.number}</b> <small style="color:var(--text-sub)">(${h.operator})</small></span>`; return li; }, "no_logs");
         }
     } catch(e){}
 }
@@ -552,11 +488,7 @@ const bind = (id, fn) => $(id)?.addEventListener("click", fn);
 
 async function adjustCurrent(delta) {
     const numEl = $("number"); const c = parseInt(numEl.textContent) || 0; const target = c + delta;
-    if(target > 0) {
-        numEl.textContent = target; numEl.style.opacity = "0.6";
-        try { if(await req("/api/control/set-call", {number: target})) toast(`${T.saved}: ${target}`, "success"); } 
-        catch(e) { numEl.textContent = c; } finally { numEl.style.opacity = "1"; }
-    }
+    if(target > 0) { numEl.textContent = target; numEl.style.opacity = "0.6"; try { if(await req("/api/control/set-call", {number: target})) toast(`${T.saved}: ${target}`, "success"); } catch(e) { numEl.textContent = c; } finally { numEl.style.opacity = "1"; } }
 }
 bind("btn-call-add-1", () => adjustCurrent(1));
 bind("btn-call-add-5", () => adjustCurrent(5));
@@ -572,23 +504,27 @@ bind("add-passed-btn", async()=>{ const n=$("new-passed-number").value; if(n>0 &
 bind("add-featured-btn", async()=>{ const t=$("new-link-text").value, u=$("new-link-url").value; if(t&&u && await req("/api/featured/add",{linkText:t, linkUrl:u})) { $("new-link-text").value=""; $("new-link-url").value=""; }});
 bind("btn-broadcast", async()=>{ const m=$("broadcast-msg").value; if(m && await req("/api/admin/broadcast",{message:m})) { toast(T.msg_sent,"success"); $("broadcast-msg").value=""; }});
 bind("btn-add-appt", async()=>{ const n=$("appt-number").value, t=$("appt-time").value; if(n&&t && await req("/api/appointment/add",{number:parseInt(n), timeStr:t})) { toast(T.saved,"success"); $("appt-number").value=""; $("appt-time")._flatpickr?.clear(); }});
-bind("btn-save-roles", async()=>{ 
-    const c={ OPERATOR:{level:1,can:[]}, MANAGER:{level:2,can:[]}, ADMIN:{level:9,can:['*']} };
-    $$(".role-chk:checked").forEach(k => c[k.dataset.role].can.push(k.dataset.perm));
-    if(await req("/api/admin/roles/update", {rolesConfig:c})) { toast(T.saved,"success"); globalRoleConfig = c; applyUIPermissions(); }
-});
+bind("btn-save-roles", async()=>{ const c={ OPERATOR:{level:1,can:[]}, MANAGER:{level:2,can:[]}, ADMIN:{level:9,can:['*']} }; $$(".role-chk:checked").forEach(k => c[k.dataset.role].can.push(k.dataset.perm)); if(await req("/api/admin/roles/update", {rolesConfig:c})) { toast(T.saved,"success"); globalRoleConfig = c; applyUIPermissions(); } });
 bind("btn-save-unlock-pwd", async()=>{ const p=$("line-unlock-pwd").value; if(await req("/api/admin/line-settings/save-pass", {password:p})) toast(T.saved,"success"); });
-bind("btn-export-csv", async()=>{ 
-    const d=await req("/api/admin/export-csv", { date: new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Taipei"}) }); 
-    if(d?.csvData) { const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob(["\uFEFF"+d.csvData],{type:'text/csv'})); a.download=d.fileName; a.click(); }
+bind("btn-export-csv", async()=>{ const d=await req("/api/admin/export-csv", { date: new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Taipei"}) }); if(d?.csvData) { const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob(["\uFEFF"+d.csvData],{type:'text/csv'})); a.download=d.fileName; a.click(); } });
+
+// [New] Save Line Messages
+bind("btn-save-line-msgs", async () => {
+    const data = {
+        success: $("msg-success").value,
+        approach: $("msg-approach").value,
+        arrival: $("msg-arrival").value,
+        passed: $("msg-passed").value,
+        cancel: $("msg-cancel").value
+    };
+    if(await req("/api/admin/line-messages/save", data, $("btn-save-line-msgs"))) {
+        toast(T.saved, "success");
+    }
 });
 
 bind("admin-theme-toggle", ()=>{ isDark = !isDark; applyTheme(); });
 bind("admin-theme-toggle-mobile", ()=>{ isDark = !isDark; applyTheme(); });
-bind("login-button", async () => {
-    const res = await fetch("/login", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({username:$("username-input").value, password:$("password-input").value})}).then(r=>r.json()).catch(()=>({error:T.login_fail}));
-    if(res.success) { localStorage.setItem('callsys_user', res.username); localStorage.setItem('callsys_role', res.userRole); localStorage.setItem('callsys_nick', res.nickname); checkSession(); } else $("login-error").textContent=res.error||T.login_fail;
-});
+bind("login-button", async () => { const res = await fetch("/login", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({username:$("username-input").value, password:$("password-input").value})}).then(r=>r.json()).catch(()=>({error:T.login_fail})); if(res.success) { localStorage.setItem('callsys_user', res.username); localStorage.setItem('callsys_role', res.userRole); localStorage.setItem('callsys_nick', res.nickname); checkSession(); } else $("login-error").textContent=res.error||T.login_fail; });
 bind("btn-logout", logout); bind("btn-logout-mobile", logout);
 
 ["resetNumber","resetIssued","resetPassed","resetFeaturedContents","resetAll","btn-clear-logs","btn-clear-stats","btn-reset-line-msg"].forEach(id => {
@@ -603,14 +539,7 @@ bind("btn-logout", logout); bind("btn-logout-mobile", logout);
     const needsZero = id.startsWith('reset') && !['All','Passed','Featured','line'].some(s => id.includes(s));
     confirmBtn(el, el.textContent.trim(), async () => {
         await req(url, needsZero ? {number: 0} : {});
-        if(id === 'btn-clear-stats') { 
-            $("stats-today-count").textContent="0"; 
-            const chart = $("hourly-chart"); chart.innerHTML="";
-            for(let i=0; i<24; i++) {
-                chart.appendChild(mk("div", `chart-col ${i===new Date().getHours()?'current':''}`, null, {}, [mk("div","chart-val","0"), mk("div","chart-bar",null,{style:"height:2%;background:var(--border-color)"}), mk("div","chart-label",String(i).padStart(2,'0'))]));
-            }
-            toast(T.saved, "success"); 
-        }
+        if(id === 'btn-clear-stats') { $("stats-today-count").textContent="0"; const chart = $("hourly-chart"); chart.innerHTML=""; for(let i=0; i<24; i++) { chart.appendChild(mk("div", `chart-col ${i===new Date().getHours()?'current':''}`, null, {}, [mk("div","chart-val","0"), mk("div","chart-bar",null,{style:"height:2%;background:var(--border-color)"}), mk("div","chart-label",String(i).padStart(2,'0'))])); } toast(T.saved, "success"); }
         if(id === 'btn-clear-logs') { $("admin-log-ui").innerHTML=`<li class='list-item'>${T.no_logs}</li>`; toast(T.saved, "success"); }
         if(id.includes('Passed')) { $("passed-list-ui").innerHTML = `<li class="list-item" style="justify-content:center;color:var(--text-sub);">${T.empty}</li>`; }
     });
@@ -637,7 +566,14 @@ document.addEventListener("DOMContentLoaded", () => {
         if(target) {
             target.classList.add('active');
             if(b.dataset.target === 'section-stats') loadStats();
-            if(b.dataset.target === 'section-settings') { loadAppointments(); loadUsers(); if(checkPerm('line')) { if(cachedLine) renderLineSettings(); else loadLineSettings(); } }
+            if(b.dataset.target === 'section-settings') { 
+                loadAppointments(); 
+                loadUsers(); 
+                if(checkPerm('line')) { 
+                    if(cachedLine) renderLineSettings(); else loadLineSettings(); 
+                    loadLineMessages(); // Load msg on tab switch
+                } 
+            }
         }
     });
     
