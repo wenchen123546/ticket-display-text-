@@ -1,5 +1,5 @@
 /* ==========================================
- * 後台樣式 (admin.css) - v20.0 Mobile Optimization
+ * 後台樣式 (admin.css) - v20.1 Mobile Fix & Matrix
  * ========================================== */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap');
 
@@ -285,12 +285,15 @@ body.dark-mode .perm-matrix thead th { background: rgba(255,255,255,0.05); }
 
     /* 4. 內容區域優化 */
     .content-area {
-        padding: 16px; /* 增加左右邊距防止貼邊 */
-        padding-bottom: 80px; /* 底部留白 */
+        padding: 16px; 
         width: 100%;
         display: block;
-        height: auto;
+        /* Fix: Use min-height + flex:none to avoid layout breakage on mobile */
+        min-height: calc(100vh - 60px);
+        height: auto !important;
+        flex: none;
         overflow: visible;
+        padding-bottom: 80px; /* Space for safety */
     }
 
     /* 5. 卡片與 Grid 強制堆疊 */
