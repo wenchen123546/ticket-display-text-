@@ -1,5 +1,5 @@
 /* ==========================================
- * 後台邏輯 (admin.js) - v19.7 Fixed Layout & Modal Overlay
+ * 後台邏輯 (admin.js) - v19.8 Language Switch Fixes
  * ========================================== */
 const $ = i => document.getElementById(i), $$ = s => document.querySelectorAll(s);
 const mk = (t, c, h, e={}, k=[]) => { 
@@ -27,18 +27,40 @@ async function req(u, d={}, b=null) {
 }
 
 const confirmBtn = (el, txt, act) => {
-    if(!el) return; let t, c=5; el.dataset.k=Object.keys(T).find(k=>T[k]===txt)||txt;
+    if(!el) return; let t, c=5; 
+    // [Fix] 嚴格比對，只有在字典裡找到對應的 key 才設定 data-k，避免將「✕」等符號誤設為 key
+    const foundKey = Object.keys(T).find(k=>T[k]===txt);
+    if(foundKey) el.dataset.k = foundKey;
+
     el.onclick = e => { e.stopPropagation(); if(el.classList.contains("ing")) { act(); reset(); } else { el.classList.add("ing"); el.textContent=`${T.confirm} (${c})`; t=setInterval(()=>{ c--; el.textContent=`${T.confirm} (${c})`; if(c<=0) reset(); },1000); } };
-    const reset=()=>{ clearInterval(t); el.classList.remove("ing"); el.textContent=T[el.dataset.k]||txt; c=5; };
+    const reset=()=>{ clearInterval(t); el.classList.remove("ing"); el.textContent=(el.dataset.k ? T[el.dataset.k] : txt); c=5; };
 };
 
 const updateLangUI = () => {
     T = i18n[curLang]||i18n["zh-TW"];
-    $$('[data-i18n]').forEach(e=>e.textContent=T[e.dataset.i18n]||e.dataset.i18n);
-    $$('[data-i18n-ph]').forEach(e=>e.placeholder=T[e.dataset.i18nPh]||"");
-    $$('button[data-k]').forEach(b=>{if(!b.classList.contains('ing')) b.textContent=T[b.dataset.k]});
+    
+    // 1. 更新一般文字
+    $$('[data-i18n]').forEach(e => {
+        // [Fix] 只有當新翻譯存在時才更新，避免 undefined
+        const val = T[e.dataset.i18n];
+        if(val) e.textContent = val;
+        else if(!e.dataset.i18nPh) e.textContent = e.dataset.i18n; // Fallback
+    });
+
+    // 2. 更新 Placeholder
+    $$('[data-i18n-ph]').forEach(e => e.placeholder = T[e.dataset.i18nPh]||"");
+
+    // 3. 更新動態按鈕 (防止符號按鈕變空白)
+    $$('button[data-k]').forEach(b => {
+        if(!b.classList.contains('ing')) {
+            const val = T[b.dataset.k];
+            if(val) b.textContent = val;
+        }
+    });
+
     if(uniqueUser) {
         if($("sidebar-user-info")) $("sidebar-user-info").textContent = username;
+        // 重新載入列表以套用新語言
         if(checkPerm('users')) loadUsers();
         if(checkPerm('stats')) loadStats();
         if(checkPerm('appointment')) loadAppts();
@@ -61,7 +83,6 @@ const checkSession = async () => {
     uniqueUser=localStorage.getItem('callsys_user'); userRole=localStorage.getItem('callsys_role'); username=localStorage.getItem('callsys_nick');
     if(uniqueUser==='superadmin' && userRole!=='ADMIN') localStorage.setItem('callsys_role', userRole='ADMIN');
     
-    // 強制隱藏彈窗，防止在登入畫面顯示
     const m = $("edit-stats-overlay"); if(m) m.style.display = "none";
 
     if(uniqueUser) {
@@ -79,10 +100,9 @@ const checkSession = async () => {
         ['card-role-management','btn-export-csv','mode-switcher-group','unlock-pwd-group','resetNumber','resetIssued','resetPassed','resetFeaturedContents','btn-clear-logs','btn-clear-stats','btn-reset-line-msg','resetAll'].forEach(id=>$(id)&&($(id).style.display=isSuper()?"block":"none"));
         
         socket.connect(); 
-        upgradeModeUI(); 
-        updateLangUI();
-
-        // 自動點擊第一個分頁
+        updateLangUI(); // [Important] 初始化 T 與介面語言
+        upgradeModeUI(); // [Important] 在 T 初始化後再建立 UI
+        
         if(!document.querySelector('.section-group.active')) {
             const firstNav = document.querySelector('.nav-btn:not([style*="display: none"])');
             if(firstNav) firstNav.click();
@@ -120,7 +140,21 @@ function upgradeModeUI() {
     if(c.querySelector('.segmented-control')) return;
     const w=mk('div','segmented-control'), radios=c.querySelectorAll('input[type="radio"]');
     if(!radios.length) return;
-    radios.forEach(r=>{ const l=mk('label','segmented-option',T[r.value==='ticketing'?'mode_online':'mode_manual']||r.value); l.dataset.i18n=r.value==='ticketing'?'mode_online':'mode_manual'; l.append(r); w.append(l); l.onclick=()=>updateSeg(w); });
+    
+    // [Fix] 重構 HTML 結構：將 input 放在 label 內，文字放在 span 內並加上 data-i18n
+    // 這樣 updateLangUI 更新文字時，才不會把 input 元素覆蓋掉
+    radios.forEach(r=>{ 
+        const l=mk('label','segmented-option');
+        const txtKey = r.value==='ticketing'?'mode_online':'mode_manual';
+        const sp = mk('span', null, T[txtKey]||r.value);
+        sp.dataset.i18n = txtKey;
+        
+        l.append(r); // Input first
+        l.append(sp); // Then text
+        w.append(l); 
+        l.onclick=()=>updateSeg(w); 
+    });
+    
     const t=c.querySelector('label:not(.segmented-option)'); c.innerHTML=''; if(t)c.append(t); c.append(w); updateSeg(w);
 }
 const updateSeg = w => w.querySelectorAll('input').forEach(r=>r.closest('label').classList.toggle('active',r.checked));
@@ -147,8 +181,10 @@ async function loadUsers() {
         const act=mk("div","user-card-actions"), form=mk("div","edit-form-wrapper",{style:"display:none"},{},[mk("input",null,null,{value:u.nickname,placeholder:T.ph_nick,style:"margin-bottom:10px"}), mk("div","edit-form-actions",null,{},[mk("button","btn-secondary",T.cancel,{onclick:e=>{e.stopPropagation();form.style.display="none"}}),mk("button","btn-secondary success",T.save,{onclick:async e=>{e.stopPropagation();if(await req("/api/admin/set-nickname",{targetUsername:u.username,nickname:form.children[0].value})){toast(T.saved,"success");loadUsers()}}})])]);
         if(isMe||sup) { const b=mk("button","btn-action-icon","✎",{title:T.edit}); b.onclick=()=>form.style.display="flex"; act.append(b); }
         if(u.username!=='superadmin'&&sup) {
+            // [Fix] 讓角色下拉選單也能翻譯
             const s=mk("select","role-select",null,{onchange:async()=>await req("/api/admin/set-role",{targetUsername:u.username,newRole:s.value})&&toast(T.saved)&&loadUsers()});
-            ['OPERATOR','MANAGER','ADMIN'].forEach(r=>s.add(new Option(r,r,false,u.role===r)));
+            ['OPERATOR','MANAGER','ADMIN'].forEach(r=>s.add(new Option(T['role_'+r.toLowerCase()]||r, r, false, u.role===r)));
+            
             const b=mk("button","btn-action-icon danger","✕"); confirmBtn(b,"✕",async()=>await req("/api/admin/del-user",{delUsername:u.username})&&loadUsers());
             const w=mk("div",null,null,{style:"display:flex;gap:8px;align-items:center"},[s,b]); act.append(w);
         }
@@ -157,8 +193,8 @@ async function loadUsers() {
     if($("add-user-container-fixed")) $("add-user-container-fixed").remove();
     if($("card-user-management")?.querySelector('.admin-card')) {
         const [u,p,n,r] = [mk("input",null,null,{placeholder:T.ph_account}),mk("input",null,null,{type:"password",placeholder:"Pwd"}),mk("input",null,null,{placeholder:T.ph_nick}),mk("select")];
-        ['OPERATOR','MANAGER','ADMIN'].forEach(o=>r.add(new Option(o,o)));
-        const btn=mk("button","btn-hero btn-add-user-fancy",`+ ${T.lbl_add_user}`,{onclick:async()=>u.value&&p.value?(await req("/api/admin/add-user",{newUsername:u.value,newPassword:p.value,newNickname:n.value,newRole:r.value})&&(toast(T.saved,"success")||loadUsers()||(u.value=p.value=n.value=""))):toast("Missing info","error")});
+        ['OPERATOR','MANAGER','ADMIN'].forEach(o=>r.add(new Option(T['role_'+o.toLowerCase()]||o,o)));
+        const btn=mk("button","btn-hero btn-add-user-fancy",`+ ${T.lbl_add_user||'Add User'}`,{onclick:async()=>u.value&&p.value?(await req("/api/admin/add-user",{newUsername:u.value,newPassword:p.value,newNickname:n.value,newRole:r.value})&&(toast(T.saved,"success")||loadUsers()||(u.value=p.value=n.value=""))):toast("Missing info","error")});
         $("card-user-management").querySelector('.admin-card').append(mk("div","add-user-container",null,{id:"add-user-container-fixed"},[mk("div","add-user-grid",null,{},[u,p,n,r,btn])]));
     }
 }
@@ -218,7 +254,6 @@ const applyTheme=()=>{ document.body.classList.toggle('dark-mode',isDark); local
 document.addEventListener("DOMContentLoaded", () => {
     applyTheme();
     
-    // 強制隱藏數據編輯彈窗，避免在登入頁面出現
     const m = $("edit-stats-overlay");
     if(m) {
         m.style.display = "none";
@@ -269,7 +304,6 @@ document.addEventListener("DOMContentLoaded", () => {
     $$('input[name="systemMode"]').forEach(r=>r.onchange=()=>confirm(T.confirm+" Switch?")?req("/set-system-mode",{mode:r.value}):(r.checked=!r.checked));
     document.addEventListener("keydown",e=>{ if(document.activeElement.tagName==="INPUT" || document.activeElement.tagName==="TEXTAREA"){if(e.key==="Enter"&&!e.shiftKey)({username:"login-button",manualNumber:"setNumber",manualIssuedNumber:"setIssuedNumber"}[document.activeElement.id.split('-')[0]]?$(document.activeElement.id.split('-')[0]+"btn")?.click():null);return} if(e.key==="ArrowRight")$("btn-call-next")?.click();if(e.key==="ArrowLeft")$("btn-call-prev")?.click();if(e.key.toLowerCase()==="p")$("btn-mark-passed")?.click(); });
 
-    // 最後才執行 Session 檢查，確保 DOM 與變數都初始化完畢
     checkSession();
 });
 
