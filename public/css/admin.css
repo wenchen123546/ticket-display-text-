@@ -1,5 +1,5 @@
 /* ==========================================
- * 後台樣式 (admin.css) - v19.0 Visual Polish
+ * 後台樣式 (admin.css) - v19.1 Full Height Fix
  * ========================================== */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap');
 
@@ -73,16 +73,21 @@ body { margin: 0; width: 100%; height: 100vh; font-family: 'Inter', system-ui, s
 .section-group { width: 100%; max-width: 1400px; display: none; animation: fadeIn 0.3s ease-out; }
 .section-group.active { display: block; }
 
-/* 2. Cards */
-.card-container { display: grid; gap: 24px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); align-items: start; } /* align-items: start 避免過度拉伸 */
+/* 2. Cards (Fix Height Issues) */
+.card-container { 
+    display: grid; 
+    gap: 24px; 
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); 
+    align-items: stretch; /* 強制等高 */
+}
 .full-width-card { grid-column: 1 / -1 !important; width: 100%; }
-.card-wrapper { height: auto; display: flex; flex-direction: column; }
+.card-wrapper { height: auto; display: flex; flex-direction: column; } /* 確保 wrapper 傳遞高度 */
 
 .admin-card { 
     background: var(--bg-surface); border-radius: var(--card-radius); 
     border: 1px solid var(--border-color); box-shadow: var(--shadow-card); 
     padding: 24px; 
-    height: auto; /* 自動高度，避免空白 */
+    height: 100%; /* 填滿 Grid 高度 */
     min-height: 180px;
     position: relative; transition: transform 0.2s, box-shadow 0.2s;
     display: flex; flex-direction: column; gap: 16px; overflow: visible; 
@@ -92,7 +97,7 @@ body.dark-mode .admin-card { border: 1px solid rgba(255,255,255,0.08); }
 .card-icon { font-size: 1.2rem; filter: grayscale(0.2); }
 
 /* 3. Inputs & Buttons */
-.control-group { margin-bottom: 0; display: flex; flex-direction: column; gap: 8px; }
+.control-group { margin-bottom: 0; display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; }
 .control-group label { font-size: 0.85rem; font-weight: 600; color: var(--text-main); display: flex; justify-content: space-between; align-items: center; }
 
 input, select, textarea { height: var(--input-h); border-radius: var(--btn-radius); font-size: 0.95rem; border: 1px solid var(--border-color); padding: 0 16px; background: var(--bg-input); color: var(--text-main); width: 100%; font-family: inherit; }
@@ -106,11 +111,17 @@ button { height: var(--input-h); border-radius: var(--btn-radius); font-weight: 
 .btn-secondary.success { background: var(--success-bg); color: var(--success-text); border-color: transparent; }
 .btn-secondary.success:hover { background: var(--success); color: white; }
 .btn-warn { background: var(--danger-bg); color: var(--danger-text); }
-.btn-reset-single { width: 100%; margin-top: 0; padding: 10px; height: auto; background: transparent; color: var(--text-light); font-size: 0.85rem; }
+.btn-reset-single { width: 100%; margin-top: auto; padding: 10px; height: auto; background: transparent; color: var(--text-light); font-size: 0.85rem; flex-shrink: 0; }
 .btn-reset-single:hover { color: var(--danger); background: var(--danger-bg); border-radius: var(--btn-radius); }
 
-/* 4. Lists & Charts */
-.list-container { flex: 1; min-height: 100px; max-height: 400px; border: 1px solid var(--border-color); border-radius: var(--btn-radius); background: var(--bg-input); display: flex; flex-direction: column; overflow: hidden; }
+/* 4. Lists & Charts (Fill space) */
+.list-container { 
+    flex: 1; /* 自動佔據剩餘空間 */
+    min-height: 100px; 
+    max-height: 400px; /* 避免過高撐破版面 */
+    border: 1px solid var(--border-color); border-radius: var(--btn-radius); 
+    background: var(--bg-input); display: flex; flex-direction: column; overflow: hidden; 
+}
 .scroll-list { flex: 1; overflow-y: auto; margin: 0; padding: 0; list-style: none; }
 .list-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--border-color); background: var(--bg-surface); gap: 12px; }
 .list-info { display: flex; flex-direction: column; overflow: hidden; flex: 1; }
@@ -119,12 +130,12 @@ button { height: var(--input-h); border-radius: var(--btn-radius); font-weight: 
 .list-actions { display: flex; gap: 6px; flex-shrink: 0; }
 .list-actions button { width: 32px; height: 32px; padding: 0; font-size: 0.9rem; border-radius: 6px; }
 
-/* 修正流量分析圖表顯示 */
+/* 修正流量分析圖表 */
 .chart-container { 
     display: flex; align-items: flex-end; 
-    height: 180px; gap: 4px; /* 間距縮小 */
+    height: 180px; gap: 4px; 
     padding-top: 20px; border-bottom: 1px dashed var(--border-color); 
-    margin-bottom: 0; width: 100%;
+    margin-bottom: 0; width: 100%; flex-grow: 1;
 }
 .chart-col { 
     flex: 1; display: flex; flex-direction: column; 
@@ -138,19 +149,19 @@ button { height: var(--input-h); border-radius: var(--btn-radius); font-weight: 
 }
 .chart-col:hover .chart-bar { opacity: 1; transform: scaleY(1.05); }
 .chart-col.current .chart-bar { background: var(--warning); opacity: 0.9; }
-.chart-label { font-size: 0.6rem; margin-top: 6px; color: var(--text-sub); } /* 縮小字體 */
+.chart-label { font-size: 0.6rem; margin-top: 6px; color: var(--text-sub); }
 
-/* Dashboard Headers (Stats Card) */
-.dashboard-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+/* Dashboard Headers */
+.dashboard-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-shrink: 0; }
 .dashboard-item { background: var(--bg-surface); padding: 24px; border-radius: var(--card-radius); border: 1px solid var(--border-color); display: flex; flex-direction: column; position: relative; overflow: hidden; }
 .dashboard-item::after { content:''; position: absolute; top:0; left:0; width: 4px; height: 100%; background: var(--primary); }
 .big-number { font-size: 3.5rem; font-weight: 800; line-height: 1; margin-top: 8px; }
 .sub-number { font-size: 2.5rem; font-weight: 700; line-height: 1.1; margin-top: 8px; }
 
-/* 5. Permission/Role Editor (修復內部卷軸問題) */
+/* 5. Permission/Role Editor */
 .role-editor-container { 
     display: flex; flex-direction: column; gap: 16px; 
-    height: auto; overflow: visible; /* 移除內部卷軸 */
+    height: auto; overflow: visible; flex-grow: 1;
 }
 .role-block { 
     background: var(--bg-input); border: 1px solid var(--border-color); 
@@ -162,7 +173,7 @@ button { height: var(--input-h); border-radius: var(--btn-radius); font-weight: 
 }
 .perm-grid { 
     display: grid; 
-    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); /* 更緊湊的網格 */
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); 
     gap: 8px; 
 }
 .perm-item { 
@@ -174,12 +185,12 @@ button { height: var(--input-h); border-radius: var(--btn-radius); font-weight: 
 .perm-item:hover { border-color: var(--primary); background: var(--bg-hover); }
 .perm-item input { width: 16px; height: 16px; margin: 0; accent-color: var(--primary); flex-shrink: 0; }
 
-/* 6. System Settings & Radio Buttons (修復系統設定破版) */
+/* 6. System Settings & Visuals */
 .toggle-switch { appearance: none; width: 46px; height: 26px; background: var(--border-color); border-radius: 20px; position: relative; cursor: pointer; transition: 0.3s; }
 .toggle-switch::after { content: ''; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; background: white; border-radius: 50%; transition: 0.3s; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
 .toggle-switch:checked { background: var(--success); } .toggle-switch:checked::after { transform: translateX(20px); }
 
-/* Segmented Control (Radio Button Group) Style Fix */
+/* Segmented Control Fix */
 .segmented-control { 
     background: var(--bg-input); padding: 4px; border-radius: 12px; 
     border: 1px solid var(--border-color); display: flex; gap: 4px; width: 100%;
@@ -193,10 +204,11 @@ button { height: var(--input-h); border-radius: var(--btn-radius); font-weight: 
     box-shadow: 0 2px 4px rgba(0,0,0,0.05); font-weight: 700; 
     border: 1px solid var(--border-color); 
 }
-input[type="radio"] { display: none; } /* 隱藏原始 Radio */
+input[type="radio"] { display: none; }
 
-/* 7. Other UI & Mobile */
 .setting-card { padding: 16px; border: 1px solid var(--border-color); border-radius: 12px; background: var(--bg-surface); display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+.settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 16px; margin-bottom: 0; flex-grow: 0; } /* Prevent grid from expanding infinitely */
+
 .mobile-only-settings { display: block; margin-top: 24px; padding-top: 20px; border-top: 1px dashed var(--border-color); }
 #login-container { width: 100%; max-width: 400px; margin: 10% auto; padding: 48px; background: var(--bg-surface); border-radius: 24px; box-shadow: var(--shadow-float); border: 1px solid var(--border-color); }
 
@@ -214,8 +226,8 @@ input[type="radio"] { display: none; } /* 隱藏原始 Radio */
 #user-list-ui, #online-users-list {
     display: grid !important;
     grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-    grid-auto-rows: max-content; gap: 16px; padding: 4px; height: auto;
-    max-height: 600px; overflow-y: auto;
+    grid-auto-rows: max-content; gap: 16px; padding: 4px; 
+    max-height: 600px; overflow-y: auto; flex-grow: 1;
 }
 .user-card-item {
     background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: 16px;
@@ -239,6 +251,10 @@ input[type="radio"] { display: none; } /* 隱藏原始 Radio */
 .btn-action-icon.danger:hover { border-color: var(--danger); color: var(--danger); background: var(--danger-bg); }
 .status-pulse-indicator { width: 8px; height: 8px; background-color: var(--success); border-radius: 50%; box-shadow: 0 0 0 rgba(16, 185, 129, 0.7); animation: pulse-green 2s infinite; display: inline-block; margin-right: 6px; }
 @keyframes pulse-green { 0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); } 70% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); } 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); } }
+
+.add-user-container { background: var(--bg-input); border-top: 1px solid var(--border-color); padding: 20px; border-radius: 0 0 16px 16px; margin-top: auto; }
+.add-user-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.btn-add-user-fancy { grid-column: 1 / -1; margin-top: 4px; background: var(--text-main); color: var(--bg-body); }
 
 @media (max-width: 768px) {
     #admin-panel { flex-direction: column; height: auto; overflow: visible; }
