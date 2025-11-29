@@ -1,10 +1,10 @@
 /* ==========================================
- * 後台樣式 (admin.css) - v19.4 Card Layout Optimization
+ * 後台樣式 (admin.css) - v19.5 Mobile Scroll Fix
  * ========================================== */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap');
 
 :root {
-    /* [色彩系統 - 保持 v19.3 的優化配色] */
+    /* [色彩系統] */
     --bg-body: #f1f5f9;
     --bg-surface: #ffffff;
     --bg-sidebar: #ffffff;
@@ -77,7 +77,7 @@ body { margin: 0; width: 100%; height: 100vh; font-family: 'Inter', system-ui, s
 /* Grid System */
 .card-container, .dashboard-header { 
     display: grid; gap: 24px; 
-    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); /* 稍微加寬以容納橫向按鈕 */
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); 
     align-items: stretch; width: 100%;
 }
 .dashboard-header { margin-bottom: 24px; flex-shrink: 0; }
@@ -93,8 +93,8 @@ body { margin: 0; width: 100%; height: 100vh; font-family: 'Inter', system-ui, s
 }
 .admin-card { 
     box-shadow: var(--shadow-card); padding: 24px; 
-    height: 100%; min-height: 220px; /* 增加最小高度 */
-    display: flex; flex-direction: column; gap: 20px; /* 增加內部間距 */
+    height: 100%; min-height: 220px; 
+    display: flex; flex-direction: column; gap: 20px; 
 }
 .dashboard-item { padding: 24px; display: flex; flex-direction: column; justify-content: center; box-shadow: var(--shadow-sm); }
 .admin-card:hover, .dashboard-item:hover { transform: translateY(-2px); box-shadow: var(--shadow-float); border-color: var(--primary); }
@@ -127,28 +127,12 @@ button:active { transform: scale(0.97); }
 .btn-reset-single { width: 100%; margin-top: auto; padding: 12px; height: auto; background: transparent; color: var(--text-light); font-size: 0.85rem; font-weight: 500; text-align: center; }
 .btn-reset-single:hover { color: var(--danger); background: var(--danger-bg); border-radius: var(--btn-radius); }
 
-/* --- v19.4 Special Layout Fixes --- */
-
-/* 1. 指揮中心：修復 +1/+5 按鈕排版 */
+/* Quick Actions & Big Buttons */
 .quick-actions { display: flex; gap: 6px; margin-right: 8px; flex-shrink: 0; }
 .quick-actions button { width: 44px; padding: 0; font-size: 0.9rem; border: 1px solid var(--border-color); background: var(--bg-surface); }
 .quick-actions button:hover { border-color: var(--primary); color: var(--primary); }
-
-/* 2. 發號管理：大按鈕佈局 */
-.big-action-row { 
-    display: grid; 
-    grid-template-columns: 1fr 1.2fr; /* 右邊發號按鈕稍微大一點 */
-    gap: 16px; 
-    margin-bottom: auto; /* 將下方內容推到底部 */
-}
-.btn-big { 
-    height: 80px; /* 加高按鈕 */
-    font-size: 1.1rem; 
-    flex-direction: column; 
-    gap: 6px;
-}
-
-/* 3. 調整底部輸入框位置 */
+.big-action-row { display: grid; grid-template-columns: 1fr 1.2fr; gap: 16px; margin-bottom: auto; }
+.btn-big { height: 80px; font-size: 1.1rem; flex-direction: column; gap: 6px; }
 .admin-card .control-group:last-of-type { margin-top: auto; padding-top: 16px; border-top: 1px dashed var(--border-color); }
 
 /* Lists */
@@ -187,7 +171,7 @@ input[type="radio"] { display: none; }
 #toast-notification { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: var(--text-main); color: var(--bg-body); padding: 12px 24px; border-radius: 50px; font-weight: 600; opacity: 0; transition: 0.3s; pointer-events: none; z-index: 9999; box-shadow: 0 10px 30px rgba(0,0,0,0.2); font-size: 0.95rem; border: 1px solid var(--border-color); white-space: nowrap; }
 #toast-notification.show { opacity: 1; } #toast-notification.success { background: var(--success); color: white; } #toast-notification.error { background: var(--danger); color: white; }
 
-/* Grid & User Styles (Maintained) */
+/* Grid & User Styles */
 #user-list-ui, #online-users-list { display: grid !important; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); grid-auto-rows: max-content; gap: 16px; padding: 4px; max-height: 600px; overflow-y: auto; flex-grow: 1; }
 .user-card-item { background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: 16px; display: flex; flex-direction: column; height: auto; min-height: 0; position: relative; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.02); transition: all 0.2s ease; }
 .user-card-item:hover { transform: translateY(-3px); box-shadow: 0 10px 20px -5px rgba(0,0,0,0.1); border-color: var(--primary); z-index: 5; }
@@ -204,14 +188,22 @@ input[type="radio"] { display: none; }
 .status-pulse-indicator { width: 10px; height: 10px; background-color: var(--success); border-radius: 50%; animation: pulse-green 2s infinite; display: inline-block; margin-right: 6px; }
 @keyframes pulse-green { 0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); } 70% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); } 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); } }
 
+/* Mobile Only Fixes */
 @media (max-width: 768px) {
-    #admin-panel { flex-direction: column; height: auto; overflow: visible; }
+    /* 關鍵修復：Body 和 Panel 允許滾動 */
+    body { height: auto; min-height: 100vh; overflow-y: auto !important; -webkit-overflow-scrolling: touch; }
+    #admin-panel { flex-direction: column; height: auto; min-height: 100vh; overflow: visible; }
+    
     .sidebar { width: 100%; height: auto; position: sticky; top: 0; flex-direction: row; overflow-x: auto; border-bottom: 1px solid var(--border-color); box-shadow: var(--shadow-sm); border-right: none; }
     .sidebar-header, .sidebar-footer { display: none; }
     .sidebar-nav { flex-direction: row; padding: 8px 12px; gap: 8px; flex-wrap: nowrap; }
     .nav-btn { flex-direction: column; padding: 6px 12px; font-size: 0.75rem; gap: 4px; justify-content: center; text-align: center; flex: 0 0 auto; min-width: 65px; }
+    
     .content-area { padding: 16px; width: 100%; display: block; height: auto; }
     .card-container, .dashboard-header { display: flex; flex-direction: column; }
-    .admin-card { height: auto !important; }
+    .admin-card { height: auto !important; min-height: auto; }
+    
+    /* 讓使用者列表在手機上正常顯示 */
     #user-list-ui, #online-users-list { display: flex !important; flex-direction: column; max-height: none; }
+    .add-user-container { position: relative; margin-top: 0; }
 }
