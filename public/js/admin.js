@@ -1,5 +1,5 @@
 /* ==========================================
- * 後台邏輯 (admin.js) - Fixed Business Hours (HH:MM)
+ * 後台邏輯 (admin.js) - Fixed Layout & HH:MM
  * ========================================== */
 const $ = i => document.getElementById(i), $$ = s => document.querySelectorAll(s);
 const mk = (t, c, txt, ev={}, ch=[]) => {
@@ -81,28 +81,35 @@ function upgradeSystemModeUI() {
 }
 const updateSegmentedVisuals = (w) => w.querySelectorAll('input[type="radio"]').forEach(r => r.closest('.segmented-option').classList.toggle('active', r.checked));
 
-// --- Updated Business Hours UI for HH:MM ---
+// --- Updated Business Hours UI (Fixed Layout) ---
 async function initBusinessHoursUI() {
     if(!checkPerm('settings') || !$("card-sys") || $("business-hours-group")) return;
     
-    // Changed input type to 'time' and adjusted styles
-    const t = mk("input","toggle-switch",null,{type:"checkbox",id:"bh-enabled"}), 
-          s = mk("input",null,null,{type:"time",id:"bh-start",style:"width:110px;text-align:center;padding:0 5px;"}), 
-          e = mk("input",null,null,{type:"time",id:"bh-end",style:"width:110px;text-align:center;padding:0 5px;"});
+    // Style for time inputs: increased width to show full text (HH:MM AM/PM) and flexible
+    const inputStyle = "flex:1; min-width:130px; text-align:center; padding:0 5px; height:42px;";
     
-    const ctr = mk("div","control-group",null,{id:"business-hours-group",style:"margin-top:10px;border-top:1px dashed var(--border-color);padding-top:10px;"}, [
+    const t = mk("input","toggle-switch",null,{type:"checkbox",id:"bh-enabled", style:"flex-shrink:0;"}), 
+          s = mk("input",null,null,{type:"time",id:"bh-start",style:inputStyle}), 
+          e = mk("input",null,null,{type:"time",id:"bh-end",style:inputStyle});
+    
+    const ctr = mk("div","control-group",null,{id:"business-hours-group",style:"margin-top:10px;border-top:1px dashed var(--border-color);padding-top:15px;"}, [
         mk("label",null,"營業時間控制"), 
-        mk("div",null,null,{style:"display:flex;gap:10px;align-items:center;flex-wrap:wrap;"}, [
-            t, s, mk("span",null,"➜"), e, 
+        // Main container with wrap enabled for mobile
+        mk("div",null,null,{style:"display:flex;gap:12px;align-items:center;flex-wrap:wrap;width:100%;"}, [
+            t, 
+            // Group the time inputs together to keep them on same line if possible
+            mk("div",null,null,{style:"display:flex;flex:1;gap:8px;align-items:center;min-width:280px;"}, [
+                s, mk("span",null,"➜",{style:"color:var(--text-sub);font-weight:bold;"}), e
+            ]),
+            // Save button
             mk("button","btn-secondary success","儲存",{
-                style:"margin-left:auto;", 
+                style:"padding:0 24px;height:42px;flex-shrink:0;", 
                 onclick:async()=>await req("/api/admin/settings/hours/save",{enabled:t.checked,start:s.value,end:e.value}) && toast(T.saved,"success")
             })
         ])
     ]);
     const r=$("resetAll"); r ? $("card-sys").insertBefore(ctr,r) : $("card-sys").appendChild(ctr);
     
-    // Load config and handle potential legacy integer format
     req("/api/admin/settings/hours/get").then(d=>{ 
         if(d) { 
             t.checked=d.enabled; 
@@ -158,7 +165,6 @@ socket.on("updateOnlineAdmins", l => checkPerm('users') && renderList("online-us
     return mk("li","user-card-item online-mode",null,{},[mk("div","user-card-header",null,{},[mk("div","user-avatar-fancy",(u.nickname||u.username).charAt(0).toUpperCase(),{style:`background:linear-gradient(135deg, hsl(${u.username.split('').reduce((a,c)=>a+c.charCodeAt(0),0)%360},75%,60%), hsl(${(u.username.split('').reduce((a,c)=>a+c.charCodeAt(0),0)+50)%360},75%,50%))`}), mk("div","user-info-fancy",null,{},[mk("div","user-nick-fancy",null,{},[mk("span","status-pulse-indicator"),mk("span",null,u.nickname||u.username)]), mk("div","user-id-fancy",`IP/ID: @${u.username}`), mk("div",`role-badge-fancy ${rC.includes('admin')?'admin':rC}`,rL)])]), mk("div","user-card-actions",null,{style:"justify-content:flex-end;opacity:0.7;font-size:0.8rem;"},[mk("span",null,"🟢 Active Now")])]);
 }, "loading"));
 
-// Updated socket listener for Business Hours Sync (Handles string format)
 socket.on("updateBusinessHours", cfg => {
     if($("bh-enabled")) $("bh-enabled").checked = cfg.enabled;
     if($("bh-start")) $("bh-start").value = String(cfg.start).includes(':') ? cfg.start : String(cfg.start).padStart(2,'0') + ":00";
