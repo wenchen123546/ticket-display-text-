@@ -317,12 +317,39 @@
                             
                             <div class="control-group" style="display:flex; gap:10px;">
                                 <div style="flex:1;">
-                                    <label>已過號訊息</label>
+                                    <label>已過號</label>
                                     <input type="text" id="msg-passed" placeholder="已過號">
                                 </div>
                                 <div style="flex:1;">
-                                    <label>取消追蹤訊息</label>
+                                    <label>已取消追蹤</label>
                                     <input type="text" id="msg-cancel" placeholder="已取消">
+                                </div>
+                            </div>
+                            
+                            <div class="control-group" style="display:flex; gap:10px; margin-top:10px;">
+                                <div style="flex:1;">
+                                    <label>無追蹤 (取消時)</label>
+                                    <input type="text" id="msg-no-tracking" placeholder="您目前沒有設定追蹤。">
+                                </div>
+                                <div style="flex:1;">
+                                    <label>無過號 (查詢時)</label>
+                                    <input type="text" id="msg-no-passed" placeholder="目前沒有過號名單。">
+                                </div>
+                            </div>
+
+                            <div class="control-group" style="margin-top:10px;">
+                                <label>過號名單標題前綴</label>
+                                <input type="text" id="msg-passed-prefix" placeholder="⚠️ 過號名單：">
+                            </div>
+
+                            <div class="control-group" style="display:flex; gap:10px; margin-top:10px;">
+                                <div style="flex:1;">
+                                    <label>登入提示 (輸入指令後)</label>
+                                    <input type="text" id="msg-login-prompt" placeholder="請輸入密碼">
+                                </div>
+                                <div style="flex:1;">
+                                    <label>登入成功</label>
+                                    <input type="text" id="msg-login-success" placeholder="🔓 驗證成功">
                                 </div>
                             </div>
                             
