@@ -3,13 +3,17 @@
  * ========================================== */
 const $ = i => document.getElementById(i), $$ = s => document.querySelectorAll(s);
 
-// FIX: 修正 mk 函數，正確處理 style 字串與 data-* 屬性
+// FIX: 修正 mk 函數，增加 String() 轉換以防止傳入數字時 startsWith 報錯
 const mk = (t, c, txt, ev={}, ch=[]) => {
     const e = document.createElement(t); if(c) e.className=c;
-    if(txt) e[txt.startsWith('<')?'innerHTML':'textContent'] = txt;
+    // 修正點：確保 txt 存在且轉為字串後再檢查是否為 HTML
+    if(txt !== null && txt !== undefined) {
+        const s = String(txt);
+        e[s.startsWith('<') ? 'innerHTML' : 'textContent'] = s;
+    }
     Object.entries(ev).forEach(([k,v])=>{
         if(k.startsWith('on')) e[k.toLowerCase()]=v;
-        else if(k === 'style') e.style.cssText = v; // 關鍵修正：正確套用 inline style
+        else if(k === 'style') e.style.cssText = v; // 正確套用 inline style
         else if(k.includes('-')) e.setAttribute(k, v); // 處理 data-*
         else e[k]=v;
     });
