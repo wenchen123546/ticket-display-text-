@@ -1,5 +1,5 @@
 /* ==========================================
- * 前台邏輯 (main.js) - Refactored & Minified
+ * 前台邏輯 (main.js) - Refactored & Fixed
  * ========================================== */
 const d = document, ls = localStorage, $ = i => d.getElementById(i), $$ = s => d.querySelectorAll(s);
 const on = (e, ev, fn) => e?.addEventListener(ev, fn), show = (e, v) => e && (e.style.display = v ? 'block' : 'none');
@@ -101,10 +101,15 @@ socket.on("connect", () => { socket.emit('joinRoom', 'public'); clearTimeout(con
         ov.style.display = !b ? 'flex' : 'none';
     })
     .on("updateSystemMode", m => { if(cachedMode!==m) ls.setItem('callsys_mode_cache', cachedMode=sysMode=m); renderMode(); })
+    // ========== 修正處：確保過號名單為空時也能清空 HTML ==========
     .on("updatePassed", l => { 
-        const ul=$("passedList"), mt=$("passed-empty-msg"); if($("passed-count")) $("passed-count").textContent=l?.length||0;
-        show(ul, l?.length); show(mt, !l?.length); if(l?.length) ul.innerHTML=l.map(n=>`<li>${n}</li>`).join(""); 
+        const ul=$("passedList"), mt=$("passed-empty-msg"), len = l?.length||0; 
+        if($("passed-count")) $("passed-count").textContent=len;
+        show(ul, len); show(mt, !len); 
+        // 修正邏輯：不管有沒有內容，都要重寫 innerHTML，如果為空則寫入空字串
+        ul.innerHTML = len ? l.map(n=>`<li>${n}</li>`).join("") : ""; 
     })
+    // =========================================================
     .on("updateFeaturedContents", l => $("featured-container") && ($("featured-container").innerHTML = l.map(c=>`<a class="link-chip" href="${c.linkUrl}" target="_blank">${c.linkText}</a>`).join("")))
     .on("updateTimestamp", ts => { lastUpd = new Date(ts); updTime(); });
 
