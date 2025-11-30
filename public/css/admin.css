@@ -449,3 +449,56 @@ textarea.multi-line-input {
     /* 隱藏部分非必要裝飾 */
     .card-icon { font-size: 1.1rem; }
 }
+
+/* ==========================================
+ * Fix: Mobile List Scroll (手機版列表捲軸修復)
+ * Add to the bottom of admin.css
+ * ========================================== */
+@media (max-width: 768px) {
+    /* 1. 強制限制列表容器高度，恢復捲軸 */
+    .list-container {
+        max-height: 220px !important; /* 設定高度上限，超過則捲動 */
+        height: auto !important;
+        overflow: hidden !important;  /* 確保容器邊界 */
+        display: flex !important;
+        flex-direction: column;
+        border: 1px solid var(--border-color);
+    }
+
+    /* 2. 恢復內部列表的垂直捲動 */
+    .scroll-list {
+        overflow-y: auto !important;
+        overflow-x: hidden;
+        flex: 1 1 auto;
+        height: auto !important;
+        max-height: 100% !important;
+        -webkit-overflow-scrolling: touch; /* iOS 滑動慣性優化 */
+        padding-right: 2px; /* 避免捲軸蓋住內容 */
+    }
+
+    /* 3. 特別針對「操作日誌」做緊湊化 */
+    #admin-log-ui li.list-item {
+        padding: 6px 12px;     /* 減少單行內距 */
+        font-size: 0.75rem;    /* 縮小字體 */
+        line-height: 1.3;
+        min-height: 0;
+    }
+
+    /* 4. 特別針對「過號名單」做緊湊化 */
+    #passed-list-ui li.list-item {
+        padding: 8px 12px;
+    }
+    
+    /* 修正列表內按鈕大小 */
+    .list-actions button {
+        height: 28px;
+        padding: 0 8px;
+        font-size: 0.75rem;
+    }
+
+    /* 5. 例外處理：使用者列表 (User List) 保持展開 (如果需要的話)
+       如果你希望使用者列表也捲動，請刪除下面這行 */
+    #user-list-ui, #online-users-list {
+        max-height: 300px !important; /* 限制使用者列表高度，避免太長 */
+    }
+}
