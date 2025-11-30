@@ -1,5 +1,5 @@
 /* ==========================================
- * 後台邏輯 (admin.js) - Fixed Missing Icons
+ * 後台邏輯 (admin.js) - Fixed Icons & Multiline
  * ========================================== */
 const $ = i => document.getElementById(i), $$ = s => document.querySelectorAll(s);
 
@@ -40,7 +40,7 @@ let globalRoleConfig = null;
 const confirmBtn = (el, txt, action) => {
     if(!el) return; let t, c=5; 
     el.dataset.originalKey = Object.keys(T).find(key=>T[key]===txt)||txt;
-    el.textContent = T[el.dataset.originalKey]||txt; // <--- 這裡修復了文字/圖示不顯示的問題
+    el.textContent = T[el.dataset.originalKey]||txt;
     
     el.onclick = (e) => {
         e.stopPropagation();
@@ -134,10 +134,24 @@ async function loadLineAutoReplies() {
     req("/api/admin/line-default-reply/get").then(r => $("line-default-msg") && ($("line-default-msg").value = r.reply||""));
     const rules = await req("/api/admin/line-autoreply/list");
     renderList("line-autoreply-list", Object.entries(rules||{}), ([key, reply]) => {
-        const form = mk("div","edit-form-wrapper",null,{style:"display:none;width:100%;gap:8px;align-items:center;"}, [mk("input",null,null,{value:key,placeholder:"Key",style:"flex:1;"}), mk("input",null,null,{value:reply,placeholder:"Reply",style:"flex:2;"}), mk("div","edit-form-actions",null,{},[mk("button","btn-secondary",T.cancel,{onclick:e=>{e.stopPropagation();form.style.display="none";view.style.display="flex";acts.style.display="flex";}}), mk("button","btn-secondary success",T.save,{onclick:async e=>{e.stopPropagation(); if(await req("/api/admin/line-autoreply/edit",{oldKeyword:key,newKeyword:form.children[0].value,newReply:form.children[1].value})) {toast(T.saved,"success");loadLineAutoReplies();}}})])]);
+        // 使用 textarea 支援換行
+        const form = mk("div","edit-form-wrapper",null,{style:"display:none;width:100%;gap:8px;align-items:flex-start;"}, [
+            mk("input",null,null,{value:key,placeholder:"Key",style:"flex:1;"}),
+            mk("textarea","multi-line-input",null,{value:reply,placeholder:"Reply",style:"flex:2;min-height:80px;"}),
+            mk("div","edit-form-actions",null,{},[
+                mk("button","btn-secondary",T.cancel,{onclick:e=>{e.stopPropagation();form.style.display="none";view.style.display="flex";acts.style.display="flex";}}),
+                mk("button","btn-secondary success",T.save,{onclick:async e=>{
+                    e.stopPropagation(); 
+                    if(await req("/api/admin/line-autoreply/edit",{oldKeyword:key,newKeyword:form.children[0].value,newReply:form.children[1].value})) {
+                        toast(T.saved,"success");
+                        loadLineAutoReplies();
+                    }
+                }})
+            ])
+        ]);
         const view = mk("div","list-info",null,{},[mk("span","list-main-text",key,{style:"color:var(--primary);font-weight:bold;"}), mk("span","list-sub-text",reply)]);
         const acts = mk("div","list-actions",null,{},[mk("button","btn-action-icon","✎",{title:T.edit,onclick:()=>{form.style.display="flex";view.style.display="none";acts.style.display="none";}}), (b=>{confirmBtn(b,"✕",async()=>{await req("/api/admin/line-autoreply/del",{keyword:key});loadLineAutoReplies();}); b.className="btn-action-icon danger"; b.title=T.del; return b;})(mk("button"))]);
-        return mk("li","list-item",null,{style:"flex-wrap:wrap;"},[view,acts,form]);
+        return mk("li","list-item",null,{style:"flex-wrap:wrap;align-items:flex-start;"},[view,acts,form]);
     });
 }
 
