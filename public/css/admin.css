@@ -52,21 +52,77 @@ body { margin: 0; width: 100%; height: 100vh; font-family: 'Inter', system-ui, s
 .nav-btn.active { background: var(--primary-soft); color: var(--primary); font-weight: 700; }
 .sidebar-footer { padding: 20px; border-top: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 12px; background: var(--bg-sidebar); }
 
-/* Content */
-.content-area { flex: 1; padding: 32px; width: 0; min-width: 0; overflow-y: auto; display: flex; flex-direction: column; align-items: center; scroll-behavior: smooth; }
-.section-group { width: 100%; max-width: 1400px; display: none; animation: fadeIn 0.4s ease-out; }
+/* Content Area - Optimized for Wide Screens */
+.content-area { 
+    flex: 1; 
+    padding: 32px; 
+    width: 0; 
+    min-width: 0; 
+    overflow-y: auto; 
+    display: flex; 
+    flex-direction: column; 
+    align-items: center; /* Center the content on ultra-wide screens */
+    scroll-behavior: smooth; 
+}
+
+.section-group { 
+    width: 100%; 
+    max-width: 1600px; /* Limit width for readability */
+    display: none; 
+    animation: fadeIn 0.4s ease-out; 
+}
 .section-group.active { display: block; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 
-/* Cards & Grid */
-.card-container, .dashboard-header { display: grid; gap: 24px; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); align-items: stretch; width: 100%; }
-.dashboard-header { margin-bottom: 24px; flex-shrink: 0; }
+/* Cards & Grid System */
+/* Default Grid (Mobile/Tablet) */
+.card-container { 
+    display: grid; 
+    gap: 24px; 
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); 
+    align-items: stretch; 
+    width: 100%; 
+    margin-bottom: 24px;
+}
+
+.dashboard-header { 
+    display: grid; 
+    gap: 24px; 
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); 
+    margin-bottom: 24px; 
+    flex-shrink: 0; 
+    width: 100%;
+}
+
 .full-width-card { grid-column: 1 / -1 !important; width: 100%; }
-.card-wrapper { height: auto; display: flex; flex-direction: column; }
+.card-wrapper { height: auto; display: flex; flex-direction: column; min-height: 0; }
+
+/* Large Screen Optimizations (>1200px) */
+@media (min-width: 1200px) {
+    /* Live Console: Force 3 columns for tidiness */
+    #section-live .card-container {
+        grid-template-columns: repeat(3, 1fr);
+    }
+    
+    /* Stats: Asymmetrical Grid (Chart wide, Logs narrow) */
+    #section-stats .card-container {
+        grid-template-columns: 2fr 1fr;
+    }
+    
+    /* Settings: 3 columns default */
+    #section-settings .card-container {
+        grid-template-columns: repeat(3, 1fr);
+    }
+    
+    /* Dashboard Stats Header: Fixed 3 columns */
+    #section-live .dashboard-header {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
 
 .admin-card, .dashboard-item { background: var(--bg-surface); border-radius: var(--card-radius); border: 1px solid var(--border-color); position: relative; transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s; overflow: visible; }
 .admin-card { box-shadow: var(--shadow-card); padding: 24px; height: 100%; min-height: 220px; display: flex; flex-direction: column; gap: 20px; }
-.dashboard-item { padding: 24px; display: flex; flex-direction: column; justify-content: center; box-shadow: var(--shadow-sm); }
+.dashboard-item { padding: 24px; display: flex; flex-direction: column; justify-content: center; box-shadow: var(--shadow-sm); min-height: 120px; }
 .admin-card:hover, .dashboard-item:hover { transform: translateY(-2px); box-shadow: var(--shadow-float); border-color: var(--primary-soft); }
 .admin-card h3 { margin: 0; padding-bottom: 16px; border-bottom: 1px solid var(--border-color); font-size: 1rem; color: var(--text-main); font-weight: 700; display: flex; align-items: center; gap: 12px; flex-shrink: 0; letter-spacing: -0.3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .card-icon { font-size: 1.3rem; opacity: 1; filter: grayscale(0.2); }
@@ -107,7 +163,7 @@ button:active { transform: scale(0.97); }
 .admin-card .control-group:last-of-type { margin-top: auto; padding-top: 16px; border-top: 1px dashed var(--border-color); }
 
 /* List View */
-.list-container { flex: 1; min-height: 100px; max-height: 400px; border: 1px solid var(--border-color); border-radius: var(--btn-radius); background: var(--bg-input); display: flex; flex-direction: column; overflow: hidden; }
+.list-container { flex: 1; min-height: 100px; max-height: 500px; border: 1px solid var(--border-color); border-radius: var(--btn-radius); background: var(--bg-input); display: flex; flex-direction: column; overflow: hidden; }
 .scroll-list { flex: 1; overflow-y: auto; margin: 0; padding: 0; list-style: none; padding-right: 2px; }
 .list-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border-color); background: var(--bg-surface); transition: background 0.15s; gap: 12px; }
 .list-item:hover { background: var(--bg-hover); }
@@ -133,9 +189,7 @@ button:active { transform: scale(0.97); }
 #hourly-chart.chart-container { margin-top: 0 !important; padding-top: 25px !important; height: 260px !important; align-items: flex-end; border-bottom: 1px dashed var(--border-color); }
 #section-stats .admin-card { padding-bottom: 16px; gap: 12px; }
 
-/* ==========================================
- * FIX: Stats Header Horizontal Layout
- * ========================================== */
+/* FIX: Stats Header Horizontal Layout */
 #section-stats .dashboard-header {
     display: flex !important;
     flex-direction: row !important;
@@ -144,6 +198,7 @@ button:active { transform: scale(0.97); }
     margin-bottom: 10px !important;
     padding-bottom: 0 !important;
     gap: 0 !important;
+    height: auto;
 }
 #section-stats .quick-actions {
     display: flex !important;
@@ -233,7 +288,7 @@ input[type="radio"] { display: none; }
 
     /* Content & Cards */
     .content-area { padding: 8px; padding-bottom: 80px; width: 100%; display: block; min-height: calc(100vh - 60px); height: auto !important; flex: none; overflow: visible; }
-    .card-container, .dashboard-header { display: flex !important; flex-direction: column; gap: 8px !important; }
+    .card-container, .dashboard-header { display: flex !important; flex-direction: column; gap: 8px !important; margin-bottom: 12px; }
     .admin-card { height: auto !important; min-height: auto; padding: 12px; gap: 8px !important; }
     .admin-card h3 { padding-bottom: 8px; margin-bottom: 0; font-size: 0.95rem; }
     .card-icon { font-size: 1.1rem; }
