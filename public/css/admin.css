@@ -334,3 +334,25 @@ body.dark-mode .perm-matrix thead th { background: rgba(255,255,255,0.05); }
     padding-top: 10px !important; /* Reduce top padding significantly */
     margin-top: 0 !important;
 }
+/* ==========================================
+ * 流量分析卡片優化 (Stats Chart Optimization)
+ * ========================================== */
+
+/* 1. 減少標題區域與圖表之間的空白 */
+#section-stats .admin-card {
+    gap: 0 !important;          /* 強制移除卡片內元件的預設間距 (原為 20px) */
+    padding-bottom: 10px;       /* 調整底部內距 */
+}
+
+/* 2. 加高圖表區域，讓長條圖看起來更長 */
+#hourly-chart.chart-container {
+    height: 350px !important;   /* 大幅增加高度 (原為 220px)，讓長條圖有空間伸展 */
+    padding-top: 35px !important; /* 上方保留空間給浮動數值顯示，避免被切掉 */
+    margin-top: 0 !important;   /* 確保上方無額外邊距 */
+    align-items: flex-end;      /* 確保長條圖底部對齊 */
+}
+
+/* 3. 確保圖表內的標籤不會跑版 */
+.chart-col {
+    justify-content: flex-end;
+}
