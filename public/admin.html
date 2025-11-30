@@ -80,6 +80,7 @@
                 <div class="card-wrapper" data-perm="call">
                     <div class="admin-card control-deck">
                         <h3><span class="card-icon">📢</span> <span data-i18n="card_call">指揮中心</span></h3>
+                        
                         <div class="hero-control-row">
                              <button id="btn-call-next" class="btn-hero" data-i18n="btn_next">下一號 ▶</button>
                         </div>
@@ -87,7 +88,7 @@
                             <button id="btn-call-prev" class="btn-secondary" data-i18n="btn_prev">◀ 上一號</button>
                             <button id="btn-mark-passed" class="btn-warn" data-i18n="btn_pass">過號</button>
                         </div>
-                        <div class="control-group compact-group">
+                        <div class="control-group compact-group" style="margin-top:20px;">
                             <label data-i18n="lbl_assign">指定 / 插隊</label>
                             <div class="input-group">
                                 <div class="quick-actions">
@@ -229,13 +230,16 @@
                         <button id="resetAll" class="btn-reset-single" style="color:var(--danger);" data-i18n="btn_reset_all">💥 全域重置</button>
 
                         <div class="mobile-only-settings">
-                            <div class="control-group" style="display:flex; gap:10px;">
-                                <button id="admin-theme-toggle-mobile" class="btn-secondary" style="flex:1;">🌙 Theme</button>
-                                <select id="admin-lang-selector-mobile" class="lang-select" style="flex:2;"><option value="zh-TW">繁體中文</option><option value="en">English</option></select>
+                            <div class="control-group">
+                                <button id="admin-theme-toggle-mobile" class="btn-secondary">🌙</button>
+                                <select id="admin-lang-selector-mobile" class="lang-select">
+                                    <option value="zh-TW">繁體中文</option>
+                                    <option value="en">English</option>
+                                </select>
                             </div>
-                            <button id="btn-logout-mobile" class="btn-reset-single" style="color:var(--danger); margin-top:10px;" data-i18n="logout">登出</button>
+                            <button id="btn-logout-mobile" class="btn-reset-single" data-i18n="logout">登出</button>
                         </div>
-                    </div>
+                        </div>
                 </div>
 
                 <div class="card-wrapper" data-perm="settings">
