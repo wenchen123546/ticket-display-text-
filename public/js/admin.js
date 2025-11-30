@@ -1,5 +1,5 @@
 /* ==========================================
- * 後台邏輯 (admin.js) - v20.8 Fixes (Permission Safety)
+ * 後台邏輯 (admin.js) - v20.9 Fixes (Role Save Fix)
  * ========================================== */
 const $ = i => document.getElementById(i), $$ = s => document.querySelectorAll(s);
 
@@ -566,7 +566,12 @@ async function loadRoles() {
             const roleCan = cfg[r]?.can || [];
             const isChecked = roleCan.includes('*') || roleCan.includes(p.k);
             const label = mk("label", "custom-check"); 
-            const chk = mk("input", "role-chk", null, {type: "checkbox", dataset: { role: r, perm: p.k }, checked: isChecked}); 
+            
+            // [Fix] 這裡修正了 dataset 在 mk 函式中無法正確賦值的問題
+            const chk = mk("input", "role-chk", null, {type: "checkbox", checked: isChecked}); 
+            chk.dataset.role = r;
+            chk.dataset.perm = p.k;
+
             const checkmark = mk("span", "checkmark"); 
             label.append(chk, checkmark); tdCheck.appendChild(label); tr.appendChild(tdCheck); 
         });
