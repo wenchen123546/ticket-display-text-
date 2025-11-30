@@ -1,9 +1,9 @@
 /* ==========================================
- * 後台邏輯 (admin.js) - UI Layout Fixed
+ * 後台邏輯 (admin.js) - Fixed Missing Icons
  * ========================================== */
 const $ = i => document.getElementById(i), $$ = s => document.querySelectorAll(s);
 
-// FIX: 修正 mk 函數，增加 String() 轉換以防止傳入數字時 startsWith 報錯 (延續上一次修復)
+// FIX: 修正 mk 函數，增加 String() 轉換以防止傳入數字時 startsWith 報錯
 const mk = (t, c, txt, ev={}, ch=[]) => {
     const e = document.createElement(t); if(c) e.className=c;
     if(txt !== null && txt !== undefined) {
@@ -36,8 +36,12 @@ let curLang = localStorage.getItem('callsys_lang')||'zh-TW', T = i18n[curLang], 
 const socket = io({ autoConnect: false });
 let globalRoleConfig = null;
 
+// FIX: Added initialization of textContent to ensure icons/text appear immediately
 const confirmBtn = (el, txt, action) => {
-    if(!el) return; let t, c=5; el.dataset.originalKey = Object.keys(T).find(key=>T[key]===txt)||txt;
+    if(!el) return; let t, c=5; 
+    el.dataset.originalKey = Object.keys(T).find(key=>T[key]===txt)||txt;
+    el.textContent = T[el.dataset.originalKey]||txt; // <--- 這裡修復了文字/圖示不顯示的問題
+    
     el.onclick = (e) => {
         e.stopPropagation();
         if(el.classList.contains("is-confirming")) { action(); reset(); }
@@ -95,11 +99,8 @@ function upgradeSystemModeUI() {
 }
 const updateSegmentedVisuals = (w) => w.querySelectorAll('input[type="radio"]').forEach(r => r.closest('.segmented-option').classList.toggle('active', r.checked));
 
-// FIX: 調整輸入框樣式 (width: 75px, padding: 0 5px) 解決數字被遮擋問題
 async function initBusinessHoursUI() {
     if(!checkPerm('settings')) return; const card=$("card-sys"); if(!card || card.querySelector('#business-hours-group')) return;
-    
-    // 關鍵修改：增加 width 並強制覆寫 padding
     const t = mk("input","toggle-switch",null,{type:"checkbox",id:"bh-enabled"});
     const s = mk("input",null,null,{type:"number",min:0,max:23,placeholder:"Start",style:"width:75px;text-align:center;padding:0 5px;"});
     const e = mk("input",null,null,{type:"number",min:0,max:24,placeholder:"End",style:"width:75px;text-align:center;padding:0 5px;"});
