@@ -1,5 +1,5 @@
 /* ==========================================
- * 後台邏輯 (admin.js) - Refactored & Compact
+ * 後台邏輯 (admin.js) - Fixed Business Hours Sync
  * ========================================== */
 const $ = i => document.getElementById(i), $$ = s => document.querySelectorAll(s);
 const mk = (t, c, txt, ev={}, ch=[]) => {
@@ -83,8 +83,15 @@ const updateSegmentedVisuals = (w) => w.querySelectorAll('input[type="radio"]').
 
 async function initBusinessHoursUI() {
     if(!checkPerm('settings') || !$("card-sys") || $("business-hours-group")) return;
-    const t=mk("input","toggle-switch",null,{type:"checkbox",id:"bh-enabled"}), s=mk("input",null,null,{type:"number",min:0,max:23,placeholder:"Start",style:"width:75px;text-align:center;padding:0 5px;"}), e=mk("input",null,null,{type:"number",min:0,max:24,placeholder:"End",style:"width:75px;text-align:center;padding:0 5px;"});
-    const ctr = mk("div","control-group",null,{id:"business-hours-group",style:"margin-top:10px;border-top:1px dashed var(--border-color);padding-top:10px;"}, [mk("label",null,"營業時間控制"), mk("div",null,null,{style:"display:flex;gap:10px;align-items:center;"}, [t, s, mk("span",null,"➜"), e, mk("button","btn-secondary success","儲存",{style:"margin-left:auto;", onclick:async()=>await req("/api/admin/settings/hours/save",{enabled:t.checked,start:s.value,end:e.value}) && toast(T.saved,"success")})])]);
+    // Added IDs to start and end inputs for sync
+    const t=mk("input","toggle-switch",null,{type:"checkbox",id:"bh-enabled"}), 
+          s=mk("input",null,null,{type:"number",id:"bh-start",min:0,max:23,placeholder:"Start",style:"width:75px;text-align:center;padding:0 5px;"}), 
+          e=mk("input",null,null,{type:"number",id:"bh-end",min:0,max:24,placeholder:"End",style:"width:75px;text-align:center;padding:0 5px;"});
+    
+    const ctr = mk("div","control-group",null,{id:"business-hours-group",style:"margin-top:10px;border-top:1px dashed var(--border-color);padding-top:10px;"}, [
+        mk("label",null,"營業時間控制"), 
+        mk("div",null,null,{style:"display:flex;gap:10px;align-items:center;"}, [t, s, mk("span",null,"➜"), e, mk("button","btn-secondary success","儲存",{style:"margin-left:auto;", onclick:async()=>await req("/api/admin/settings/hours/save",{enabled:t.checked,start:s.value,end:e.value}) && toast(T.saved,"success")})])
+    ]);
     const r=$("resetAll"); r ? $("card-sys").insertBefore(ctr,r) : $("card-sys").appendChild(ctr);
     req("/api/admin/settings/hours/get").then(d=>{ if(d) { t.checked=d.enabled; s.value=d.start; e.value=d.end; } });
 }
@@ -124,8 +131,8 @@ socket.on("updateQueue", d => { $("number").textContent=d.current; $("issued-num
 socket.on("update", n => { $("number").textContent=n; if(checkPerm('stats')) loadStats(); });
 socket.on("initAdminLogs", l => checkPerm('stats') && renderLogs(l, true));
 socket.on("newAdminLog", l => checkPerm('stats') && renderLogs([l], false));
-socket.on("updatePublicStatus", b => $("public-toggle").checked = b);
-socket.on("updateSoundSetting", b => $("sound-toggle").checked = b);
+socket.on("updatePublicStatus", b => $("public-toggle") && ($("public-toggle").checked = b));
+socket.on("updateSoundSetting", b => $("sound-toggle") && ($("sound-toggle").checked = b));
 socket.on("updateSystemMode", m => { $$('input[name="systemMode"]').forEach(r => r.checked = (r.value === m)); const w = document.querySelector('.segmented-control'); if(w) updateSegmentedVisuals(w); });
 socket.on("updateAppointments", l => checkPerm('appointment') && renderAppointments(l));
 socket.on("updatePassed", l => renderList("passed-list-ui", l, n => mk("li","list-item",null,{},[mk("span","list-main-text",`${n} 號`,{style:"font-size:1rem;color:var(--primary);"}), mk("div","list-actions",null,{},[mk("button","btn-secondary",T.recall,{onclick:()=>{if(confirm(T.msg_recall_confirm.replace('%s',n))) req("/api/control/recall-passed",{number:n});}}), (b=>{confirmBtn(b,T.del,()=>req("/api/passed/remove",{number:n}));return b;})(mk("button","btn-secondary",T.del))])]), "empty"));
@@ -134,6 +141,13 @@ socket.on("updateOnlineAdmins", l => checkPerm('users') && renderList("online-us
     const rC=(u.userRole||u.role||'OPERATOR').toLowerCase(), rL=rC.includes('admin')?'ADMIN':(rC.includes('manager')?'MANAGER':'OPERATOR');
     return mk("li","user-card-item online-mode",null,{},[mk("div","user-card-header",null,{},[mk("div","user-avatar-fancy",(u.nickname||u.username).charAt(0).toUpperCase(),{style:`background:linear-gradient(135deg, hsl(${u.username.split('').reduce((a,c)=>a+c.charCodeAt(0),0)%360},75%,60%), hsl(${(u.username.split('').reduce((a,c)=>a+c.charCodeAt(0),0)+50)%360},75%,50%))`}), mk("div","user-info-fancy",null,{},[mk("div","user-nick-fancy",null,{},[mk("span","status-pulse-indicator"),mk("span",null,u.nickname||u.username)]), mk("div","user-id-fancy",`IP/ID: @${u.username}`), mk("div",`role-badge-fancy ${rC.includes('admin')?'admin':rC}`,rL)])]), mk("div","user-card-actions",null,{style:"justify-content:flex-end;opacity:0.7;font-size:0.8rem;"},[mk("span",null,"🟢 Active Now")])]);
 }, "loading"));
+
+// Added listener for Business Hours Sync
+socket.on("updateBusinessHours", cfg => {
+    if($("bh-enabled")) $("bh-enabled").checked = cfg.enabled;
+    if($("bh-start")) $("bh-start").value = cfg.start;
+    if($("bh-end")) $("bh-end").value = cfg.end;
+});
 
 const renderFeaturedItem = (item) => {
     const view = mk("div","list-info",null,{},[mk("span","list-main-text",item.linkText),mk("span","list-sub-text",item.linkUrl)]), form = mk("div","edit-form-wrapper",null,{style:"display:none;position:relative;"},[mk("input",null,null,{value:item.linkText}),mk("input",null,null,{value:item.linkUrl}),mk("div","edit-form-actions",null,{},[mk("button","btn-secondary",T.cancel,{onclick:()=>{form.style.display="none";view.style.display="flex";acts.style.display="flex";}}),mk("button","btn-secondary success",T.save,{onclick:async()=>{if(await req("/api/featured/edit",{oldLinkText:item.linkText,oldLinkUrl:item.linkUrl,newLinkText:form.children[0].value,newLinkUrl:form.children[1].value})) toast(T.saved,"success");}})])]);
@@ -186,7 +200,7 @@ function renderLineSettings() {
 }
 function renderLogs(logs, init) { const ul=$("admin-log-ui"); if(!ul) return; if(init) ul.innerHTML=""; if(!logs?.length&&init) return ul.innerHTML=`<li class='list-item' style='color:var(--text-sub);'>${T.no_logs}</li>`; const frag=document.createDocumentFragment(); logs.forEach(m=>frag.appendChild(mk("li","list-item",m,{style:"font-family:monospace;font-size:0.8rem;"}))); init?ul.appendChild(frag):ul.insertBefore(frag.firstChild, ul.firstChild); while(ul.children.length>50) ul.removeChild(ul.lastChild); }
 
-const act=(id,api,data={})=>$(id)?.addEventListener("click",async()=>{const n=$("number"),ov=n?parseInt(n.textContent||0):0; if(api.includes('call')&&n&&data.direction){n.textContent=ov+(data.direction==='next'?1:-1);n.style.opacity="0.6";} try{await req(api,data,$(id));}catch(e){if(n)n.textContent=ov;}finally{if(n)n.style.opacity="1";}}), bind=(id,fn)=>$(id)?.addEventListener("click",fn), adjCur=async d=>{const n=$("number"),c=parseInt(n.textContent)||0,t=c+d;if(t>0){n.textContent=t;n.style.opacity="0.6";try{if(await req("/api/control/set-call",{number:t}))toast(`${T.saved}: ${t}`,"success");}catch(e){n.textContent=c;}finally{n.style.opacity="1";}}};
+const act=(id,api,data={})=>$(id)?.addEventListener("click",async()=>{const n=$("number"),ov=n?parseInt(n.textContent||0):0; if(api.includes('call')&&n&&data.direction){n.textContent=ov+(data.direction==='next'?1:-1);n.style.opacity="0.6";} try{await req(api,data,$(id));}catch(e){if(n)n.textContent=ov;}finally{if(n)n.style.opacity="1";}}), bind=(id,fn)=>$(id)?.addEventListener("click",fn), adjCur=async d=>{const n=$("number"),c=parseInt(n.textContent||0,t=c+d);if(t>0){n.textContent=t;n.style.opacity="0.6";try{if(await req("/api/control/set-call",{number:t}))toast(`${T.saved}: ${t}`,"success");}catch(e){n.textContent=c;}finally{n.style.opacity="1";}}};
 
 bind("btn-call-add-1",()=>adjCur(1)); bind("btn-call-add-5",()=>adjCur(5));
 act("btn-call-prev","/api/control/call",{direction:"prev"}); act("btn-call-next","/api/control/call",{direction:"next"});
