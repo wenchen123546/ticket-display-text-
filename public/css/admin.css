@@ -26,7 +26,7 @@ body.dark-mode {
 }
 
 /* ==========================================
- * Scrollbar Fixes (捲軸修復)
+ * Scrollbar Fixes (全域捲軸修復)
  * ========================================== */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -114,15 +114,85 @@ button:active { transform: scale(0.97); }
 .list-actions button { width: auto; height: 32px; padding: 0 10px; font-size: 0.8rem; border-radius: 6px; background: transparent; border: 1px solid var(--border-color); color: var(--text-sub); }
 .list-actions button:hover { border-color: var(--primary); color: var(--primary); background: var(--bg-surface); }
 
-/* Components: Charts, Toggles, Badges */
-.chart-container { display: flex; align-items: flex-end; height: 180px; gap: 4px; padding-top: 20px; border-bottom: 1px dashed var(--border-color); margin-bottom: 0; width: 100%; flex-grow: 1; overflow-x: auto; overflow-y: hidden; padding-bottom: 10px; -webkit-overflow-scrolling: touch; }
-.chart-col { flex: 1 0 auto; min-width: 28px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; cursor: pointer; position: relative; }
-.chart-bar { width: 80%; min-height: 4px; border-radius: 4px 4px 0 0; background: var(--primary); opacity: 0.3; transition: 0.3s; }
-.chart-col:hover .chart-bar { opacity: 1; transform: scaleY(1.1); background: var(--primary-hover); }
-.chart-col.current .chart-bar { background: var(--warning); opacity: 0.9; }
-.chart-val { font-size: 0.7rem; margin-bottom: 4px; opacity: 0; transition: 0.2s; font-weight: 700; transform: translateY(5px); color: var(--text-main); }
-.chart-col:hover .chart-val { opacity: 1; transform: translateY(0); }
-.chart-label { font-size: 0.65rem; margin-top: 6px; color: var(--text-sub); font-family: 'JetBrains Mono', monospace; }
+/* Components: Charts (FIXED), Toggles, Badges */
+.chart-container { 
+    display: flex; 
+    align-items: stretch; /* 確保內容填滿 */
+    height: 200px; /* 加高避免擠壓 */
+    gap: 6px; 
+    padding-top: 20px; 
+    padding-bottom: 12px; /* 增加底部間距，防止 X 軸標籤被捲軸遮擋 */
+    border-bottom: 1px dashed var(--border-color); 
+    margin-bottom: 0; 
+    width: 100%; 
+    flex-grow: 1; 
+    overflow-x: auto; 
+    overflow-y: hidden; 
+    -webkit-overflow-scrolling: touch; 
+}
+.chart-container::-webkit-scrollbar { height: 6px; } 
+.chart-container::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }
+
+.chart-col { 
+    flex: 1 0 auto; 
+    min-width: 32px; /* 加寬點擊區域 */
+    display: flex; 
+    flex-direction: column; 
+    align-items: center; 
+    justify-content: flex-end; /* 底部對齊 */
+    height: 100%; 
+    cursor: pointer; 
+    position: relative; 
+}
+
+.chart-bar { 
+    width: 70%; 
+    min-height: 4px; 
+    border-radius: 4px 4px 0 0; 
+    background: var(--primary); 
+    opacity: 0.5; /* 提高可視度 */
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); 
+    transform-origin: bottom; /* 關鍵：從底部向上生長，防止 hover 時懸空 */
+    margin-bottom: 4px; 
+}
+
+.chart-col:hover .chart-bar { 
+    opacity: 1; 
+    transform: scaleY(1.1); 
+    background: var(--primary-hover); 
+    box-shadow: 0 0 10px var(--primary-soft); 
+}
+
+.chart-col.current .chart-bar { 
+    background: var(--warning); 
+    opacity: 1; 
+    box-shadow: 0 0 8px rgba(245, 158, 11, 0.4);
+}
+
+.chart-val { 
+    font-size: 0.75rem; 
+    margin-bottom: 2px; 
+    opacity: 0; 
+    transition: 0.2s; 
+    font-weight: 700; 
+    transform: translateY(10px); 
+    color: var(--text-main); 
+    pointer-events: none; 
+}
+
+.chart-col:hover .chart-val { 
+    opacity: 1; 
+    transform: translateY(0); 
+}
+
+.chart-label { 
+    font-size: 0.7rem; 
+    color: var(--text-sub); 
+    font-family: 'JetBrains Mono', monospace; 
+    margin-top: 0;
+    line-height: 1;
+}
+
 .toggle-switch { appearance: none; width: 46px; height: 26px; background: var(--border-color); border-radius: 20px; position: relative; cursor: pointer; transition: 0.3s; }
 .toggle-switch::after { content: ''; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; background: white; border-radius: 50%; transition: 0.3s; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
 .toggle-switch:checked { background: var(--success); } .toggle-switch:checked::after { transform: translateX(20px); }
